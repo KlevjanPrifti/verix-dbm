@@ -5,8 +5,12 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,6 +41,8 @@ type User struct {
 type session struct {
 	user    User
 	expires time.Time
+	// idToken is the raw OIDC ID token, kept for RP-initiated logout (id_token_hint).
+	idToken string
 	// oauthState is the expected callback state for an in-flight login.
 	oauthState string
 }
@@ -46,9 +52,10 @@ type Authenticator struct {
 	mu       sync.Mutex
 	sessions map[string]*session
 
-	provider *oidc.Provider
-	verifier *oidc.IDTokenVerifier
-	oauth    *oauth2.Config
+	provider   *oidc.Provider
+	verifier   *oidc.IDTokenVerifier
+	oauth      *oauth2.Config
+	endSession string // OIDC end_session_endpoint (from provider metadata)
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
@@ -60,6 +67,13 @@ func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
 		}
 		a.provider = p
 		a.verifier = p.Verifier(&oidc.Config{ClientID: cfg.OIDCClientID})
+		// Pull the RP-initiated logout endpoint out of the discovery document.
+		var md struct {
+			EndSession string `json:"end_session_endpoint"`
+		}
+		if err := p.Claims(&md); err == nil {
+			a.endSession = md.EndSession
+		}
 		a.oauth = &oauth2.Config{
 			ClientID:     cfg.OIDCClientID,
 			ClientSecret: cfg.OIDCClientSecret,
@@ -97,7 +111,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 		if a.cfg.DevMode {
 			// Auto-login a local admin so the app is usable without Keycloak.
 			u := User{Subject: "dev", Name: "Dev Admin", Email: "dev@localhost", Roles: []string{"dev"}, Admin: true, Write: true}
-			tok := a.put(u)
+			tok := a.put(u, "")
 			setCookie(w, tok, a.cfg)
 			u.CSRF = a.csrfFor(tok)
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, u)))
@@ -156,7 +170,10 @@ func (a *Authenticator) Callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "claims parse failed", http.StatusBadGateway)
 		return
 	}
-	u := User{Subject: claims.Sub, Name: claims.Name, Email: claims.Email, Roles: claims.RealmAccess.Roles}
+	// Keycloak places realm roles in the access token by default and only in the
+	// ID token if a mapper opts in — so merge roles from both to be robust.
+	roles := mergeRoles(claims.RealmAccess.Roles, realmRolesFromJWT(oauth2Token.AccessToken))
+	u := User{Subject: claims.Sub, Name: claims.Name, Email: claims.Email, Roles: roles}
 	for _, role := range u.Roles {
 		if role == a.cfg.OIDCAdminRole {
 			u.Admin = true
@@ -166,20 +183,76 @@ func (a *Authenticator) Callback(w http.ResponseWriter, r *http.Request) {
 			u.Write = true
 		}
 	}
-	tok := a.put(u)
+	tok := a.put(u, rawID)
 	setCookie(w, tok, a.cfg)
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-// Logout clears the local session.
+// Logout clears the local session and, when possible, ends the Keycloak SSO
+// session too (RP-initiated logout). Without the latter the IdP would silently
+// re-authenticate the user on the next /auth/login redirect.
 func (a *Authenticator) Logout(w http.ResponseWriter, r *http.Request) {
+	var idHint string
 	if c, err := r.Cookie(cookieName); err == nil {
 		a.mu.Lock()
+		if s, ok := a.sessions[c.Value]; ok {
+			idHint = s.idToken
+		}
 		delete(a.sessions, c.Value)
 		a.mu.Unlock()
 	}
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", MaxAge: -1})
-	http.Redirect(w, r, "/auth/login", http.StatusFound)
+
+	// Dev mode has no IdP; just land on home.
+	if a.cfg.DevMode || a.endSession == "" {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	q := url.Values{}
+	if idHint != "" {
+		q.Set("id_token_hint", idHint)
+	}
+	q.Set("client_id", a.cfg.OIDCClientID)
+	q.Set("post_logout_redirect_uri", a.cfg.BaseURL)
+	http.Redirect(w, r, a.endSession+"?"+q.Encode(), http.StatusFound)
+}
+
+// realmRolesFromJWT decodes a JWT payload (no signature check — the token came
+// straight from the trusted token endpoint) and returns its realm_access roles.
+func realmRolesFromJWT(raw string) []string {
+	parts := strings.Split(raw, ".")
+	if len(parts) < 2 {
+		return nil
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil
+	}
+	var c struct {
+		RealmAccess struct {
+			Roles []string `json:"roles"`
+		} `json:"realm_access"`
+	}
+	if err := json.Unmarshal(payload, &c); err != nil {
+		return nil
+	}
+	return c.RealmAccess.Roles
+}
+
+// mergeRoles unions role lists, dropping duplicates and empties.
+func mergeRoles(lists ...[]string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, l := range lists {
+		for _, r := range l {
+			if r == "" || seen[r] {
+				continue
+			}
+			seen[r] = true
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func (a *Authenticator) current(r *http.Request) (User, bool) {
@@ -198,10 +271,10 @@ func (a *Authenticator) current(r *http.Request) (User, bool) {
 	return u, true
 }
 
-func (a *Authenticator) put(u User) string {
+func (a *Authenticator) put(u User, idToken string) string {
 	tok := token()
 	a.mu.Lock()
-	a.sessions[tok] = &session{user: u, expires: time.Now().Add(sessionTTL)}
+	a.sessions[tok] = &session{user: u, idToken: idToken, expires: time.Now().Add(sessionTTL)}
 	a.mu.Unlock()
 	return tok
 }
