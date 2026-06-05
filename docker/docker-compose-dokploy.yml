@@ -1,0 +1,48 @@
+# verix-dbm — Dokploy production topology.
+# Single Go binary serving the HTMX UI + API. No bundled DB; it connects to the
+# targets you register (incl. your SHARED Postgres/Valkey). It joins the external
+# `shared` network so it can resolve their internal hostnames.
+#
+# In Dokploy: map your domain to this service, port 8080, behind Traefik (TLS).
+# Set OIDC_* to a Keycloak client whose redirect URI is ${DBM_BASE_URL}/auth/callback.
+
+services:
+  dbm:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      DBM_ADDR: ":8080"
+      DBM_BASE_URL: ${DBM_BASE_URL:?public https URL, e.g. https://dbm.example.com}
+      DBM_SQLITE_PATH: /data/verix-dbm.db
+      # 32-byte key (64 hex chars) that encrypts saved connection passwords.
+      # Generate with: openssl rand -hex 32
+      DBM_ENC_KEY: ${DBM_ENC_KEY:?DBM_ENC_KEY must be set (64 hex chars)}
+      # Keycloak OIDC — leave OIDC_ISSUER empty ONLY for local dev (auto-admin).
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-}
+      OIDC_ADMIN_ROLE: ${OIDC_ADMIN_ROLE:-dbm-admin}
+      OIDC_WRITE_ROLE: ${OIDC_WRITE_ROLE:-dbm-write}
+    volumes:
+      - dbm_data:/data
+    expose:
+      - "8080"
+    networks:
+      - default
+      - shared
+    restart: unless-stopped
+    # distroless has no shell/wget for a CMD healthcheck; Traefik probes the
+    # HTTP route and the restart policy covers crashes. /healthz is available.
+
+networks:
+  default:
+  # External network the SHARED Postgres/Valkey instances live on. Verify the
+  # name matches your Dokploy setup (the Dokploy default is `dokploy-network`).
+  shared:
+    external: true
+    name: dokploy-network
+
+volumes:
+  dbm_data:

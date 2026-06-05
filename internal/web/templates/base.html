@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" data-accent="{{if .HasConn}}{{if eq .Conn.Kind "redis"}}emerald{{else}}cyan{{end}}{{else}}cyan{{end}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#020c16">
+  <title>{{template "title" .}} · verix-dbm</title>
+  <link rel="stylesheet" href="/static/hud.css">
+  <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/alpine.min.js" defer></script>
+</head>
+<body class="hud-grid">
+  <header class="topbar">
+    <a class="brand hud-heading" href="/">VERIX<span class="cta">DBM</span></a>
+    <nav class="topnav hud-label">
+      <a href="/" class="{{if eq .Active "dashboard"}}on{{end}}">Connections</a>
+      {{if .User.Admin}}<a href="/audit" class="{{if eq .Active "audit"}}on{{end}}">Audit</a>{{end}}
+    </nav>
+    <div class="userbox hud-label">
+      <span class="who">{{.User.Name}}{{if .User.Admin}} · ADMIN{{else if .User.Write}} · WRITE{{else}} · READ{{end}}</span>
+      <a href="/auth/logout">Logout</a>
+    </div>
+  </header>
+
+  {{if .HasConn}}
+  <div class="connbar hud-label">
+    <span class="kind kind-{{.Conn.Kind}}">{{.Conn.Kind}}</span>
+    <strong class="hud">{{.Conn.Name}}</strong>
+    <span class="dim">{{.Conn.Host}}:{{.Conn.Port}}{{if .Conn.DBName}}/{{.Conn.DBName}}{{end}}</span>
+    {{if .Conn.ReadOnly}}<span class="ro">READ-ONLY</span>{{end}}
+  </div>
+  {{end}}
+
+  <main class="container">
+    {{if .Error}}<div class="alert error">{{.Error}}</div>{{end}}
+    {{template "content" .}}
+  </main>
+</body>
+</html>

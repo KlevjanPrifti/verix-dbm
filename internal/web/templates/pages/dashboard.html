@@ -1,0 +1,64 @@
+{{define "title"}}Connections{{end}}
+{{define "content"}}
+<div class="grid-2">
+  <section class="hud-panel p-4">
+    <h2 class="hud-heading">Registered targets</h2>
+    {{if .Connections}}
+    <table class="data">
+      <thead><tr><th>Name</th><th>Kind</th><th>Host</th><th>DB</th><th>Mode</th><th></th></tr></thead>
+      <tbody>
+      {{range .Connections}}
+        <tr>
+          <td><a href="/c/{{.ID}}">{{.Name}}</a></td>
+          <td><span class="kind kind-{{.Kind}}">{{.Kind}}</span></td>
+          <td class="dim">{{.Host}}:{{.Port}}</td>
+          <td class="dim">{{.DBName}}</td>
+          <td>{{if .ReadOnly}}<span class="ro">RO</span>{{else}}<span class="dim">rw</span>{{end}}</td>
+          <td>
+            {{if $.User.Admin}}
+            <form method="post" action="/connections/{{.ID}}/delete" onsubmit="return confirm('Delete connection {{.Name}}?')">
+              <input type="hidden" name="csrf" value="{{$.User.CSRF}}">
+              <button class="btn-danger" type="submit">delete</button>
+            </form>
+            {{end}}
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="dim">No connections yet. {{if .User.Admin}}Add one →{{else}}Ask an admin to add one.{{end}}</p>
+    {{end}}
+  </section>
+
+  {{if .User.Admin}}
+  <section class="hud-panel hud-panel-glow p-4">
+    <h2 class="hud-heading">Add connection</h2>
+    <form method="post" action="/connections" class="stack">
+      <input type="hidden" name="csrf" value="{{.User.CSRF}}">
+      <label class="hud-label">Name</label>
+      <input class="hud-input" name="name" required placeholder="shared seal db">
+      <label class="hud-label">Kind</label>
+      <select class="hud-input" name="kind" onchange="this.form.port.value = this.value==='redis' ? '6379' : '5432'">
+        <option value="postgres">postgres</option>
+        <option value="redis">redis / valkey</option>
+      </select>
+      <div class="row">
+        <div class="col"><label class="hud-label">Host</label><input class="hud-input" name="host" required placeholder="shared-db-instance-s0llma"></div>
+        <div class="col port"><label class="hud-label">Port</label><input class="hud-input" name="port" value="5432"></div>
+      </div>
+      <label class="hud-label">Database (pg name / redis db number)</label>
+      <input class="hud-input" name="dbname" placeholder="seal">
+      <div class="row">
+        <div class="col"><label class="hud-label">Username</label><input class="hud-input" name="username" placeholder="verixsync"></div>
+        <div class="col"><label class="hud-label">Password</label><input class="hud-input" type="password" name="password"></div>
+      </div>
+      <label class="hud-label">Options (pg query string)</label>
+      <input class="hud-input" name="options" placeholder="sslmode=disable">
+      <label class="check"><input type="checkbox" name="readonly"> <span class="hud-label">Read-only</span></label>
+      <button class="hud-btn-cta" type="submit">Save connection</button>
+    </form>
+  </section>
+  {{end}}
+</div>
+{{end}}

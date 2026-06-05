@@ -1,0 +1,23 @@
+{{define "title"}}Audit{{end}}
+{{define "content"}}
+<section class="hud-panel p-4">
+  <h2 class="hud-heading">Audit log</h2>
+  <table class="data">
+    <thead><tr><th>When</th><th>User</th><th>Conn</th><th>Action</th><th>Detail</th><th>OK</th></tr></thead>
+    <tbody>
+    {{range .Data}}
+      <tr>
+        <td class="dim">{{.TS.Format "2006-01-02 15:04:05"}}</td>
+        <td>{{.User}}</td>
+        <td class="dim">#{{.ConnID}}</td>
+        <td><span class="hud-label">{{.Action}}</span></td>
+        <td class="code dim">{{.Detail}}</td>
+        <td>{{if .Success}}<span class="ok">✓</span>{{else}}<span class="bad">✗</span>{{end}}</td>
+      </tr>
+    {{else}}
+      <tr><td colspan="6" class="dim">No audit entries yet.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}
