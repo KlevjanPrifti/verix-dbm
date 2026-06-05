@@ -3,6 +3,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"regexp"
 	"strings"
@@ -38,18 +39,24 @@ type Result struct {
 
 const defaultStatementTimeout = "30s"
 
-// Schemas lists non-system schemas with their relations and estimated row counts.
+// Schemas lists non-system schemas with their relations and estimated row
+// counts. It LEFT JOINs from pg_namespace so empty schemas (e.g. a fresh
+// "public") still appear — that lets the UI distinguish an empty database from
+// a failed/misdirected connection.
 func Schemas(ctx context.Context, pool *pgxpool.Pool) ([]Schema, error) {
 	const q = `
 SELECT n.nspname AS schema,
        c.relname AS name,
        CASE c.relkind WHEN 'r' THEN 'table' WHEN 'v' THEN 'view' WHEN 'm' THEN 'matview' WHEN 'p' THEN 'table' ELSE c.relkind::text END AS kind,
        COALESCE(c.reltuples,0)::bigint AS est_rows
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE c.relkind IN ('r','v','m','p')
-  AND n.nspname NOT IN ('pg_catalog','information_schema')
+FROM pg_namespace n
+LEFT JOIN pg_class c
+       ON c.relnamespace = n.oid
+      AND c.relkind IN ('r','v','m','p')
+WHERE n.nspname NOT IN ('pg_catalog','information_schema')
   AND n.nspname NOT LIKE 'pg_toast%'
+  AND n.nspname NOT LIKE 'pg_temp%'
+  AND n.nspname NOT LIKE 'pg_toast_temp%'
 ORDER BY n.nspname, c.relname`
 	rows, err := pool.Query(ctx, q)
 	if err != nil {
@@ -59,17 +66,25 @@ ORDER BY n.nspname, c.relname`
 	order := []string{}
 	byName := map[string]*Schema{}
 	for rows.Next() {
-		var t Table
-		if err := rows.Scan(&t.Schema, &t.Name, &t.Kind, &t.EstRows); err != nil {
+		var (
+			schema string
+			name   sql.NullString
+			kind   sql.NullString
+			est    sql.NullInt64
+		)
+		if err := rows.Scan(&schema, &name, &kind, &est); err != nil {
 			return nil, err
 		}
-		s, ok := byName[t.Schema]
+		s, ok := byName[schema]
 		if !ok {
-			s = &Schema{Name: t.Schema}
-			byName[t.Schema] = s
-			order = append(order, t.Schema)
+			s = &Schema{Name: schema}
+			byName[schema] = s
+			order = append(order, schema)
 		}
-		s.Tables = append(s.Tables, t)
+		// NULL name => the schema has no relations (LEFT JOIN miss).
+		if name.Valid {
+			s.Tables = append(s.Tables, Table{Schema: schema, Name: name.String, Kind: kind.String, EstRows: est.Int64})
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -79,6 +94,13 @@ ORDER BY n.nspname, c.relname`
 		out = append(out, *byName[n])
 	}
 	return out, nil
+}
+
+// DatabaseName returns the database the pool is connected to (current_database()).
+func DatabaseName(ctx context.Context, pool *pgxpool.Pool) (string, error) {
+	var name string
+	err := pool.QueryRow(ctx, "SELECT current_database()").Scan(&name)
+	return name, err
 }
 
 // Browse returns a page of rows from a table using identifier-quoted names.

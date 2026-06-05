@@ -16,6 +16,7 @@ const browseLimit = 100
 // ── Postgres ────────────────────────────────────────────────────────────────
 
 type pgViewData struct {
+	DB      string
 	Schemas []postgres.Schema
 	Schema  string
 	Table   string
@@ -41,6 +42,7 @@ func (s *Server) pgView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := pgViewData{Schema: r.URL.Query().Get("schema"), Table: r.URL.Query().Get("table")}
+	d.DB, _ = postgres.DatabaseName(r.Context(), pool)
 	d.Schemas, err = postgres.Schemas(r.Context(), pool)
 	if err != nil {
 		d.Err = err.Error()

@@ -4,8 +4,9 @@
 {{with .Data}}
 <div class="workspace">
   <aside class="hud-panel sidebar">
-    <h3 class="hud-label">Schemas</h3>
+    <h3 class="hud-label">Schemas {{if .DB}}<span class="dim">· {{.DB}}</span>{{end}}</h3>
     {{if .Err}}<div class="alert error">{{.Err}}</div>{{end}}
+    {{if not .Schemas}}<div class="dim">no user schemas in this database</div>{{end}}
     <div class="tree">
     {{range .Schemas}}
       <details {{if eq .Name $.Data.Schema}}open{{end}}>
