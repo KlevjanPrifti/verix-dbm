@@ -116,6 +116,21 @@ func (s *Store) CreateConnection(ctx context.Context, c Connection) (int64, erro
 	return res.LastInsertId()
 }
 
+// UpdateConnection saves edits to an existing connection. The password is only
+// rewritten when updatePw is true (an empty field in the edit form means "keep").
+func (s *Store) UpdateConnection(ctx context.Context, c Connection, updatePw bool) error {
+	if updatePw {
+		_, err := s.db.ExecContext(ctx,
+			`UPDATE connections SET name=?,kind=?,host=?,port=?,dbname=?,username=?,password_enc=?,options=?,readonly=? WHERE id=?`,
+			c.Name, c.Kind, c.Host, c.Port, c.DBName, c.Username, c.PasswordEnc, c.Options, boolToInt(c.ReadOnly), c.ID)
+		return err
+	}
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE connections SET name=?,kind=?,host=?,port=?,dbname=?,username=?,options=?,readonly=? WHERE id=?`,
+		c.Name, c.Kind, c.Host, c.Port, c.DBName, c.Username, c.Options, boolToInt(c.ReadOnly), c.ID)
+	return err
+}
+
 func (s *Store) DeleteConnection(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM connections WHERE id=?`, id)
 	return err

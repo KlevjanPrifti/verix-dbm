@@ -133,6 +133,43 @@ type Column struct {
 	NotNull bool
 	Default string
 	PK      bool
+	AutoInc bool
+}
+
+// TypeText is the display type shown in the tree: shortened type name, with an
+// "(auto increment)" / "not null" suffix the way DataGrip renders it.
+func (c Column) TypeText() string {
+	t := c.Type
+	t = strings.ReplaceAll(t, "character varying", "varchar")
+	t = strings.ReplaceAll(t, "timestamp without time zone", "timestamp")
+	t = strings.ReplaceAll(t, "time without time zone", "time")
+	if c.AutoInc {
+		t += " (auto increment)"
+	}
+	return t
+}
+
+// Cat is a coarse type category used to pick the column's icon glyph.
+func (c Column) Cat() string {
+	if c.PK {
+		return "pk"
+	}
+	t := strings.ToLower(c.Type)
+	switch {
+	case strings.Contains(t, "int"), strings.Contains(t, "numeric"), strings.Contains(t, "decimal"),
+		strings.Contains(t, "real"), strings.Contains(t, "double"), strings.Contains(t, "money"), strings.Contains(t, "serial"):
+		return "num"
+	case strings.Contains(t, "char"), strings.Contains(t, "text"), strings.Contains(t, "uuid"):
+		return "text"
+	case strings.Contains(t, "timestamp"), strings.Contains(t, "date"), strings.Contains(t, "time"), strings.Contains(t, "interval"):
+		return "time"
+	case strings.Contains(t, "bool"):
+		return "bool"
+	case strings.Contains(t, "json"):
+		return "json"
+	default:
+		return "col"
+	}
 }
 
 // Columns lists the columns of a table/view in ordinal order.
@@ -144,7 +181,8 @@ SELECT a.attname,
        COALESCE(pg_get_expr(d.adbin, d.adrelid), '') AS dflt,
        COALESCE((SELECT true FROM pg_index ix
                   WHERE ix.indrelid = a.attrelid AND ix.indisprimary
-                    AND a.attnum = ANY(ix.indkey)), false) AS pk
+                    AND a.attnum = ANY(ix.indkey)), false) AS pk,
+       (a.attidentity <> '') AS ident
 FROM pg_attribute a
 JOIN pg_class c     ON c.oid = a.attrelid
 JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -159,12 +197,30 @@ ORDER BY a.attnum`
 	var out []Column
 	for rows.Next() {
 		var col Column
-		if err := rows.Scan(&col.Name, &col.Type, &col.NotNull, &col.Default, &col.PK); err != nil {
+		var ident bool
+		if err := rows.Scan(&col.Name, &col.Type, &col.NotNull, &col.Default, &col.PK, &ident); err != nil {
 			return nil, err
 		}
+		col.AutoInc = ident || strings.HasPrefix(strings.ToLower(col.Default), "nextval")
 		out = append(out, col)
 	}
 	return out, rows.Err()
+}
+
+// parenContents returns the text inside the first (or last) (...) pair of s.
+func parenContents(s string, last bool) string {
+	open := strings.Index(s, "(")
+	if last {
+		open = strings.LastIndex(s, "(")
+	}
+	if open < 0 {
+		return ""
+	}
+	rel := strings.Index(s[open:], ")")
+	if rel < 0 {
+		return ""
+	}
+	return s[open+1 : open+rel]
 }
 
 // Index describes a table index (for the Explorer "indexes" node).
@@ -173,6 +229,7 @@ type Index struct {
 	Unique  bool
 	Primary bool
 	Def     string
+	Cols    string // column list parsed from the index definition
 }
 
 // Indexes lists the indexes on a table.
@@ -196,6 +253,7 @@ ORDER BY c2.relname`
 		if err := rows.Scan(&ix.Name, &ix.Unique, &ix.Primary, &ix.Def); err != nil {
 			return nil, err
 		}
+		ix.Cols = parenContents(ix.Def, true)
 		out = append(out, ix)
 	}
 	return out, rows.Err()
@@ -206,6 +264,7 @@ type Key struct {
 	Name string
 	Type string // primary | foreign | unique | check | other
 	Def  string
+	Cols string // column list parsed from the constraint definition
 }
 
 // Keys lists the constraints on a table (primary/foreign/unique/check).
@@ -230,6 +289,7 @@ ORDER BY con.contype, con.conname`
 			return nil, err
 		}
 		k.Type = constraintType(t)
+		k.Cols = parenContents(k.Def, false)
 		out = append(out, k)
 	}
 	return out, rows.Err()

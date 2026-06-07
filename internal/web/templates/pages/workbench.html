@@ -8,7 +8,7 @@
       <span class="hud-label">Database Explorer</span>
       {{if .User.Admin}}
       <div class="menu-wrap" @click.outside="menuOpen=false">
-        <button class="ico-btn" @click="menuOpen=!menuOpen" title="New data source">＋</button>
+        <button class="ico-btn" @click="menuOpen=!menuOpen" title="New data source">+</button>
         <div class="menu" x-show="menuOpen" x-cloak>
           <button type="button" class="menu-item" @click="openModal('postgres')"><span class="ico ico-postgres"></span> New PostgreSQL</button>
           <button type="button" class="menu-item" @click="openModal('redis')"><span class="ico ico-redis"></span> New Redis / Valkey</button>
@@ -23,7 +23,9 @@
         <details class="tree-node conn-node">
           <summary class="tree-row conn-row"
                    hx-get="/c/{{.ID}}/explorer" hx-trigger="click once"
-                   hx-target="next .node-children" hx-swap="innerHTML">
+                   hx-target="next .node-children" hx-swap="innerHTML"
+                   data-id="{{.ID}}" data-name="{{.Name}}" data-kind="{{.Kind}}"
+                   @contextmenu="openCtx($event,{type:'conn',id:$el.dataset.id,name:$el.dataset.name,kind:$el.dataset.kind})">
             <span class="ico ico-{{.Kind}}"></span>
             <span class="tree-name">{{.Name}}<span class="conn-host dim"> · {{.Host}}</span></span>
             <span class="badge">{{.Kind}}</span>
@@ -40,7 +42,7 @@
               {{end}}
             </span>
           </summary>
-          <div class="node-children"><span class="dim loading">loading…</span></div>
+          <div class="node-children" id="cc-{{.ID}}"><span class="dim loading">loading…</span></div>
         </details>
         {{end}}
       {{else}}
@@ -73,7 +75,61 @@
     </div>
   </section>
 
+  <!-- ── Right-click context menu ──────────────────────────────────────── -->
+  <div class="ctx-menu" x-show="ctx.open" x-cloak
+       @click.outside="closeCtx()" @keydown.escape.window="closeCtx()"
+       :style="`left:${ctx.x}px; top:${ctx.y}px`">
+
+    <template x-if="ctx.type==='conn'">
+      <div>
+        <div class="ctx-head" x-text="ctx.name"></div>
+        <button type="button" class="menu-item" @click="ctxConsole()"><span class="ico ico-console"></span> Query console <span class="ctx-key">Ctrl+⏎</span></button>
+        <button type="button" class="menu-item" @click="ctxRefresh()"><span class="mi-ico">↻</span> Refresh <span class="ctx-key">Ctrl+F5</span></button>
+        <div class="menu-sep"></div>
+        <button type="button" class="menu-item" @click="copy(ctx.name)"><span class="mi-ico">⎘</span> Copy name</button>
+        {{if .User.Admin}}
+        <button type="button" class="menu-item" @click="ctxProps()"><span class="mi-ico">⚙</span> Properties <span class="ctx-key">F4</span></button>
+        <button type="button" class="menu-item" @click="ctxProps()"><span class="mi-ico">⎘</span> Duplicate…</button>
+        <div class="menu-sep"></div>
+        <button type="button" class="menu-item danger"
+                @click="closeCtx(); if(confirm('Remove data source “'+ctx.name+'”?')) $refs['del'+ctx.id].submit()">
+          <span class="mi-ico">✕</span> Remove data source <span class="ctx-key">Del</span>
+        </button>
+        {{end}}
+      </div>
+    </template>
+
+    <template x-if="ctx.type==='schema'">
+      <div>
+        <div class="ctx-head" x-text="ctx.schema"></div>
+        <button type="button" class="menu-item" @click="ctxConsole()"><span class="ico ico-console"></span> Query console</button>
+        <button type="button" class="menu-item" @click="ctxRefresh()"><span class="mi-ico">↻</span> Refresh <span class="ctx-key">Ctrl+F5</span></button>
+        <div class="menu-sep"></div>
+        <button type="button" class="menu-item" @click="copy(ctx.name)"><span class="mi-ico">⎘</span> Copy name</button>
+      </div>
+    </template>
+
+    <template x-if="ctx.type==='table'">
+      <div>
+        <div class="ctx-head"><span x-text="ctx.schema+'.'+ctx.table"></span></div>
+        <button type="button" class="menu-item" @click="ctxBrowse()"><span class="ico ico-table"></span> Open data <span class="ctx-key">F4</span></button>
+        <div class="menu-sep"></div>
+        <button type="button" class="menu-item" @click="copy(ctx.table)"><span class="mi-ico">⎘</span> Copy name</button>
+        <button type="button" class="menu-item" @click="copy(ctx.schema+'.'+ctx.table)"><span class="mi-ico">⎘</span> Copy qualified name</button>
+        <button type="button" class="menu-item" @click="ctxCopySelect()"><span class="mi-ico">▷</span> Copy SELECT</button>
+      </div>
+    </template>
+
+    <template x-if="ctx.type==='col'">
+      <div>
+        <button type="button" class="menu-item" @click="copy(ctx.name)"><span class="mi-ico">⎘</span> Copy name</button>
+      </div>
+    </template>
+  </div>
+
   {{if .User.Admin}}{{template "connModal" .}}{{end}}
+  <!-- edit-connection (Properties) modal is loaded here on demand -->
+  <div id="editmodal-host"></div>
 
 </div>
 {{end}}

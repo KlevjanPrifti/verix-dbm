@@ -195,6 +195,68 @@ func (s *Server) redisTabFragment(w http.ResponseWriter, r *http.Request, c stor
 	s.rnd.partial(w, "redisTab", map[string]any{"Console": d, "Redis": rd})
 }
 
+// ── Connection edit (Properties) ──────────────────────────────────────────────
+
+// editConnForm renders the prefilled "Data Sources & Drivers" modal for an
+// existing connection (loaded via HTMX when the user picks Properties).
+func (s *Server) editConnForm(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.FromContext(r.Context())
+	if !u.Admin {
+		http.Error(w, "admin required", http.StatusForbidden)
+		return
+	}
+	c, err := s.connFor(r)
+	if err != nil {
+		http.Error(w, "connection not found", http.StatusNotFound)
+		return
+	}
+	s.rnd.partial(w, "connEditModal", map[string]any{"Conn": c, "CSRF": u.CSRF})
+}
+
+func (s *Server) updateConnection(w http.ResponseWriter, r *http.Request) {
+	if !s.auth.CheckCSRF(r) {
+		http.Error(w, "bad csrf", http.StatusForbidden)
+		return
+	}
+	u, _ := auth.FromContext(r.Context())
+	if !u.Admin {
+		http.Error(w, "admin required", http.StatusForbidden)
+		return
+	}
+	c, err := s.connFor(r)
+	if err != nil {
+		http.Error(w, "connection not found", http.StatusNotFound)
+		return
+	}
+	port, _ := strconv.Atoi(r.FormValue("port"))
+	c.Name = r.FormValue("name")
+	c.Kind = r.FormValue("kind")
+	c.Host = r.FormValue("host")
+	c.Port = port
+	c.DBName = r.FormValue("dbname")
+	c.Username = r.FormValue("username")
+	c.Options = r.FormValue("options")
+	c.ReadOnly = r.FormValue("readonly") == "on"
+
+	updatePw := false
+	if pw := r.FormValue("password"); pw != "" {
+		enc, err := s.box.Encrypt(pw)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		c.PasswordEnc = enc
+		updatePw = true
+	}
+	if err := s.st.UpdateConnection(r.Context(), c, updatePw); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.reg.Forget(c.ID) // creds/host may have changed; drop cached pool
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "update_connection", Detail: c.Name, Success: true})
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
 // ── Connection test ───────────────────────────────────────────────────────────
 
 func (s *Server) testConnection(w http.ResponseWriter, r *http.Request) {

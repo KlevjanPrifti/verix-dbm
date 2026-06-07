@@ -6,15 +6,19 @@
 {{range .Schemas}}
   {{$schema := .Name}}
   <details class="tree-node" open>
-    <summary class="tree-row"><span class="ico ico-schema"></span><span class="tree-name">{{.Name}}</span><span class="count">{{len .Tables}}</span></summary>
+    <summary class="tree-row schema-row" data-conn="{{$conn.ID}}" data-schema="{{.Name}}"
+             @contextmenu="openCtx($event,{type:'schema',id:$el.dataset.conn,connId:$el.dataset.conn,schema:$el.dataset.schema,name:$el.dataset.schema})">
+      <span class="ico ico-schema"></span><span class="tree-name">{{.Name}}</span><span class="count">{{len .Tables}}</span></summary>
     <div class="node-children">
       {{range .Tables}}
       <details class="tree-node">
-        <summary class="tree-row">
+        <summary class="tree-row table-row"
+                 data-conn="{{$conn.ID}}" data-schema="{{$schema}}" data-table="{{.Name}}"
+                 @contextmenu="openCtx($event,{type:'table',connId:$el.dataset.conn,schema:$el.dataset.schema,table:$el.dataset.table,name:$el.dataset.table})">
           <span class="ico ico-{{.Kind}}"></span>
           <span class="tree-name table-name"
                 @click="$event.preventDefault(); openTab({key:'grid:{{$conn.ID}}:{{$schema}}.{{.Name}}',title:'{{$schema}}.{{.Name}}',url:'/c/{{$conn.ID}}/grid?schema={{urlq $schema}}&table={{urlq .Name}}',icon:'grid'})"
-                title="double-click name to open">{{.Name}}</span>
+                title="click name to open">{{.Name}}</span>
           <span class="est dim">{{.EstRows}}</span>
         </summary>
         <div class="node-children">
@@ -51,21 +55,36 @@
 {{define "nodeColumns"}}
 {{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
 {{range .Columns}}
-  <div class="tree-row leaf"><span class="ico ico-col{{if .PK}} pk{{end}}"></span><span class="tree-name">{{.Name}}</span><span class="col-type dim">{{.Type}}</span></div>
+  <div class="tree-row leaf col-leaf" title="{{.Name}} · {{.TypeText}}{{if .NotNull}} · not null{{end}}"
+       @contextmenu="openCtx($event,{type:'col',name:$el.dataset.name})" data-name="{{.Name}}">
+    <span class="ico ico-{{.Cat}}"></span>
+    <span class="tree-name">{{.Name}}</span>
+    <span class="col-type dim">{{.TypeText}}</span>
+  </div>
 {{else}}<div class="tree-empty dim">none</div>{{end}}
 {{end}}
 
 {{define "nodeIndexes"}}
 {{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
 {{range .Indexes}}
-  <div class="tree-row leaf" title="{{.Def}}"><span class="ico ico-idx{{if .Primary}} pk{{end}}"></span><span class="tree-name">{{.Name}}</span>{{if .Unique}}<span class="col-type dim">unique</span>{{end}}</div>
+  <div class="tree-row leaf" title="{{.Def}}"
+       @contextmenu="openCtx($event,{type:'col',name:$el.dataset.name})" data-name="{{.Name}}">
+    <span class="ico ico-idx{{if .Primary}} pk{{end}}"></span>
+    <span class="tree-name">{{.Name}}</span>
+    <span class="col-type dim">{{if .Cols}}({{.Cols}}){{end}}{{if .Unique}} UNIQUE{{end}}</span>
+  </div>
 {{else}}<div class="tree-empty dim">none</div>{{end}}
 {{end}}
 
 {{define "nodeKeys"}}
 {{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
 {{range .Keys}}
-  <div class="tree-row leaf" title="{{.Def}}"><span class="ico ico-key{{if eq .Type "primary"}} pk{{end}}"></span><span class="tree-name">{{.Name}}</span><span class="col-type dim">{{.Type}}</span></div>
+  <div class="tree-row leaf" title="{{.Def}}"
+       @contextmenu="openCtx($event,{type:'col',name:$el.dataset.name})" data-name="{{.Name}}">
+    <span class="ico {{if eq .Type "foreign"}}ico-fkey{{else}}ico-key{{if eq .Type "primary"}} pk{{end}}{{end}}"></span>
+    <span class="tree-name">{{.Name}}</span>
+    <span class="col-type dim">{{if .Cols}}({{.Cols}}) {{end}}{{.Type}}</span>
+  </div>
 {{else}}<div class="tree-empty dim">none</div>{{end}}
 {{end}}
 
@@ -201,6 +220,49 @@
 
 {{define "testResult"}}
 {{if .OK}}<span class="ok hud-label">✓ connection ok</span>{{else}}<span class="bad hud-label code">✗ {{.Err}}</span>{{end}}
+{{end}}
+
+{{/* ── Edit existing connection (Properties) — loaded via HTMX ── */}}
+{{define "connEditModal"}}
+{{$c := .Conn}}
+<div class="modal-overlay" x-data="{open:true}" x-show="open" @keydown.escape.window="open=false">
+  <div class="modal hud-panel hud-panel-glow">
+    <div class="modal-head">
+      <span class="hud-heading">Data Sources &amp; Drivers <span class="dim">· edit</span></span>
+      <button type="button" class="ico-btn" @click="open=false">✕</button>
+    </div>
+    <form method="post" action="/connections/{{$c.ID}}" class="modal-body">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="hidden" name="password_enc" value="{{$c.PasswordEnc}}">
+      <div class="mrow"><label class="hud-label">Name</label><input class="hud-input" name="name" required value="{{$c.Name}}"></div>
+      <div class="mrow"><label class="hud-label">Driver</label>
+        <select class="hud-input" name="kind">
+          <option value="postgres" {{if eq $c.Kind "postgres"}}selected{{end}}>PostgreSQL</option>
+          <option value="redis" {{if eq $c.Kind "redis"}}selected{{end}}>Redis / Valkey</option>
+        </select>
+      </div>
+      <div class="mrow2">
+        <div class="mcol"><label class="hud-label">Host</label><input class="hud-input" name="host" required value="{{$c.Host}}"></div>
+        <div class="mcol port"><label class="hud-label">Port</label><input class="hud-input" name="port" value="{{$c.Port}}"></div>
+      </div>
+      <div class="mrow2">
+        <div class="mcol"><label class="hud-label">User</label><input class="hud-input" name="username" value="{{$c.Username}}"></div>
+        <div class="mcol"><label class="hud-label">Password</label><input class="hud-input" type="password" name="password" placeholder="•••• unchanged"></div>
+      </div>
+      <div class="mrow"><label class="hud-label">Database <span class="dim">(pg name / redis db #)</span></label><input class="hud-input" name="dbname" value="{{$c.DBName}}"></div>
+      <div class="mrow"><label class="hud-label">Options</label><input class="hud-input" name="options" value="{{$c.Options}}"></div>
+      <label class="check"><input type="checkbox" name="readonly" {{if $c.ReadOnly}}checked{{end}}> <span class="hud-label">Read-only</span></label>
+      <div class="modal-foot">
+        <button type="button" class="hud-btn-accent" hx-post="/connections/test" hx-include="closest form" hx-target="#test-result-edit">Test Connection</button>
+        <span id="test-result-edit" class="test-result"></span>
+        <span class="tb-grow"></span>
+        <button type="submit" class="hud-btn-accent" formaction="/connections" title="Create a new connection from these values (host/creds reusable for a different DB or driver)">Save as copy</button>
+        <button type="button" class="hud-btn-accent" @click="open=false">Cancel</button>
+        <button type="submit" class="hud-btn-cta">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
 {{end}}
 
 {{/* ── Connection modal (Data Sources & Drivers) ── */}}

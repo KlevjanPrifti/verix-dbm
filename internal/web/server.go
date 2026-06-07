@@ -45,7 +45,9 @@ func (s *Server) Router() http.Handler {
 		r.Get("/", s.workbench)
 		r.Post("/connections", s.createConnection)
 		r.Post("/connections/test", s.testConnection)
+		r.Post("/connections/{id}", s.updateConnection)
 		r.Post("/connections/{id}/delete", s.deleteConnection)
+		r.Get("/c/{id}/edit", s.editConnForm)
 
 		// Explorer tree (lazy fragments) + tab content.
 		r.Get("/c/{id}/explorer", s.explorer)
@@ -125,6 +127,9 @@ func (s *Server) createConnection(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		c.PasswordEnc = enc
+	} else if enc := r.FormValue("password_enc"); enc != "" {
+		// "Save as copy" carries the existing ciphertext so the clone keeps creds.
 		c.PasswordEnc = enc
 	}
 	id, err := s.st.CreateConnection(r.Context(), c)
