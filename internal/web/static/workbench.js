@@ -5,6 +5,7 @@ document.addEventListener('alpine:init', () => {
     tabs: [],
     active: null,
     menuOpen: false,
+    drawer: false, // mobile: explorer slides in as an off-canvas drawer
     modal: { open: false, kind: 'postgres', port: '5432' },
     // right-click context menu
     ctx: { open: false, x: 0, y: 0, type: null, id: null, connId: null, name: '', schema: '', table: '', kind: '' },
@@ -17,6 +18,7 @@ document.addEventListener('alpine:init', () => {
 
     select(key) {
       this.active = key;
+      this.drawer = false; // opening a tab on mobile closes the explorer drawer
       const t = this.tabs.find((x) => x.key === key);
       if (!t) return;
       this.$nextTick(() => {
@@ -50,7 +52,23 @@ document.addEventListener('alpine:init', () => {
     openCtx(ev, d) {
       ev.preventDefault();
       ev.stopPropagation();
-      Object.assign(this.ctx, { schema: '', table: '', kind: '' }, d, { open: true, x: ev.clientX, y: ev.clientY });
+      // clamp so the menu stays on-screen — matters most on phones / near edges
+      const mw = 240, mh = 300;
+      const x = Math.max(8, Math.min(ev.clientX, window.innerWidth - mw - 8));
+      const y = Math.max(8, Math.min(ev.clientY, window.innerHeight - mh - 8));
+      Object.assign(this.ctx, { schema: '', table: '', kind: '' }, d, { open: true, x, y });
+    },
+    // touch entry point for the same menu — the ⋯ button reads the row's data-*
+    // attributes (same source the desktop @contextmenu handler uses).
+    kebab(ev, type) {
+      const s = ev.currentTarget.closest('summary');
+      const d = s ? s.dataset : {};
+      const byType = {
+        conn: { type: 'conn', id: d.id, name: d.name, kind: d.kind },
+        schema: { type: 'schema', id: d.conn, connId: d.conn, schema: d.schema, name: d.schema },
+        table: { type: 'table', connId: d.conn, schema: d.schema, table: d.table, name: d.table },
+      };
+      this.openCtx(ev, byType[type] || {});
     },
     closeCtx() { this.ctx.open = false; },
 

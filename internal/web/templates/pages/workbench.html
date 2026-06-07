@@ -2,8 +2,11 @@
 {{define "content"}}
 <div class="ide" x-data="workbench">
 
+  <!-- backdrop behind the off-canvas explorer drawer (mobile only) -->
+  <div class="drawer-backdrop" x-show="drawer" x-cloak @click="drawer=false"></div>
+
   <!-- ── Database Explorer ─────────────────────────────────────────────── -->
-  <aside class="explorer hud-panel">
+  <aside class="explorer hud-panel" :class="{open: drawer}">
     <div class="explorer-head">
       <span class="hud-label">Database Explorer</span>
       {{if .User.Admin}}
@@ -41,6 +44,7 @@
               </form>
               {{end}}
             </span>
+            <button type="button" class="row-kebab" title="actions" @click="kebab($event,'conn')">⋯</button>
           </summary>
           <div class="node-children" id="cc-{{.ID}}"><span class="dim loading">loading…</span></div>
         </details>
@@ -54,6 +58,8 @@
   <!-- ── Tabbed workspace ──────────────────────────────────────────────── -->
   <section class="work">
     <div class="tabbar">
+      <button type="button" class="drawer-toggle" @click="drawer=!drawer"
+              title="Database Explorer" aria-label="Toggle Database Explorer">☰</button>
       <template x-for="t in tabs" :key="t.key">
         <div class="tab" :class="{on: active===t.key}" @click="select(t.key)">
           <span class="tab-ico" :class="'ti-'+t.icon"></span>

@@ -340,3 +340,74 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .mcol.port { max-width: 120px; }
 .modal-foot { display: flex; align-items: center; gap: .6rem; margin-top: .5rem; padding-top: .8rem; border-top: 1px solid rgba(var(--accent-rgb),0.15); }
 .test-result { font-size: .78rem; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Mobile / touch — the workbench is a desktop IDE, so on small screens the
+   explorer becomes an off-canvas drawer, right-click menus get a ⋯ button, and
+   hover-only affordances are promoted to always-visible with bigger tap targets.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ⋯ kebab + ☰ drawer toggle: hidden on desktop (right-click + side-by-side panes
+   are enough); revealed under the mobile breakpoint below. */
+.row-kebab { display: none; flex-shrink: 0; background: none; border: none; color: rgba(var(--accent-rgb),0.7); cursor: pointer; font-size: 1.05rem; line-height: 1; padding: 0 .35rem; border-radius: 2px; }
+.row-kebab:hover { background: rgba(var(--accent-rgb),0.15); color: var(--hud); }
+.drawer-toggle { display: none; }
+.drawer-backdrop { display: none; }
+
+@media (max-width: 900px) {
+  /* Address-bar-aware viewport height so the shell fills the screen on phones */
+  .hud-grid { height: 100dvh; }
+
+  /* Work area owns the screen; the explorer floats over it as a drawer */
+  .ide { grid-template-columns: 1fr; height: 100%; gap: 0; }
+  .explorer {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 45;
+    width: min(86vw, 320px); border-radius: 0;
+    transform: translateX(-100%); transition: transform .22s ease;
+    box-shadow: 0 0 40px rgba(0,0,0,0.6);
+  }
+  .explorer.open { transform: translateX(0); }
+  .drawer-backdrop { display: block; position: fixed; inset: 0; z-index: 44; background: rgba(0,5,12,0.55); backdrop-filter: blur(1px); }
+  .drawer-toggle {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 2.6rem; min-height: 2.4rem; background: none; border: none;
+    border-right: 1px solid rgba(var(--accent-rgb),0.2);
+    color: rgb(var(--accent-rgb)); font-size: 1.25rem; cursor: pointer;
+  }
+
+  /* Reveal touch affordances that desktop only shows on hover */
+  .row-kebab { display: inline-flex; align-items: center; }
+  .th-tools { opacity: 1; }
+
+  /* Roomier tap targets (desktop densities are sub-30px) */
+  .tree-row { padding: .5rem .4rem; font-size: .9rem; }
+  .tree-row.leaf { padding-top: .5rem; padding-bottom: .5rem; }
+  .ico-btn { width: 2.2rem; height: 2.2rem; font-size: 1.2rem; }
+  .menu-item, .ctx-menu .menu-item { padding: .7rem .6rem; font-size: .9rem; }
+  .tab { padding: .55rem .8rem; font-size: .85rem; max-width: 60vw; }
+  .tab-x { font-size: .95rem; padding: 0 .25rem; }
+  .tb-ico { width: 2.2rem; height: 2.2rem; font-size: 1.1rem; }
+  .th-sort { font-size: .85rem; }
+  .pg-btn { padding: .3rem .7rem; }
+
+  /* Context menu: wider + capped so it never runs off a narrow screen */
+  .ctx-menu { min-width: 240px; max-width: 92vw; }
+
+  /* Chrome bars wrap instead of overflowing horizontally */
+  .topbar { flex-wrap: wrap; gap: .6rem 1rem; padding: .6rem .9rem; }
+  .connbar { flex-wrap: wrap; padding: .45rem .9rem; }
+  .container { padding: .5rem; }
+
+  /* Grid filter bar stacks WHERE / ORDER BY on narrow screens */
+  .filter-bar { flex-wrap: wrap; }
+  .fb-input { min-width: 120px; }
+  table.data td { max-width: 60vw; }
+
+  /* Redis pane: cap the key list so the value area stays reachable */
+  .redis-keys { max-height: 38vh; }
+
+  /* Modal: stack paired rows, let the footer buttons wrap */
+  .mrow2 { flex-direction: column; gap: .7rem; }
+  .mcol.port { max-width: none; }
+  .modal-foot { flex-wrap: wrap; }
+}

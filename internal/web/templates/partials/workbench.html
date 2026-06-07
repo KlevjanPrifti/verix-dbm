@@ -8,7 +8,8 @@
   <details class="tree-node" open>
     <summary class="tree-row schema-row" data-conn="{{$conn.ID}}" data-schema="{{.Name}}"
              @contextmenu="openCtx($event,{type:'schema',id:$el.dataset.conn,connId:$el.dataset.conn,schema:$el.dataset.schema,name:$el.dataset.schema})">
-      <span class="ico ico-schema"></span><span class="tree-name">{{.Name}}</span><span class="count">{{len .Tables}}</span></summary>
+      <span class="ico ico-schema"></span><span class="tree-name">{{.Name}}</span><span class="count">{{len .Tables}}</span>
+      <button type="button" class="row-kebab" title="actions" @click="kebab($event,'schema')">⋯</button></summary>
     <div class="node-children">
       {{range .Tables}}
       <details class="tree-node">
@@ -20,6 +21,7 @@
                 @click="$event.preventDefault(); openTab({key:'grid:{{$conn.ID}}:{{$schema}}.{{.Name}}',title:'{{$schema}}.{{.Name}}',url:'/c/{{$conn.ID}}/grid?schema={{urlq $schema}}&table={{urlq .Name}}',icon:'grid'})"
                 title="click name to open">{{.Name}}</span>
           <span class="est dim">{{.EstRows}}</span>
+          <button type="button" class="row-kebab" title="actions" @click="kebab($event,'table')">⋯</button>
         </summary>
         <div class="node-children">
           <details class="tree-node">
