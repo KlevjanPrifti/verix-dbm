@@ -7,6 +7,8 @@
   <title>{{template "title" .}} · verix-dbm</title>
   <link rel="stylesheet" href="/static/hud.css">
   <script src="/static/htmx.min.js" defer></script>
+  <!-- workbench.js registers the Alpine component; it MUST run before Alpine boots -->
+  <script src="/static/workbench.js" defer></script>
   <script src="/static/alpine.min.js" defer></script>
 </head>
 <body class="hud-grid">
