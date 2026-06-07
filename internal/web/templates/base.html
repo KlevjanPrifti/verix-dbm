@@ -31,7 +31,7 @@
   </div>
   {{end}}
 
-  <main class="container">
+  <main class="container{{if not .HasConn}} boxed{{end}}">
     {{if .Error}}<div class="alert error">{{.Error}}</div>{{end}}
     {{template "content" .}}
   </main>

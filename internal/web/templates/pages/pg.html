@@ -33,25 +33,28 @@
       <h3 class="hud-heading">SQL console {{if $conn.ReadOnly}}<span class="ro">READ-ONLY</span>{{end}}</h3>
       <form hx-post="/c/{{$conn.ID}}/pg/query" hx-target="#qresult" hx-indicator="#qspin" class="stack">
         <input type="hidden" name="csrf" value="{{$.User.CSRF}}">
-        <textarea class="hud-input code" name="sql" rows="5" placeholder="select * from accounts limit 100;">{{if .Table}}select * from "{{.Schema}}"."{{.Table}}" limit 100;{{end}}</textarea>
+        <textarea class="hud-input code" name="sql" rows="3" placeholder="select * from accounts limit 100;">{{if .Table}}select * from "{{.Schema}}"."{{.Table}}" limit 100;{{end}}</textarea>
         <div class="row end">
           <span id="qspin" class="htmx-indicator hud-label">running…</span>
           <button class="hud-btn-cta" type="submit">Run</button>
         </div>
       </form>
-      <div id="qresult"></div>
     </div>
 
-    {{if .Result}}
-    <div class="hud-panel p-4">
-      <h3 class="hud-heading">{{.Schema}}.{{.Table}} <span class="dim">page {{inc .Page}}</span></h3>
-      {{template "resultTable" .Result}}
-      <div class="row end pager">
-        {{if gt .Page 0}}<a class="hud-btn-accent" href="/c/{{$conn.ID}}/pg?schema={{.Schema}}&table={{.Table}}&page={{dec .Page}}">‹ prev</a>{{end}}
-        {{if .Result.Rows}}<a class="hud-btn-accent" href="/c/{{$conn.ID}}/pg?schema={{.Schema}}&table={{.Table}}&page={{inc .Page}}">next ›</a>{{end}}
+    <div class="hud-panel p-4 panel-grow">
+      <h3 class="hud-heading">{{if .Result}}{{.Schema}}.{{.Table}} <span class="dim">· page {{inc .Page}}</span>{{else}}Result{{end}}</h3>
+      <div id="qresult">
+        {{if .Result}}
+        {{template "resultTable" .Result}}
+        <div class="row end pager">
+          {{if gt .Page 0}}<a class="hud-btn-accent" href="/c/{{$conn.ID}}/pg?schema={{.Schema}}&table={{.Table}}&page={{dec .Page}}">‹ prev</a>{{end}}
+          {{if .Result.Rows}}<a class="hud-btn-accent" href="/c/{{$conn.ID}}/pg?schema={{.Schema}}&table={{.Table}}&page={{inc .Page}}">next ›</a>{{end}}
+        </div>
+        {{else}}
+        <p class="dim">Run a query, or pick a table from the navigator to browse it.</p>
+        {{end}}
       </div>
     </div>
-    {{end}}
   </section>
 </div>
 {{end}}
