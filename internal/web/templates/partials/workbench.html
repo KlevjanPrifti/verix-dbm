@@ -1,0 +1,244 @@
+{{/* ── Explorer: a Postgres connection's schemas → tables → cols/keys/idx ── */}}
+{{define "explorerPG"}}
+{{$conn := .Conn}}
+{{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
+{{if and (not .Schemas) (not .Err)}}<div class="tree-empty dim">no user schemas</div>{{end}}
+{{range .Schemas}}
+  {{$schema := .Name}}
+  <details class="tree-node" open>
+    <summary class="tree-row"><span class="ico ico-schema"></span><span class="tree-name">{{.Name}}</span><span class="count">{{len .Tables}}</span></summary>
+    <div class="node-children">
+      {{range .Tables}}
+      <details class="tree-node">
+        <summary class="tree-row">
+          <span class="ico ico-{{.Kind}}"></span>
+          <span class="tree-name table-name"
+                @click="$event.preventDefault(); openTab({key:'grid:{{$conn.ID}}:{{$schema}}.{{.Name}}',title:'{{$schema}}.{{.Name}}',url:'/c/{{$conn.ID}}/grid?schema={{urlq $schema}}&table={{urlq .Name}}',icon:'grid'})"
+                title="double-click name to open">{{.Name}}</span>
+          <span class="est dim">{{.EstRows}}</span>
+        </summary>
+        <div class="node-children">
+          <details class="tree-node">
+            <summary class="tree-row" hx-get="/c/{{$conn.ID}}/pg/columns?schema={{urlq $schema}}&table={{urlq .Name}}" hx-trigger="click once" hx-target="next .node-children" hx-swap="innerHTML"><span class="ico ico-folder"></span><span class="tree-name">columns</span></summary>
+            <div class="node-children"><span class="dim loading">…</span></div>
+          </details>
+          <details class="tree-node">
+            <summary class="tree-row" hx-get="/c/{{$conn.ID}}/pg/keys?schema={{urlq $schema}}&table={{urlq .Name}}" hx-trigger="click once" hx-target="next .node-children" hx-swap="innerHTML"><span class="ico ico-folder"></span><span class="tree-name">keys</span></summary>
+            <div class="node-children"><span class="dim loading">…</span></div>
+          </details>
+          <details class="tree-node">
+            <summary class="tree-row" hx-get="/c/{{$conn.ID}}/pg/indexes?schema={{urlq $schema}}&table={{urlq .Name}}" hx-trigger="click once" hx-target="next .node-children" hx-swap="innerHTML"><span class="ico ico-folder"></span><span class="tree-name">indexes</span></summary>
+            <div class="node-children"><span class="dim loading">…</span></div>
+          </details>
+        </div>
+      </details>
+      {{end}}
+    </div>
+  </details>
+{{end}}
+{{end}}
+
+{{/* ── Explorer: a Redis connection — a single console entry ── */}}
+{{define "explorerRedis"}}
+{{$conn := .Conn}}
+{{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
+<div class="tree-row leaf"
+     @click="openTab({key:'console:{{$conn.ID}}',title:'console [{{$conn.Name}}]',url:'/c/{{$conn.ID}}/console',icon:'console'})">
+  <span class="ico ico-keyspace"></span><span class="tree-name">keyspace</span>
+</div>
+{{end}}
+
+{{define "nodeColumns"}}
+{{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
+{{range .Columns}}
+  <div class="tree-row leaf"><span class="ico ico-col{{if .PK}} pk{{end}}"></span><span class="tree-name">{{.Name}}</span><span class="col-type dim">{{.Type}}</span></div>
+{{else}}<div class="tree-empty dim">none</div>{{end}}
+{{end}}
+
+{{define "nodeIndexes"}}
+{{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
+{{range .Indexes}}
+  <div class="tree-row leaf" title="{{.Def}}"><span class="ico ico-idx{{if .Primary}} pk{{end}}"></span><span class="tree-name">{{.Name}}</span>{{if .Unique}}<span class="col-type dim">unique</span>{{end}}</div>
+{{else}}<div class="tree-empty dim">none</div>{{end}}
+{{end}}
+
+{{define "nodeKeys"}}
+{{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
+{{range .Keys}}
+  <div class="tree-row leaf" title="{{.Def}}"><span class="ico ico-key{{if eq .Type "primary"}} pk{{end}}"></span><span class="tree-name">{{.Name}}</span><span class="col-type dim">{{.Type}}</span></div>
+{{else}}<div class="tree-empty dim">none</div>{{end}}
+{{end}}
+
+{{define "fragErr"}}<div class="alert error code">{{.Err}}</div>{{end}}
+
+{{/* ── Data grid tab ── */}}
+{{define "grid"}}
+{{$g := .}}
+<div class="grid-pane">
+  <div class="grid-toolbar">
+    <button class="tb-ico" title="refresh"
+            hx-get="/c/{{$g.Conn.ID}}/grid?schema={{urlq $g.Schema}}&table={{urlq $g.Table}}&where={{urlq $g.Where}}&order={{urlq $g.Order}}&page={{$g.Page}}"
+            hx-target="#tab-content">↻</button>
+    <span class="tb-sep"></span>
+    <button class="tb-ico" title="add row (coming soon)" disabled>＋</button>
+    <button class="tb-ico" title="remove row (coming soon)" disabled>－</button>
+    <span class="tb-sep"></span>
+    <span class="tb-chip hud-label">Tx: Auto</span>
+    <span class="tb-grow"></span>
+    {{if $g.ReadOnly}}<span class="ro">READ-ONLY</span>{{end}}
+    <span class="tb-chip hud-label">{{$g.Conn.Kind}}@{{$g.Conn.Host}}</span>
+  </div>
+
+  <form class="filter-bar" hx-get="/c/{{$g.Conn.ID}}/grid" hx-target="#tab-content" hx-swap="innerHTML">
+    <input type="hidden" name="schema" value="{{$g.Schema}}">
+    <input type="hidden" name="table" value="{{$g.Table}}">
+    <span class="fb-key hud-label">WHERE</span>
+    <input class="fb-input code" name="where" value="{{$g.Where}}" placeholder="user_id = 4 and group_code = 0">
+    <span class="fb-key hud-label">ORDER BY</span>
+    <input class="fb-input code" name="order" value="{{$g.Order}}" placeholder="event_time desc">
+    <button class="hud-btn-accent sm" type="submit">apply</button>
+  </form>
+
+  <div class="grid-body">
+    {{if $g.Err}}<div class="alert error code">{{$g.Err}}</div>
+    {{else}}{{template "gridResult" $g}}{{end}}
+  </div>
+
+  <div class="grid-footer hud-label">
+    <span class="ico ico-{{$g.Conn.Kind}}"></span>
+    <span>{{$g.Schema}}.{{$g.Table}}</span>
+    <span class="tb-grow"></span>
+    {{if gt $g.Page 0}}
+    <a class="pg-btn" hx-get="/c/{{$g.Conn.ID}}/grid?schema={{urlq $g.Schema}}&table={{urlq $g.Table}}&where={{urlq $g.Where}}&order={{urlq $g.Order}}&page={{dec $g.Page}}" hx-target="#tab-content">‹ prev</a>
+    {{end}}
+    <span>page {{inc $g.Page}}</span>
+    {{if and $g.Result $g.Result.Rows}}
+    <a class="pg-btn" hx-get="/c/{{$g.Conn.ID}}/grid?schema={{urlq $g.Schema}}&table={{urlq $g.Table}}&where={{urlq $g.Where}}&order={{urlq $g.Order}}&page={{inc $g.Page}}" hx-target="#tab-content">next ›</a>
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+{{/* gridResult: like resultTable but with row numbers + per-column sort arrows */}}
+{{define "gridResult"}}
+{{$g := .}}
+{{with $g.Result}}
+{{if .IsSelect}}
+  {{if .Rows}}
+  <div class="tablewrap grid-table">
+    <table class="data">
+      <thead><tr>
+        <th class="rownum">#</th>
+        {{range .Columns}}
+        <th>
+          <span class="th-name">{{.}}</span>
+          <span class="th-tools">
+            <a class="th-sort" title="sort asc" hx-get="/c/{{$g.Conn.ID}}/grid?schema={{urlq $g.Schema}}&table={{urlq $g.Table}}&where={{urlq $g.Where}}&order={{urlq (printf "%q asc" .)}}" hx-target="#tab-content">▲</a>
+            <a class="th-sort" title="sort desc" hx-get="/c/{{$g.Conn.ID}}/grid?schema={{urlq $g.Schema}}&table={{urlq $g.Table}}&where={{urlq $g.Where}}&order={{urlq (printf "%q desc" .)}}" hx-target="#tab-content">▼</a>
+          </span>
+        </th>
+        {{end}}
+      </tr></thead>
+      <tbody>
+      {{range $i, $row := .Rows}}<tr><td class="rownum">{{inc $i}}</td>{{range $row}}<td class="code">{{.}}</td>{{end}}</tr>{{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="grid-meta hud-label dim">{{len .Rows}} rows{{if .Truncated}} · truncated at 1000{{end}} · {{.Duration}}</p>
+  {{else}}
+  <p class="dim">0 rows · {{.Duration}}</p>
+  {{end}}
+{{else}}
+  <p class="ok hud-label">{{.Command}} · {{.RowsAffected}} rows affected · {{.Duration}}</p>
+{{end}}
+{{end}}
+{{end}}
+
+{{/* ── SQL console tab ── */}}
+{{define "consolePG"}}
+<div class="console-pane">
+  <form class="console-form" hx-post="/c/{{.Conn.ID}}/pg/query" hx-target="#cresult-{{.Conn.ID}}" hx-indicator="#cspin-{{.Conn.ID}}">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <div class="console-toolbar">
+      <button class="hud-btn-cta sm" type="submit">▷ Run</button>
+      {{if .ReadOnly}}<span class="ro">READ-ONLY</span>{{end}}
+      <span class="tb-chip hud-label">{{.Conn.Kind}}@{{.Conn.Host}}</span>
+      <span id="cspin-{{.Conn.ID}}" class="htmx-indicator hud-label">running…</span>
+    </div>
+    <textarea class="hud-input code console-editor" name="sql" rows="6" placeholder="select * from … limit 100;"></textarea>
+  </form>
+  <div class="console-result" id="cresult-{{.Conn.ID}}"></div>
+</div>
+{{end}}
+
+{{/* ── Redis console tab ── */}}
+{{define "redisTab"}}
+{{$c := .Console}}{{$r := .Redis}}
+<div class="redis-pane">
+  <aside class="redis-keys hud-panel">
+    <h3 class="hud-label">Keyspace</h3>
+    <input class="hud-input" type="search" name="match" value="{{$r.Match}}" placeholder="match e.g. seal:*"
+           hx-get="/c/{{$c.Conn.ID}}/redis/keys" hx-target="#rkeys-{{$c.Conn.ID}}" hx-trigger="keyup changed delay:300ms" hx-include="this">
+    <div id="rkeys-{{$c.Conn.ID}}">{{template "redisKeys" $r}}</div>
+  </aside>
+  <div class="redis-main">
+    <div class="hud-panel p-4 panel-grow">
+      <h3 class="hud-heading">Value</h3>
+      <div id="rvalue"><p class="dim">Select a key from the keyspace to inspect it.</p></div>
+    </div>
+    <div class="hud-panel p-4">
+      <h3 class="hud-heading">Command console {{if $c.ReadOnly}}<span class="ro">READ-ONLY</span>{{end}}</h3>
+      <form hx-post="/c/{{$c.Conn.ID}}/redis/cmd" hx-target="#cmdresult" class="stack">
+        <input type="hidden" name="csrf" value="{{$c.CSRF}}">
+        <input class="hud-input code" name="cmd" placeholder="GET seal:session:abc   ·   SCAN 0 MATCH ch:*">
+        <div class="row end"><button class="hud-btn-cta" type="submit">Run</button></div>
+      </form>
+      <div id="cmdresult"></div>
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{define "testResult"}}
+{{if .OK}}<span class="ok hud-label">✓ connection ok</span>{{else}}<span class="bad hud-label code">✗ {{.Err}}</span>{{end}}
+{{end}}
+
+{{/* ── Connection modal (Data Sources & Drivers) ── */}}
+{{define "connModal"}}
+<div class="modal-overlay" x-show="modal.open" x-cloak @keydown.escape.window="modal.open=false">
+  <div class="modal hud-panel hud-panel-glow">
+    <div class="modal-head">
+      <span class="hud-heading">Data Sources &amp; Drivers</span>
+      <button type="button" class="ico-btn" @click="modal.open=false">✕</button>
+    </div>
+    <form method="post" action="/connections" class="modal-body">
+      <input type="hidden" name="csrf" value="{{.User.CSRF}}">
+      <div class="mrow"><label class="hud-label">Name</label><input class="hud-input" name="name" required placeholder="postgres@localhost"></div>
+      <div class="mrow"><label class="hud-label">Driver</label>
+        <select class="hud-input" name="kind" x-model="modal.kind" @change="modal.port = modal.kind==='redis'?'6379':'5432'">
+          <option value="postgres">PostgreSQL</option>
+          <option value="redis">Redis / Valkey</option>
+        </select>
+      </div>
+      <div class="mrow2">
+        <div class="mcol"><label class="hud-label">Host</label><input class="hud-input" name="host" required placeholder="localhost"></div>
+        <div class="mcol port"><label class="hud-label">Port</label><input class="hud-input" name="port" x-model="modal.port"></div>
+      </div>
+      <div class="mrow2">
+        <div class="mcol"><label class="hud-label">User</label><input class="hud-input" name="username" placeholder="postgres"></div>
+        <div class="mcol"><label class="hud-label">Password</label><input class="hud-input" type="password" name="password"></div>
+      </div>
+      <div class="mrow"><label class="hud-label">Database <span class="dim">(pg name / redis db #)</span></label><input class="hud-input" name="dbname" placeholder="postgres"></div>
+      <div class="mrow"><label class="hud-label">Options</label><input class="hud-input" name="options" placeholder="sslmode=disable"></div>
+      <label class="check"><input type="checkbox" name="readonly"> <span class="hud-label">Read-only</span></label>
+      <div class="modal-foot">
+        <button type="button" class="hud-btn-accent" hx-post="/connections/test" hx-include="closest form" hx-target="#test-result">Test Connection</button>
+        <span id="test-result" class="test-result"></span>
+        <span class="tb-grow"></span>
+        <button type="button" class="hud-btn-accent" @click="modal.open=false">Cancel</button>
+        <button type="submit" class="hud-btn-cta">OK</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

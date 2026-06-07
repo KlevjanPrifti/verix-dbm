@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 )
 
 //go:embed templates static
@@ -18,9 +19,10 @@ type renderer struct {
 }
 
 var funcMap = template.FuncMap{
-	"inc": func(i int) int { return i + 1 },
-	"dec": func(i int) int { return i - 1 },
-	"add": func(a, b int) int { return a + b },
+	"inc":  func(i int) int { return i + 1 },
+	"dec":  func(i int) int { return i - 1 },
+	"add":  func(a, b int) int { return a + b },
+	"urlq": url.QueryEscape,
 }
 
 func newRenderer() *renderer {

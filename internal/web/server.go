@@ -42,10 +42,20 @@ func (s *Server) Router() http.Handler {
 
 	r.Group(func(r chi.Router) {
 		r.Use(s.auth.Middleware)
-		r.Get("/", s.dashboard)
+		r.Get("/", s.workbench)
 		r.Post("/connections", s.createConnection)
+		r.Post("/connections/test", s.testConnection)
 		r.Post("/connections/{id}/delete", s.deleteConnection)
 
+		// Explorer tree (lazy fragments) + tab content.
+		r.Get("/c/{id}/explorer", s.explorer)
+		r.Get("/c/{id}/pg/columns", s.pgColumns)
+		r.Get("/c/{id}/pg/indexes", s.pgIndexes)
+		r.Get("/c/{id}/pg/keys", s.pgKeys)
+		r.Get("/c/{id}/grid", s.gridView)
+		r.Get("/c/{id}/console", s.consoleTab)
+
+		// Legacy full-page views (still reachable) + shared HTMX endpoints.
 		r.Get("/c/{id}", s.openConnection)
 		r.Get("/c/{id}/pg", s.pgView)
 		r.Post("/c/{id}/pg/query", s.pgQuery)
@@ -65,6 +75,7 @@ type view struct {
 	Active      string
 	Flash       string
 	Error       string
+	Boxed       bool // center content in a max-width column (dashboard/audit)
 	HasConn     bool
 	Conn        store.Connection
 	Connections []store.Connection
@@ -165,6 +176,7 @@ func (s *Server) audit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := s.newView(r, "audit")
+	v.Boxed = true
 	rows, err := s.st.ListAudit(r.Context(), 200)
 	if err != nil {
 		v.Error = err.Error()

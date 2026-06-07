@@ -105,11 +105,149 @@ func DatabaseName(ctx context.Context, pool *pgxpool.Pool) (string, error) {
 
 // Browse returns a page of rows from a table using identifier-quoted names.
 func Browse(ctx context.Context, pool *pgxpool.Pool, schema, table string, limit, offset int) (*Result, error) {
+	return BrowseWhere(ctx, pool, schema, table, "", "", limit, offset, false)
+}
+
+// BrowseWhere returns a page of rows with optional WHERE and ORDER BY fragments
+// (raw SQL the user typed into the grid's filter bar). The query runs read-only
+// when readOnly is set; multi-statement input is rejected by the pgx protocol.
+func BrowseWhere(ctx context.Context, pool *pgxpool.Pool, schema, table, where, order string, limit, offset int, readOnly bool) (*Result, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}
-	q := fmt.Sprintf("SELECT * FROM %s.%s LIMIT %d OFFSET %d", quoteIdent(schema), quoteIdent(table), limit, offset)
-	return Query(ctx, pool, q, false)
+	q := fmt.Sprintf("SELECT * FROM %s.%s", quoteIdent(schema), quoteIdent(table))
+	if w := strings.TrimSpace(where); w != "" {
+		q += " WHERE " + w
+	}
+	if o := strings.TrimSpace(order); o != "" {
+		q += " ORDER BY " + o
+	}
+	q += fmt.Sprintf(" LIMIT %d OFFSET %d", limit, offset)
+	return Query(ctx, pool, q, readOnly)
+}
+
+// Column describes one column of a relation (for the Explorer "columns" node).
+type Column struct {
+	Name    string
+	Type    string
+	NotNull bool
+	Default string
+	PK      bool
+}
+
+// Columns lists the columns of a table/view in ordinal order.
+func Columns(ctx context.Context, pool *pgxpool.Pool, schema, table string) ([]Column, error) {
+	const q = `
+SELECT a.attname,
+       format_type(a.atttypid, a.atttypmod) AS type,
+       a.attnotnull,
+       COALESCE(pg_get_expr(d.adbin, d.adrelid), '') AS dflt,
+       COALESCE((SELECT true FROM pg_index ix
+                  WHERE ix.indrelid = a.attrelid AND ix.indisprimary
+                    AND a.attnum = ANY(ix.indkey)), false) AS pk
+FROM pg_attribute a
+JOIN pg_class c     ON c.oid = a.attrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+WHERE n.nspname = $1 AND c.relname = $2 AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum`
+	rows, err := pool.Query(ctx, q, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Column
+	for rows.Next() {
+		var col Column
+		if err := rows.Scan(&col.Name, &col.Type, &col.NotNull, &col.Default, &col.PK); err != nil {
+			return nil, err
+		}
+		out = append(out, col)
+	}
+	return out, rows.Err()
+}
+
+// Index describes a table index (for the Explorer "indexes" node).
+type Index struct {
+	Name    string
+	Unique  bool
+	Primary bool
+	Def     string
+}
+
+// Indexes lists the indexes on a table.
+func Indexes(ctx context.Context, pool *pgxpool.Pool, schema, table string) ([]Index, error) {
+	const q = `
+SELECT c2.relname, i.indisunique, i.indisprimary, pg_get_indexdef(i.indexrelid)
+FROM pg_index i
+JOIN pg_class c      ON c.oid = i.indrelid
+JOIN pg_namespace n  ON n.oid = c.relnamespace
+JOIN pg_class c2     ON c2.oid = i.indexrelid
+WHERE n.nspname = $1 AND c.relname = $2
+ORDER BY c2.relname`
+	rows, err := pool.Query(ctx, q, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Index
+	for rows.Next() {
+		var ix Index
+		if err := rows.Scan(&ix.Name, &ix.Unique, &ix.Primary, &ix.Def); err != nil {
+			return nil, err
+		}
+		out = append(out, ix)
+	}
+	return out, rows.Err()
+}
+
+// Key describes a table constraint (for the Explorer "keys" node).
+type Key struct {
+	Name string
+	Type string // primary | foreign | unique | check | other
+	Def  string
+}
+
+// Keys lists the constraints on a table (primary/foreign/unique/check).
+func Keys(ctx context.Context, pool *pgxpool.Pool, schema, table string) ([]Key, error) {
+	const q = `
+SELECT con.conname, con.contype, pg_get_constraintdef(con.oid)
+FROM pg_constraint con
+JOIN pg_class c      ON c.oid = con.conrelid
+JOIN pg_namespace n  ON n.oid = c.relnamespace
+WHERE n.nspname = $1 AND c.relname = $2
+ORDER BY con.contype, con.conname`
+	rows, err := pool.Query(ctx, q, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Key
+	for rows.Next() {
+		var k Key
+		var t string
+		if err := rows.Scan(&k.Name, &t, &k.Def); err != nil {
+			return nil, err
+		}
+		k.Type = constraintType(t)
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
+func constraintType(c string) string {
+	switch c {
+	case "p":
+		return "primary"
+	case "f":
+		return "foreign"
+	case "u":
+		return "unique"
+	case "c":
+		return "check"
+	default:
+		return c
+	}
 }
 
 var (
