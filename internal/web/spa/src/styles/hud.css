@@ -205,7 +205,7 @@ table.data tbody tr:hover td { color: var(--hud); }
 .ide { display: grid; grid-template-columns: 300px 1fr; gap: 1rem; flex: 1; min-height: 0; }
 @media (max-width: 900px) { .container:has(.ide) { display: block; overflow: auto; } .ide { grid-template-columns: 1fr; height: auto; } }
 
-/* ── Database Explorer ── */
+/* Database Explorer */
 .explorer { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: 0; }
 .explorer-head { display: flex; align-items: center; justify-content: space-between; padding: .5rem .6rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.15); }
 .explorer-tree { flex: 1; min-height: 0; overflow: auto; padding: .4rem .3rem; }
@@ -313,7 +313,7 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .doc-list { margin: .2rem 0 .6rem; padding-left: 1.2rem; font-size: .8rem; }
 .doc-list li { margin: .15rem 0; }
 
-/* ── Work area + tabs ── */
+/* Work area + tabs */
 .work { display: flex; flex-direction: column; height: 100%; min-width: 0; }
 .tabbar { display: flex; align-items: stretch; gap: 2px; border-bottom: 1px solid rgba(var(--accent-rgb),0.2); overflow-x: auto; min-height: 2.2rem; }
 .tab { display: flex; align-items: center; gap: .4rem; padding: .35rem .7rem; font-size: .78rem; cursor: pointer; border: 1px solid transparent; border-bottom: none; background: var(--panel); color: rgba(var(--accent-rgb),0.7); white-space: nowrap; max-width: 240px; }
@@ -329,7 +329,7 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .welcome { flex: 1; display: flex; align-items: center; justify-content: center; }
 .welcome-box { max-width: 460px; text-align: center; }
 
-/* ── Data grid ── */
+/* Data grid */
 .grid-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .grid-toolbar { display: flex; align-items: center; gap: .3rem; padding: .3rem .5rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.12); }
 .tb-ico { background: none; border: 1px solid transparent; color: rgba(var(--accent-rgb),0.85); cursor: pointer; width: 1.7rem; height: 1.7rem; border-radius: 2px; font-size: .95rem; }
@@ -359,7 +359,7 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .th-sort:hover { color: var(--cta); text-decoration: none; }
 td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; background: var(--panel-raised); position: sticky; left: 0; z-index: 2; font-size: .7rem; width: 1%; white-space: nowrap; }
 
-/* ── SQL console tab ── */
+/* SQL console tab */
 .console-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .console-form { display: flex; flex-direction: column; }
 .console-toolbar { display: flex; align-items: center; gap: .6rem; padding: .4rem .5rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.12); }
@@ -367,13 +367,13 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .console-result { flex: 1; min-height: 0; overflow: auto; padding: .5rem; border-top: 1px solid rgba(var(--accent-rgb),0.12); }
 .hud-btn-cta.sm { padding: .35rem .8rem; font-size: .72rem; }
 
-/* ── Redis tab ── */
+/* Redis tab */
 .redis-pane { flex: 1; min-height: 0; display: grid; grid-template-columns: 260px 1fr; gap: 1rem; padding: .6rem; }
 @media (max-width: 900px) { .redis-pane { grid-template-columns: 1fr; } }
 .redis-keys { padding: .6rem; height: 100%; min-height: 0; overflow: auto; }
 .redis-main { min-width: 0; height: 100%; display: flex; flex-direction: column; gap: 1rem; }
 
-/* ── Connection modal ── */
+/* Connection modal */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,5,12,0.7); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .modal { width: min(620px, 92vw); max-height: 90vh; overflow: auto; background: var(--panel); }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: .8rem 1rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.2); }
@@ -395,7 +395,7 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .record-view .rv-key { white-space: nowrap; width: 1%; padding-right: 1.2rem; vertical-align: top; color: rgba(var(--accent-rgb),0.85); }
 .record-view .rv-val { word-break: break-word; color: var(--hud); }
 
-/* ── Table designer (DataGrip-style Create / Modify table) ── */
+/* Table designer (DataGrip-style Create / Modify table) */
 .modal-wide { width: min(1040px, 95vw); height: min(720px, 92vh); display: flex; flex-direction: column; }
 .modal-wide .modal-body { flex: 1; min-height: 0; padding: 0; gap: 0; }
 .tdz { display: flex; flex-direction: column; height: 100%; min-height: 0; }

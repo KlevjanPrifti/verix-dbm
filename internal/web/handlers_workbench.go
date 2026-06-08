@@ -29,7 +29,7 @@ func (s *Server) workbench(w http.ResponseWriter, r *http.Request) {
 	s.rnd.page(w, "workbench", v)
 }
 
-// ── Explorer tree fragments ───────────────────────────────────────────────────
+// Explorer tree fragments
 
 type explorerData struct {
 	Conn    store.Connection
@@ -115,7 +115,7 @@ func (s *Server) pgKeys(w http.ResponseWriter, r *http.Request) {
 	s.rnd.partial(w, "nodeKeys", d)
 }
 
-// ── Data grid tab ─────────────────────────────────────────────────────────────
+// Data grid tab
 
 type gridData struct {
 	Conn     store.Connection
@@ -164,7 +164,7 @@ func (s *Server) gridView(w http.ResponseWriter, r *http.Request) {
 	s.rnd.partial(w, "grid", d)
 }
 
-// ── Console tabs ──────────────────────────────────────────────────────────────
+// Console tabs
 
 type consoleData struct {
 	Conn     store.Connection
@@ -200,7 +200,7 @@ func (s *Server) redisTabFragment(w http.ResponseWriter, r *http.Request, c stor
 	s.rnd.partial(w, "redisTab", map[string]any{"Console": d, "Redis": rd})
 }
 
-// ── Connection edit (Properties) ──────────────────────────────────────────────
+// Connection edit (Properties)
 
 // editConnForm renders the prefilled "Data Sources & Drivers" modal for an
 // existing connection (loaded via HTMX when the user picks Properties).
@@ -262,7 +262,7 @@ func (s *Server) updateConnection(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
-// ── Connection test ───────────────────────────────────────────────────────────
+// Connection test
 
 func (s *Server) testConnection(w http.ResponseWriter, r *http.Request) {
 	if !s.auth.CheckCSRF(r) {
@@ -335,7 +335,7 @@ func pingRedis(ctx context.Context, c store.Connection, pw string) error {
 	return client.Ping(ctx).Err()
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// helpers
 
 // pgPoolFor resolves the URL's connection and its Postgres pool, writing an
 // error fragment and returning ok=false on failure.

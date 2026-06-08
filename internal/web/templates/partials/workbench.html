@@ -1,4 +1,4 @@
-{{/* ── Explorer: a Postgres connection's schemas → tables → cols/keys/idx ── */}}
+{{/* Explorer: a Postgres connection's schemas → tables → cols/keys/idx */}}
 {{define "explorerPG"}}
 {{$conn := .Conn}}
 {{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
@@ -46,7 +46,7 @@
 {{end}}
 {{end}}
 
-{{/* ── Explorer: a Redis connection — a single console entry ── */}}
+{{/* Explorer: a Redis connection — a single console entry */}}
 {{define "explorerRedis"}}
 {{$conn := .Conn}}
 {{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
@@ -106,7 +106,7 @@
 
 {{define "fragErr"}}<div class="alert error code">{{.Err}}</div>{{end}}
 
-{{/* ── Data grid tab ── */}}
+{{/* Data grid tab */}}
 {{define "grid"}}
 {{$g := .}}
 <div class="grid-pane">
@@ -189,7 +189,7 @@
 {{end}}
 {{end}}
 
-{{/* ── SQL console tab ── */}}
+{{/* SQL console tab */}}
 {{define "consolePG"}}
 <div class="console-pane">
   <form class="console-form" hx-post="/c/{{.Conn.ID}}/pg/query" hx-target="#cresult-{{.Conn.ID}}" hx-indicator="#cspin-{{.Conn.ID}}">
@@ -206,7 +206,7 @@
 </div>
 {{end}}
 
-{{/* ── Redis console tab ── */}}
+{{/* Redis console tab */}}
 {{define "redisTab"}}
 {{$c := .Console}}{{$r := .Redis}}
 <div class="redis-pane">
@@ -238,7 +238,7 @@
 {{if .OK}}<span class="ok hud-label">✓ connection ok</span>{{else}}<span class="bad hud-label code">✗ {{.Err}}</span>{{end}}
 {{end}}
 
-{{/* ── Edit existing connection (Properties) — loaded via HTMX ── */}}
+{{/* Edit existing connection (Properties) — loaded via HTMX */}}
 {{define "connEditModal"}}
 {{$c := .Conn}}
 <div class="modal-overlay" x-data="{open:true}" x-show="open" @keydown.escape.window="open=false">
@@ -283,7 +283,7 @@
 </div>
 {{end}}
 
-{{/* ── Connection modal (Data Sources & Drivers) ── */}}
+{{/* Connection modal (Data Sources & Drivers) */}}
 {{define "connModal"}}
 <div class="modal-overlay" x-show="modal.open" x-cloak @keydown.escape.window="modal.open=false">
   <div class="modal hud-panel hud-panel-glow">

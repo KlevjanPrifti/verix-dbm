@@ -12,7 +12,7 @@ import (
 	"verix-dbm/internal/store"
 )
 
-// ── Read-only generators (introspect → text/plain for the clipboard) ───────────
+// Read-only generators (introspect → text/plain for the clipboard)
 
 // pgDDL returns the CREATE TABLE statement for a relation as plain text.
 func (s *Server) pgDDL(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +101,7 @@ func (s *Server) pgUsages(w http.ResponseWriter, r *http.Request) {
 	s.rnd.partial(w, "usagesResult", d)
 }
 
-// ── Mutating DDL ───────────────────────────────────────────────────────────────
+// Mutating DDL
 
 // requireWrite resolves the connection + pool while enforcing CSRF, write/admin
 // role, and the connection's read-only flag. It writes the error response and
@@ -199,7 +199,7 @@ func (s *Server) pgDropIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ── Form-backed DDL (a modal collects parameters, then POSTs here) ──────────────
+// Form-backed DDL (a modal collects parameters, then POSTs here)
 
 // ddlForm holds everything the DDL modals need, both for the initial GET render
 // and for re-rendering with .Err after a failed POST.

@@ -64,7 +64,7 @@ func truncateStmt(s string) string {
 	return s
 }
 
-// ── Statement generators (read-only: introspect, then build a string) ──────────
+// Statement generators (read-only: introspect, then build a string)
 
 // GenSelect builds "SELECT col, … FROM s.t;" listing the real columns.
 func GenSelect(ctx context.Context, pool *pgxpool.Pool, schema, table string) (string, error) {

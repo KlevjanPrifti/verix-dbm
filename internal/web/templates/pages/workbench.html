@@ -6,7 +6,7 @@
   <!-- backdrop behind the off-canvas explorer drawer (mobile only) -->
   <div class="drawer-backdrop" x-show="drawer" x-cloak @click="drawer=false"></div>
 
-  <!-- ── Database Explorer ─────────────────────────────────────────────── -->
+  <!-- Database Explorer -->
   <aside class="explorer hud-panel" :class="{open: drawer}">
     <div class="explorer-head">
       <span class="hud-label">Database Explorer</span>
@@ -57,7 +57,7 @@
     </div>
   </aside>
 
-  <!-- ── Tabbed workspace ──────────────────────────────────────────────── -->
+  <!-- Tabbed workspace -->
   <section class="work">
     <div class="tabbar">
       <button type="button" class="drawer-toggle" @click="drawer=!drawer"
@@ -83,7 +83,7 @@
     </div>
   </section>
 
-  <!-- ── Right-click context menu (data-driven, nested submenus) ─────────── -->
+  <!-- Right-click context menu (data-driven, nested submenus) -->
   <!-- backdrop dims the screen behind the bottom-sheet menu on touch -->
   <div class="ctx-backdrop" x-show="ctx.open && ctx.sheet" x-cloak @click="closeCtx()"></div>
 

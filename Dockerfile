@@ -1,4 +1,4 @@
-# ─── spa ──────────────────────────────────────────────────────────────────────
+# spa
 # Build the React/Vite SPA so its dist/ can be go:embed'd into the binary. dist/
 # is gitignored, so it must be produced here rather than copied from the host.
 FROM node:20-alpine AS spa
@@ -8,7 +8,7 @@ RUN npm ci
 COPY internal/web/spa/ ./
 RUN npm run build
 
-# ─── build ────────────────────────────────────────────────────────────────────
+# build
 FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -23,7 +23,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /verix-dbm ./cmd/server
 # no shell/chown). A freshly-created named volume inherits this ownership.
 RUN mkdir -p /data
 
-# ─── runtime ──────────────────────────────────────────────────────────────────
+# runtime
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /verix-dbm /verix-dbm
 # SQLite metadata lives here; mount a volume at /data in production. Owned by

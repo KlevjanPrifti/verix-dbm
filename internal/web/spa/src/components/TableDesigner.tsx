@@ -52,7 +52,7 @@ export default function TableDesigner({ params, onClose, onApplied }: {
   const base = (m.name || m.origName || 'table').trim() || 'table'
   const patch = (p: Partial<TableModel>) => setM(s => ({ ...s, ...p }))
 
-  // ── add / remove / reorder ──
+  // add / remove / reorder
   const add = (kind: Kind) => {
     const n = (arr: unknown[]) => arr.length + 1
     if (kind === 'col') {
@@ -217,7 +217,7 @@ function Folder({ label, count }: { label: string; count: number }) {
   return <div className="tdz-folder"><Ico name="folder" /><span>{label}</span><span className="count">{count}</span></div>
 }
 
-// ── add dropdown ──
+// add dropdown
 function AddMenu({ onPick }: { onPick: (k: Kind) => void }) {
   const [open, setOpen] = useState(false)
   useEffect(() => {
@@ -247,7 +247,7 @@ function AddMenu({ onPick }: { onPick: (k: Kind) => void }) {
   )
 }
 
-// ── property panels ──
+// property panels
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="mrow"><label className="hud-label">{label}</label>{children}</div>
 }

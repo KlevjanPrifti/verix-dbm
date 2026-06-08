@@ -65,7 +65,7 @@ export const emptyModel = (): TableModel => ({
   name: '', comment: '', cols: [], uniques: [], fks: [], indexes: [], checks: [],
 })
 
-// ── quoting ──────────────────────────────────────────────────────────────────
+// quoting
 export const qi = (s: string) => '"' + String(s).replace(/"/g, '""') + '"'
 export const ql = (s: string) => "'" + String(s).replace(/'/g, "''") + "'"
 const qual = (schema: string, t: string) => qi(schema) + '.' + qi(t)
@@ -85,7 +85,7 @@ function fkClause(f: FK): string {
 }
 const pkName = (m: TableModel) => m.snapshot?.pkName || `${m.name}_pkey`
 
-// ── CREATE ───────────────────────────────────────────────────────────────────
+// CREATE
 export function generateCreate(schema: string, m: TableModel): string[] {
   const t = qual(schema, m.name || 'table_name')
   const inner: string[] = m.cols.filter(c => c.name.trim()).map(colDef)
@@ -103,7 +103,7 @@ export function generateCreate(schema: string, m: TableModel): string[] {
   return stmts
 }
 
-// ── MODIFY (diff against snapshot) ───────────────────────────────────────────
+// MODIFY (diff against snapshot)
 export function generateModify(schema: string, m: TableModel): string[] {
   const snap = m.snapshot!
   const t = qual(schema, m.origName!) // ALTER against the original name; rename comes last

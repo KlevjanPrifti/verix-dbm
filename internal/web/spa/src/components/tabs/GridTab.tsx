@@ -47,7 +47,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const rows = result?.rows || []
   const readOnly = data?.readOnly ?? (conn ? conn.readOnly || !app.caps.write : true)
 
-  // ── helpers shared by the menus ──
+  // helpers shared by the menus
   const qq = (s: string) => '"' + s.replace(/"/g, '""') + '"'
   const lit = (s: string) => "'" + s.replace(/'/g, "''") + "'"
   const qual = `${qq(schema)}.${qq(table)}`
@@ -81,57 +81,56 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
     setFilter('(' + cols.map(c => `${qq(c)}::text ILIKE ${lit('%' + term + '%')}`).join(' OR ') + ')')
   }
 
-  // Cell menu — mirrors the DataGrip data-editor menu. Write-only actions are
-  // present but disabled (this build browses read-only), exactly like DataGrip
-  // greys what the current context can't do.
-  function cellItems(r: number, c: number): MenuItem[] {
+  // Unified right-click menu — mirrors the DataGrip data-editor menu. One menu
+  // serves both cell and table-area clicks: the cell-specific block only appears
+  // when there's a row under the cursor (rows[r] exists); otherwise it collapses
+  // to the table-level actions with a schema.table header. Write-only actions
+  // are present but disabled (this build browses read-only), exactly like
+  // DataGrip greys what the current context can't do.
+  function menuItems(r: number, c: number): MenuItem[] {
+    const cell = rows[r] !== undefined
     const col = cols[c] ?? ''
     const val = rows[r]?.[c] ?? ''
     const eq = val === '' ? `${qq(col)} IS NULL` : `${qq(col)} = ${lit(val)}`
     const neq = val === '' ? `${qq(col)} IS NOT NULL` : `${qq(col)} <> ${lit(val)}`
     return [
-      { head: col },
-      { label: 'Edit', Icon: SquarePen, key: 'Enter', disabled: true },
-      { label: 'Show record view', Icon: TableProperties, run: () => setRecord(r) },
-      { label: 'Open in value editor', Icon: Maximize2, run: () => setViewer({ col, value: val }) },
-      { label: 'Show aggregate view', Icon: Sigma, run: () => setAgg(col) },
-      { sep: true },
-      { label: 'Revert selected', Icon: Undo2, disabled: true },
-      { label: 'Copy using data extractor (SQL Inserts)', Icon: FileCode, key: 'Ctrl+C', run: () => app.copy(sqlInsert(r)) },
-      { label: 'Change data extractor', Icon: Code, children: [
-        { label: 'SQL Inserts', run: () => app.copy(sqlInsert(r)) },
-        { label: 'JSON', run: () => app.copy(jsonRow(r)) },
-        { label: 'CSV', run: () => app.copy(csvRow(r)) },
-        { label: 'TSV', run: () => app.copy(rows[r].join('\t')) },
-      ] },
-      { label: 'Copy aggregation result (SUM)', Icon: Sigma, key: 'Ctrl+Shift+C', run: () => copySum(col) },
-      { sep: true },
-      { label: 'Add row', Icon: Plus, key: 'Alt+Ins', disabled: true },
-      { label: 'Delete rows', Icon: Trash2, key: 'Ctrl+Y', disabled: true },
-      { sep: true },
-      { label: 'Go to', Icon: ArrowRight, children: [
-        { label: 'First page', disabled: page === 0, run: () => setPage(0) },
-        { label: 'Previous page', disabled: page === 0, run: () => setPage(p => Math.max(0, p - 1)) },
-        { label: 'Next page', disabled: rows.length === 0, run: () => setPage(p => p + 1) },
-        { label: 'Refresh', run: () => load(page, where, order) },
-      ] },
-      { label: 'Filter by', Icon: Filter, children: [
-        { label: `${col} equals this value`, run: () => setFilter(eq) },
-        { label: `${col} ≠ this value`, run: () => setFilter(neq) },
-        { label: `${col} IS NULL`, run: () => setFilter(`${qq(col)} IS NULL`) },
-        { label: `${col} IS NOT NULL`, run: () => setFilter(`${qq(col)} IS NOT NULL`) },
-        { label: 'Add to filter (AND)', run: () => setFilter(where.trim() ? `${where.trim()} AND ${eq}` : eq) },
-        ...(where ? [{ label: 'Clear filter', run: () => setFilter('') } as MenuItem] : []),
-      ] },
-      { sep: true },
-      ...tableLevel(),
-    ]
-  }
-
-  // Table-level actions, shared by the cell menu and the table menu so both
-  // expose the same set of table-wide operations.
-  function tableLevel(): MenuItem[] {
-    return [
+      { head: cell ? col : `${schema}.${table}` },
+      ...(cell ? [
+        { label: 'Edit', Icon: SquarePen, key: 'Enter', disabled: true },
+        { label: 'Show record view', Icon: TableProperties, run: () => setRecord(r) },
+        { label: 'Open in value editor', Icon: Maximize2, run: () => setViewer({ col, value: val }) },
+        { label: 'Show aggregate view', Icon: Sigma, run: () => setAgg(col) },
+        { sep: true },
+        { label: 'Revert selected', Icon: Undo2, disabled: true },
+        { label: 'Copy using data extractor (SQL Inserts)', Icon: FileCode, key: 'Ctrl+C', run: () => app.copy(sqlInsert(r)) },
+        { label: 'Change data extractor', Icon: Code, children: [
+          { label: 'SQL Inserts', run: () => app.copy(sqlInsert(r)) },
+          { label: 'JSON', run: () => app.copy(jsonRow(r)) },
+          { label: 'CSV', run: () => app.copy(csvRow(r)) },
+          { label: 'TSV', run: () => app.copy(rows[r].join('\t')) },
+        ] },
+        { label: 'Copy aggregation result (SUM)', Icon: Sigma, key: 'Ctrl+Shift+C', run: () => copySum(col) },
+        { sep: true },
+        { label: 'Add row', Icon: Plus, key: 'Alt+Ins', disabled: true },
+        { label: 'Delete rows', Icon: Trash2, key: 'Ctrl+Y', disabled: true },
+        { sep: true },
+        { label: 'Go to', Icon: ArrowRight, children: [
+          { label: 'First page', disabled: page === 0, run: () => setPage(0) },
+          { label: 'Previous page', disabled: page === 0, run: () => setPage(p => Math.max(0, p - 1)) },
+          { label: 'Next page', disabled: rows.length === 0, run: () => setPage(p => p + 1) },
+          { label: 'Refresh', run: () => load(page, where, order) },
+        ] },
+        { label: 'Filter by', Icon: Filter, children: [
+          { label: `${col} equals this value`, run: () => setFilter(eq) },
+          { label: `${col} ≠ this value`, run: () => setFilter(neq) },
+          { label: `${col} IS NULL`, run: () => setFilter(`${qq(col)} IS NULL`) },
+          { label: `${col} IS NOT NULL`, run: () => setFilter(`${qq(col)} IS NOT NULL`) },
+          { label: 'Add to filter (AND)', run: () => setFilter(where.trim() ? `${where.trim()} AND ${eq}` : eq) },
+          ...(where ? [{ label: 'Clear filter', run: () => setFilter('') }] : []),
+        ] },
+        { sep: true },
+      ] as MenuItem[] : []),
+      // table-level actions (always shown)
       { label: 'Refresh', Icon: RotateCw, run: () => load(page, where, order) },
       { sep: true },
       { label: 'Copy column names', Icon: Copy, run: () => app.copy(cols.join('\t')) },
@@ -141,12 +140,6 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       { sep: true },
       { label: 'Quick documentation', Icon: Info, key: 'Ctrl+Q', run: openDoc },
     ]
-  }
-
-  // Table-level menu — shown when right-clicking empty grid space (incl. the
-  // 0-rows view), so the menu is reachable even with no cell under the cursor.
-  function tableItems(): MenuItem[] {
-    return [{ head: `${schema}.${table}` }, ...tableLevel()]
   }
 
   return (
@@ -172,7 +165,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       </form>
 
       <div className="grid-body"
-        onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, items: rows.length ? cellItems(0, 0) : tableItems() }) }}>
+        onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, items: menuItems(0, 0) }) }}>
         {data?.error ? <div className="alert error code">{data.error}</div>
           : !result ? <p className="dim">{loading ? 'loading…' : ''}</p>
           : !result.isSelect ? <p className="ok hud-label">{result.command} · {result.rowsAffected} rows affected · {result.duration}</p>
@@ -197,7 +190,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
                     {rows.map((row, i) => (
                       <tr key={i}><td className="rownum">{i + 1}</td>{row.map((v, j) => (
                         <td key={j} className="code"
-                          onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, items: cellItems(i, j) }) }}>{v}</td>
+                          onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, items: menuItems(i, j) }) }}>{v}</td>
                       ))}</tr>
                     ))}
                   </tbody>

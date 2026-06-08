@@ -13,7 +13,7 @@ import (
 
 const browseLimit = 100
 
-// ── Postgres ────────────────────────────────────────────────────────────────
+// Postgres
 
 type pgViewData struct {
 	DB      string
@@ -114,7 +114,7 @@ func (s *Server) pgQuery(w http.ResponseWriter, r *http.Request) {
 	s.rnd.partial(w, "queryResult", out)
 }
 
-// ── Redis / Valkey ──────────────────────────────────────────────────────────
+// Redis / Valkey
 
 type redisViewData struct {
 	Match  string

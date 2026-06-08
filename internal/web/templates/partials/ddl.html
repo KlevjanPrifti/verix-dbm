@@ -1,4 +1,4 @@
-{{/* ── Quick documentation tab ── */}}
+{{/* Quick documentation tab */}}
 {{define "docResult"}}
 <div class="doc-pane p-4">
   {{if .Err}}<div class="alert error code">{{.Err}}</div>{{else}}
@@ -21,7 +21,7 @@
 </div>
 {{end}}
 
-{{/* ── Find usages tab ── */}}
+{{/* Find usages tab */}}
 {{define "usagesResult"}}
 <div class="doc-pane p-4">
   {{if .Err}}<div class="alert error code">{{.Err}}</div>{{else}}
@@ -38,7 +38,7 @@
 </div>
 {{end}}
 
-{{/* ── DDL parameter modal (Add column / Modify / Rename / New…) ──
+{{/* DDL parameter modal (Add column / Modify / Rename / New…)
      Submits via HTMX; on success the handler returns an empty body (clears
      #ddl-host, closing the modal) plus an HX-Trigger that refreshes the tree.
      On error it re-renders this same partial with .Err and the entered values. */}}

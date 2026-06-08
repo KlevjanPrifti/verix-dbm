@@ -58,7 +58,7 @@ func (s *Server) mountAPI(r chi.Router) {
 	r.Get("/audit", s.apiAudit)
 }
 
-// ── JSON plumbing ───────────────────────────────────────────────────────────
+// JSON plumbing
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -74,7 +74,7 @@ func readJSON(r *http.Request, v any) error {
 	return json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20)).Decode(v)
 }
 
-// ── DTOs ──────────────────────────────────────────────────────────────────────
+// DTOs
 
 type connDTO struct {
 	ID       int64  `json:"id"`
@@ -147,7 +147,7 @@ func toColumnDTO(c postgres.Column) columnDTO {
 	}
 }
 
-// ── Session ─────────────────────────────────────────────────────────────────
+// Session
 
 func (s *Server) apiMe(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.FromContext(r.Context())
@@ -159,7 +159,7 @@ func (s *Server) apiMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ── Connections ───────────────────────────────────────────────────────────────
+// Connections
 
 func (s *Server) apiListConnections(w http.ResponseWriter, r *http.Request) {
 	conns, err := s.st.ListConnections(r.Context())
@@ -301,7 +301,7 @@ func (s *Server) apiTestConnection(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// ── Explorer tree ───────────────────────────────────────────────────────────
+// Explorer tree
 
 func (s *Server) apiExplorer(w http.ResponseWriter, r *http.Request) {
 	c, err := s.connFor(r)
@@ -372,7 +372,7 @@ func (s *Server) apiKeys(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
 }
 
-// ── Data grid ─────────────────────────────────────────────────────────────────
+// Data grid
 
 func (s *Server) apiGrid(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.FromContext(r.Context())
@@ -400,7 +400,7 @@ func (s *Server) apiGrid(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// ── SQL query console ───────────────────────────────────────────────────────
+// SQL query console
 
 func (s *Server) apiQuery(w http.ResponseWriter, r *http.Request) {
 	if !s.auth.CheckCSRF(r) {
@@ -450,7 +450,7 @@ func (s *Server) apiQuery(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// ── Generators / introspection ──────────────────────────────────────────────
+// Generators / introspection
 
 func (s *Server) apiGenerate(w http.ResponseWriter, r *http.Request) {
 	_, pool, ok := s.apiPGPool(w, r)
@@ -523,7 +523,7 @@ func (s *Server) apiUsages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// ── DDL ───────────────────────────────────────────────────────────────────────
+// DDL
 
 // apiDDLFormPrefill returns the live column definition so the SPA can prefill
 // the Modify-column modal (other DDL forms need no server-side prefill).
@@ -691,7 +691,7 @@ func (s *Server) execDDLAudit(r *http.Request, u auth.User, c store.Connection, 
 	return err
 }
 
-// ── Redis ─────────────────────────────────────────────────────────────────────
+// Redis
 
 func (s *Server) apiRedisKeys(w http.ResponseWriter, r *http.Request) {
 	c, err := s.connFor(r)
@@ -786,7 +786,7 @@ func (s *Server) apiRedisCmd(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"out": res})
 }
 
-// ── Audit ─────────────────────────────────────────────────────────────────────
+// Audit
 
 type auditDTO struct {
 	TS      string `json:"ts"`
@@ -818,7 +818,7 @@ func (s *Server) apiAudit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"rows": out})
 }
 
-// ── shared gates ────────────────────────────────────────────────────────────
+// shared gates
 
 func (s *Server) apiRequireAdmin(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
 	u, _ := auth.FromContext(r.Context())
