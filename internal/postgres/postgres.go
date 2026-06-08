@@ -104,13 +104,17 @@ func DatabaseName(ctx context.Context, pool *pgxpool.Pool) (string, error) {
 }
 
 // Browse returns a page of rows from a table using identifier-quoted names.
+// Browsing is always read-only.
 func Browse(ctx context.Context, pool *pgxpool.Pool, schema, table string, limit, offset int) (*Result, error) {
-	return BrowseWhere(ctx, pool, schema, table, "", "", limit, offset, false)
+	return BrowseWhere(ctx, pool, schema, table, "", "", limit, offset, true)
 }
 
 // BrowseWhere returns a page of rows with optional WHERE and ORDER BY fragments
-// (raw SQL the user typed into the grid's filter bar). The query runs read-only
-// when readOnly is set; multi-statement input is rejected by the pgx protocol.
+// (raw SQL the user typed into the grid's filter bar). Callers always run this
+// read-only (readOnly=true): the filter is unparameterized raw SQL, so the
+// read-only transaction is what guarantees an injected expression can't mutate
+// data or invoke a volatile/side-effecting function with write intent.
+// Multi-statement input is additionally rejected by the pgx extended protocol.
 func BrowseWhere(ctx context.Context, pool *pgxpool.Pool, schema, table, where, order string, limit, offset int, readOnly bool) (*Result, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 100

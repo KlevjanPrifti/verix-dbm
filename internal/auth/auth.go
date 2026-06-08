@@ -5,6 +5,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -41,6 +42,9 @@ type User struct {
 type session struct {
 	user    User
 	expires time.Time
+	// csrf is a per-session token, independent of the session id, embedded in
+	// rendered pages and validated on state-changing requests.
+	csrf string
 	// idToken is the raw OIDC ID token, kept for RP-initiated logout (id_token_hint).
 	idToken string
 	// oauthState is the expected callback state for an in-flight login.
@@ -56,6 +60,21 @@ type Authenticator struct {
 	verifier   *oidc.IDTokenVerifier
 	oauth      *oauth2.Config
 	endSession string // OIDC end_session_endpoint (from provider metadata)
+
+	// auditFn records security-relevant auth events (login success/failure).
+	// Optional; nil-safe via audit().
+	auditFn func(ctx context.Context, action, detail string, success bool)
+}
+
+// SetAudit registers a recorder for auth events (wired to the store by main).
+func (a *Authenticator) SetAudit(fn func(ctx context.Context, action, detail string, success bool)) {
+	a.auditFn = fn
+}
+
+func (a *Authenticator) audit(ctx context.Context, action, detail string, success bool) {
+	if a.auditFn != nil {
+		a.auditFn(ctx, action, detail, success)
+	}
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
@@ -140,21 +159,25 @@ func (a *Authenticator) Login(w http.ResponseWriter, r *http.Request) {
 func (a *Authenticator) Callback(w http.ResponseWriter, r *http.Request) {
 	stateCookie, err := r.Cookie("dbm_state")
 	if err != nil || r.URL.Query().Get("state") != stateCookie.Value {
+		a.audit(r.Context(), "auth_login_failed", "invalid state", false)
 		http.Error(w, "invalid state", http.StatusBadRequest)
 		return
 	}
 	oauth2Token, err := a.oauth.Exchange(r.Context(), r.URL.Query().Get("code"))
 	if err != nil {
+		a.audit(r.Context(), "auth_login_failed", "token exchange failed", false)
 		http.Error(w, "token exchange failed", http.StatusBadGateway)
 		return
 	}
 	rawID, ok := oauth2Token.Extra("id_token").(string)
 	if !ok {
+		a.audit(r.Context(), "auth_login_failed", "no id_token", false)
 		http.Error(w, "no id_token", http.StatusBadGateway)
 		return
 	}
 	idToken, err := a.verifier.Verify(r.Context(), rawID)
 	if err != nil {
+		a.audit(r.Context(), "auth_login_failed", "id_token verify failed", false)
 		http.Error(w, "id_token verify failed", http.StatusUnauthorized)
 		return
 	}
@@ -167,6 +190,7 @@ func (a *Authenticator) Callback(w http.ResponseWriter, r *http.Request) {
 		} `json:"realm_access"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
+		a.audit(r.Context(), "auth_login_failed", "claims parse failed", false)
 		http.Error(w, "claims parse failed", http.StatusBadGateway)
 		return
 	}
@@ -183,6 +207,7 @@ func (a *Authenticator) Callback(w http.ResponseWriter, r *http.Request) {
 			u.Write = true
 		}
 	}
+	a.audit(r.Context(), "auth_login", u.Email, true)
 	tok := a.put(u, rawID)
 	setCookie(w, tok, a.cfg)
 	http.Redirect(w, r, "/", http.StatusFound)
@@ -267,34 +292,45 @@ func (a *Authenticator) current(r *http.Request) (User, bool) {
 		return User{}, false
 	}
 	u := s.user
-	u.CSRF = a.csrfFor(c.Value)
+	u.CSRF = s.csrf
 	return u, true
 }
 
 func (a *Authenticator) put(u User, idToken string) string {
 	tok := token()
 	a.mu.Lock()
-	a.sessions[tok] = &session{user: u, idToken: idToken, expires: time.Now().Add(sessionTTL)}
+	a.sessions[tok] = &session{user: u, idToken: idToken, csrf: token(), expires: time.Now().Add(sessionTTL)}
 	a.mu.Unlock()
 	return tok
 }
 
-// csrfFor derives a stable per-session CSRF token (the session id reversed-hash
-// would be better; here we reuse a deterministic value tied to the session key).
+// csrfFor returns the session's independent CSRF token (empty if no session).
 func (a *Authenticator) csrfFor(sessionKey string) string {
-	if len(sessionKey) >= 16 {
-		return sessionKey[:16]
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if s, ok := a.sessions[sessionKey]; ok {
+		return s.csrf
 	}
-	return sessionKey
+	return ""
 }
 
-// CheckCSRF validates the csrf form value against the caller's session.
+// CheckCSRF validates the request's CSRF token (sent as the X-CSRF-Token header
+// for HTMX/fetch requests, or a "csrf" form field) against the caller's session,
+// using a constant-time comparison.
 func (a *Authenticator) CheckCSRF(r *http.Request) bool {
 	c, err := r.Cookie(cookieName)
 	if err != nil {
 		return false
 	}
-	return r.FormValue("csrf") == a.csrfFor(c.Value)
+	want := a.csrfFor(c.Value)
+	if want == "" {
+		return false
+	}
+	got := r.Header.Get("X-CSRF-Token")
+	if got == "" {
+		got = r.FormValue("csrf")
+	}
+	return got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }
 
 // FromContext returns the authenticated user attached by Middleware.

@@ -2,12 +2,15 @@ package web
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"html/template"
 	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 //go:embed templates static
@@ -91,5 +94,31 @@ func staticFS() http.Handler {
 	if err != nil {
 		log.Fatalf("render: static sub: %v", err)
 	}
-	return http.StripPrefix("/static/", http.FileServer(http.FS(sub)))
+	// embed.FS reports a zero ModTime, so http.FileServer emits no
+	// Last-Modified/ETag and browsers fall back to heuristic caching — which
+	// serves stale JS/CSS across deploys (e.g. a cached workbench.js missing a
+	// newly added global). Precompute a content-hash ETag so there's a real
+	// validator, and send Cache-Control: no-cache so the browser revalidates on
+	// every load and picks up a changed asset immediately.
+	etags := map[string]string{}
+	_ = fs.WalkDir(sub, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		b, rerr := fs.ReadFile(sub, p)
+		if rerr != nil {
+			return nil
+		}
+		sum := sha256.Sum256(b)
+		etags["/"+p] = `"` + hex.EncodeToString(sum[:8]) + `"`
+		return nil
+	})
+	fileServer := http.StripPrefix("/static/", http.FileServer(http.FS(sub)))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if et, ok := etags[strings.TrimPrefix(r.URL.Path, "/static")]; ok {
+			w.Header().Set("ETag", et)
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		fileServer.ServeHTTP(w, r)
+	})
 }

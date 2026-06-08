@@ -21,6 +21,11 @@ type Config struct {
 	OIDCAdminRole    string // realm role that grants the admin capability
 	OIDCWriteRole    string // realm role that grants write capability
 
+	// TrustProxy enables honoring X-Forwarded-For / X-Real-IP for the client IP.
+	// Only safe behind a reverse proxy that overwrites those headers; off by
+	// default so untrusted clients can't spoof their address.
+	TrustProxy bool
+
 	DevMode bool
 }
 
@@ -36,6 +41,7 @@ func Load() *Config {
 		OIDCRedirectURL:  os.Getenv("OIDC_REDIRECT_URL"),
 		OIDCAdminRole:    env("OIDC_ADMIN_ROLE", "dbm-admin"),
 		OIDCWriteRole:    env("OIDC_WRITE_ROLE", "dbm-write"),
+		TrustProxy:       os.Getenv("DBM_TRUST_PROXY") == "true",
 	}
 	if c.OIDCRedirectURL == "" {
 		c.OIDCRedirectURL = c.BaseURL + "/auth/callback"

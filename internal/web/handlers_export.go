@@ -15,6 +15,10 @@ import (
 // as a CSV or JSON download. It reuses the read-only browse path, so the same
 // 1000-row cap applies — the download is a convenience snapshot, not a dump.
 func (s *Server) exportTable(w http.ResponseWriter, r *http.Request) {
+	if !s.auth.CheckCSRF(r) {
+		http.Error(w, "bad csrf", http.StatusForbidden)
+		return
+	}
 	u, _ := auth.FromContext(r.Context())
 	c, pool, ok := s.pgPoolFor(w, r)
 	if !ok {

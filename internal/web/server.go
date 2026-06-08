@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -31,13 +32,23 @@ func NewServer(cfg *config.Config, st *store.Store, reg *conn.Registry, a *auth.
 
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RealIP)
+	// Only derive the client IP from forwarded headers when explicitly told we
+	// sit behind a trusted proxy; otherwise clients could spoof X-Forwarded-For.
+	if s.cfg.TrustProxy {
+		r.Use(middleware.RealIP)
+	}
 	r.Use(middleware.Recoverer)
 
 	r.Handle("/static/*", staticFS())
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
-	r.Get("/auth/login", s.auth.Login)
-	r.Get("/auth/callback", s.auth.Callback)
+
+	// Throttle auth endpoints against brute-force / redirect spam, per client IP.
+	authLimit := newRateLimiter(20, time.Minute)
+	r.Group(func(r chi.Router) {
+		r.Use(authLimit.middleware)
+		r.Get("/auth/login", s.auth.Login)
+		r.Get("/auth/callback", s.auth.Callback)
+	})
 	r.Get("/auth/logout", s.auth.Logout)
 
 	r.Group(func(r chi.Router) {

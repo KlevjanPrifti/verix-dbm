@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -187,11 +188,21 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-// DSN builds a libpq-style connection string for a Postgres connection.
+// DSN builds a libpq-style connection string for a Postgres connection. The
+// username, password, host, and database are URL-encoded (via net/url) so that
+// special characters in credentials can't break parsing or inject connection
+// parameters. Options is passed through verbatim as the query string.
 func (c Connection) DSN(password string) string {
 	opts := c.Options
 	if opts == "" {
 		opts = "sslmode=disable"
 	}
-	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?%s", c.Username, password, c.Host, c.Port, c.DBName, opts)
+	u := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(c.Username, password),
+		Host:     fmt.Sprintf("%s:%d", c.Host, c.Port),
+		Path:     "/" + c.DBName,
+		RawQuery: opts,
+	}
+	return u.String()
 }

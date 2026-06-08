@@ -131,6 +131,10 @@ type gridData struct {
 }
 
 func (s *Server) gridView(w http.ResponseWriter, r *http.Request) {
+	if !s.auth.CheckCSRF(r) {
+		http.Error(w, "bad csrf", http.StatusForbidden)
+		return
+	}
 	u, _ := auth.FromContext(r.Context())
 	c, pool, ok := s.pgPoolFor(w, r)
 	if !ok {
@@ -150,7 +154,8 @@ func (s *Server) gridView(w http.ResponseWriter, r *http.Request) {
 	if d.Page < 0 {
 		d.Page = 0
 	}
-	res, err := postgres.BrowseWhere(r.Context(), pool, d.Schema, d.Table, d.Where, d.Order, browseLimit, d.Page*browseLimit, d.ReadOnly)
+	// Always browse read-only: the where/order fragments are raw user SQL.
+	res, err := postgres.BrowseWhere(r.Context(), pool, d.Schema, d.Table, d.Where, d.Order, browseLimit, d.Page*browseLimit, true)
 	if err != nil {
 		d.Err = err.Error()
 	}

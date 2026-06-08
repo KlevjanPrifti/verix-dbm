@@ -46,6 +46,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("auth: %v", err)
 	}
+	// Record login success/failure to the audit log.
+	a.SetAudit(func(ctx context.Context, action, detail string, success bool) {
+		st.AddAudit(ctx, store.Audit{User: detail, Action: action, Detail: detail, Success: success})
+	})
 
 	srv := web.NewServer(cfg, st, reg, a, box)
 	httpSrv := &http.Server{

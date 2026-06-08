@@ -81,6 +81,11 @@ document.addEventListener('alpine:init', () => {
         csrf: el.dataset.csrf || '',
       };
       this.touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+      // Attach the CSRF token to every HTMX request — attribute-driven and
+      // programmatic (htmx.ajax) alike — so server-side CheckCSRF passes.
+      document.body.addEventListener('htmx:configRequest', (e) => {
+        e.detail.headers['X-CSRF-Token'] = this.caps.csrf;
+      });
       // DDL forms ask the server (via HX-Trigger) to refresh the affected tree.
       document.body.addEventListener('verix:refreshConn', (ev) => {
         this.refreshConn(ev.detail);
@@ -354,7 +359,9 @@ document.addEventListener('alpine:init', () => {
     exportAs(format) {
       const c = this.ctx, id = this.cid();
       this.closeCtx();
-      window.open(`/c/${id}/export?schema=${encodeURIComponent(c.schema)}&table=${encodeURIComponent(c.table)}&format=${format}`, '_blank');
+      // window.open is a top-level navigation (not an HTMX request), so the
+      // CSRF token can't ride a header here — pass it as a query parameter.
+      window.open(`/c/${id}/export?schema=${encodeURIComponent(c.schema)}&table=${encodeURIComponent(c.table)}&format=${format}&csrf=${encodeURIComponent(this.caps.csrf)}`, '_blank');
     },
 
     // ── DDL: confirm-then-POST (fetch) and form modals ──
