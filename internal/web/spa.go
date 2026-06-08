@@ -11,6 +11,8 @@ import (
 // The built React/Vite SPA, embedded so the binary stays self-contained. Built
 // with `npm --prefix internal/web/spa run build`; Vite uses base "/app/", so all
 // asset URLs resolve under the mount below.
+//
+//go:embed all:spa/dist
 var spaAssets embed.FS
 
 // spaHandler serves the SPA under /app: hashed assets straight from dist, and
