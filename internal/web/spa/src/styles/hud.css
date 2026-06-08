@@ -322,10 +322,8 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .tab-title { overflow: hidden; text-overflow: ellipsis; }
 .tab-x { background: none; border: none; color: inherit; opacity: .5; cursor: pointer; font-size: .7rem; padding: 0; }
 .tab-x:hover { opacity: 1; color: #ff9a9a; }
-.tab-hint { display: flex; align-items: center; padding: 0 .8rem; }
-.tab-ico::before { font-size: .85em; }
-.ti-grid::before { content: "▦"; color: rgba(var(--accent-rgb),0.8); }
-.ti-console::before { content: "⌨"; }
+.tab-hint { display: flex; align-items: center; gap: .3rem; padding: 0 .8rem; }
+.tab-ico { color: rgba(var(--accent-rgb),0.8); }
 .tab-content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 
 .welcome { flex: 1; display: flex; align-items: center; justify-content: center; }
