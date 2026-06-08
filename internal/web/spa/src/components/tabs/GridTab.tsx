@@ -66,6 +66,30 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const csvRow = (r: number) => rows[r].map(csvCell).join(',')
   const tableTsv = () => [cols.join('\t'), ...rows.map(r => r.join('\t'))].join('\n')
 
+  // ── write actions ──
+  // The grid is a browser, not an inline editor, so write actions seed a query
+  // console with a runnable statement the user reviews and runs — reusing the
+  // console's confirm gate + audit trail (same pattern as "query table").
+  const cellLit = (v: string) => (v === '' ? 'NULL' : lit(v))
+  // Best-effort row identifier: AND of every column = its value. The grid doesn't
+  // track the primary key, so this targets the clicked row by its full contents.
+  const rowWhere = (r: number) =>
+    cols.map((c, i) => rows[r][i] === '' ? `${qq(c)} IS NULL` : `${qq(c)} = ${lit(rows[r][i])}`).join('\n  AND ')
+  const openSql = (key: string, title: string, sql: string) =>
+    app.openTab({ key, title, icon: 'console', view: { type: 'console', connId, sql } })
+  const insertRow = () => openSql(
+    `console:${connId}:insert:${schema}.${table}`, `insert · ${table}`,
+    `INSERT INTO ${qual} (${cols.map(qq).join(', ')})\nVALUES (${cols.map(() => 'NULL').join(', ')});`)
+  const editCell = (r: number, c: number) => openSql(
+    `console:${connId}:edit:${schema}.${table}`, `edit · ${table}`,
+    `UPDATE ${qual}\nSET ${qq(cols[c])} = ${cellLit(rows[r][c])}\nWHERE ${rowWhere(r)};`)
+  const deleteRow = (r: number) => openSql(
+    `console:${connId}:delete:${schema}.${table}`, `delete · ${table}`,
+    `DELETE FROM ${qual}\nWHERE ${rowWhere(r)};`)
+  const deleteFiltered = () => openSql(
+    `console:${connId}:delete:${schema}.${table}`, `delete · ${table}`,
+    `DELETE FROM ${qual}${whereSuffix || '\nWHERE /* add a condition */ false'};`)
+
   const copySum = (col: string) =>
     api.query(connId, `SELECT sum(${qq(col)}) FROM ${qual}${whereSuffix}`, true)
       .then(r => {
@@ -84,9 +108,9 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   // Unified right-click menu — mirrors the DataGrip data-editor menu. One menu
   // serves both cell and table-area clicks: the cell-specific block only appears
   // when there's a row under the cursor (rows[r] exists); otherwise it collapses
-  // to the table-level actions with a schema.table header. Write-only actions
-  // are present but disabled (this build browses read-only), exactly like
-  // DataGrip greys what the current context can't do.
+  // to the table-level actions with a schema.table header. Write actions are
+  // enabled only when the connection is writable (`!readOnly`); on a read-only
+  // connection they stay greyed, exactly like DataGrip.
   function menuItems(r: number, c: number): MenuItem[] {
     // r < 0 is the sentinel for a table-area click (header / blank space) where
     // there's no cell under the cursor — guard on that rather than rows[r], since
@@ -100,7 +124,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       { head: cell ? col : `${schema}.${table}` },
       // ── cell-specific actions: need a row + column under the cursor ──
       ...(cell ? [
-        { label: 'Edit', Icon: SquarePen, key: 'Enter', disabled: true },
+        { label: 'Edit', Icon: SquarePen, key: 'Enter', disabled: readOnly, run: () => editCell(r, c) },
         { label: 'Show record view', Icon: TableProperties, run: () => setRecord(r) },
         { label: 'Open in value editor', Icon: Maximize2, run: () => setViewer({ col, value: val }) },
         { label: 'Show aggregate view', Icon: Sigma, run: () => setAgg(col) },
@@ -126,8 +150,8 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         { sep: true },
       ] as MenuItem[] : []),
       // ── row / pagination actions: cell-agnostic, so shown in both contexts ──
-      { label: 'Add row', Icon: Plus, key: 'Alt+Ins', disabled: true },
-      { label: 'Delete rows', Icon: Trash2, key: 'Ctrl+Y', disabled: true },
+      { label: 'Add row', Icon: Plus, key: 'Alt+Ins', disabled: readOnly, run: insertRow },
+      { label: cell ? 'Delete row' : 'Delete rows', Icon: Trash2, key: 'Ctrl+Y', disabled: readOnly, run: () => cell ? deleteRow(r) : deleteFiltered() },
       { sep: true },
       { label: 'Go to', Icon: ArrowRight, children: [
         { label: 'First page', disabled: page === 0, run: () => setPage(0) },
@@ -153,8 +177,8 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       <div className="grid-toolbar">
         <button className="tb-ico" title="refresh" onClick={() => load(page, where, order)}><RotateCw size={16} /></button>
         <span className="tb-sep" />
-        <button className="tb-ico" title="add row (coming soon)" disabled><Plus size={16} /></button>
-        <button className="tb-ico" title="remove row (coming soon)" disabled><Minus size={16} /></button>
+        <button className="tb-ico" title={readOnly ? 'add row (read-only)' : 'add row'} disabled={readOnly} onClick={insertRow}><Plus size={16} /></button>
+        <button className="tb-ico" title={readOnly ? 'remove rows (read-only)' : 'remove rows'} disabled={readOnly} onClick={deleteFiltered}><Minus size={16} /></button>
         <span className="tb-sep" />
         <span className="tb-chip hud-label">Tx: Auto</span>
         <span className="tb-grow" />
