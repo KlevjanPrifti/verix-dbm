@@ -1,10 +1,22 @@
+# ─── spa ──────────────────────────────────────────────────────────────────────
+# Build the React/Vite SPA so its dist/ can be go:embed'd into the binary. dist/
+# is gitignored, so it must be produced here rather than copied from the host.
+FROM node:20-alpine AS spa
+WORKDIR /spa
+COPY internal/web/spa/package.json internal/web/spa/package-lock.json ./
+RUN npm ci
+COPY internal/web/spa/ ./
+RUN npm run build
+
 # ─── build ────────────────────────────────────────────────────────────────────
 FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-# Pure-Go build (modernc sqlite) → static binary, no cgo. Templates/static are
+# Drop in the freshly built SPA so go:embed all:spa/dist resolves.
+COPY --from=spa /spa/dist ./internal/web/spa/dist
+# Pure-Go build (modernc sqlite) → static binary, no cgo. Templates + the SPA are
 # baked in via go:embed, so the final image needs nothing but the binary.
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /verix-dbm ./cmd/server
 # Stage an empty /data so the runtime image owns it as nonroot (distroless has

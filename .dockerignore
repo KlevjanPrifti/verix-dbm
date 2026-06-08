@@ -1,0 +1,10 @@
+# Node deps + build output are rebuilt inside the image's spa stage; keeping them
+# out of the context speeds the build and avoids stale/host-specific artifacts.
+internal/web/spa/node_modules
+internal/web/spa/dist
+
+# Local/dev cruft that has no place in the image.
+.git
+*.db
+*.db-wal
+*.db-shm
