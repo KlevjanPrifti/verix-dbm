@@ -123,8 +123,21 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         { label: 'Add to filter (AND)', run: () => setFilter(where.trim() ? `${where.trim()} AND ${eq}` : eq) },
         ...(where ? [{ label: 'Clear filter', run: () => setFilter('') } as MenuItem] : []),
       ] },
-      { label: 'Full-text search…', Icon: Search, key: 'Ctrl+Alt+Shift+F', run: fullTextSearch },
+      { sep: true },
+      ...tableLevel(),
+    ]
+  }
+
+  // Table-level actions, shared by the cell menu and the table menu so both
+  // expose the same set of table-wide operations.
+  function tableLevel(): MenuItem[] {
+    return [
+      { label: 'Refresh', Icon: RotateCw, run: () => load(page, where, order) },
+      { sep: true },
+      { label: 'Copy column names', Icon: Copy, run: () => app.copy(cols.join('\t')) },
       { label: 'Export table to clipboard', Icon: Download, run: () => app.copy(tableTsv()) },
+      { label: 'Full-text search…', Icon: Search, key: 'Ctrl+Alt+Shift+F', run: fullTextSearch },
+      ...(where ? [{ label: 'Clear filter', Icon: FilterX, run: () => setFilter('') } as MenuItem] : []),
       { sep: true },
       { label: 'Quick documentation', Icon: Info, key: 'Ctrl+Q', run: openDoc },
     ]
@@ -133,17 +146,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   // Table-level menu — shown when right-clicking empty grid space (incl. the
   // 0-rows view), so the menu is reachable even with no cell under the cursor.
   function tableItems(): MenuItem[] {
-    return [
-      { head: `${schema}.${table}` },
-      { label: 'Refresh', Icon: RotateCw, run: () => load(page, where, order) },
-      { sep: true },
-      { label: 'Copy column names', Icon: Copy, run: () => app.copy(cols.join('\t')) },
-      { label: 'Export table to clipboard', Icon: Download, run: () => app.copy(tableTsv()) },
-      { label: 'Full-text search…', Icon: Search, run: fullTextSearch },
-      ...(where ? [{ label: 'Clear filter', Icon: FilterX, run: () => setFilter('') } as MenuItem] : []),
-      { sep: true },
-      { label: 'Quick documentation', Icon: Info, run: openDoc },
-    ]
+    return [{ head: `${schema}.${table}` }, ...tableLevel()]
   }
 
   return (
@@ -169,7 +172,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       </form>
 
       <div className="grid-body"
-        onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, items: tableItems() }) }}>
+        onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, items: rows.length ? cellItems(0, 0) : tableItems() }) }}>
         {data?.error ? <div className="alert error code">{data.error}</div>
           : !result ? <p className="dim">{loading ? 'loading…' : ''}</p>
           : !result.isSelect ? <p className="ok hud-label">{result.command} · {result.rowsAffected} rows affected · {result.duration}</p>
