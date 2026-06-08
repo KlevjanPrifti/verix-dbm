@@ -2,6 +2,64 @@
 // right-click context menu with nested fly-out submenus. State lives in Alpine;
 // content loads via HTMX. The menu is data-driven: openCtx() builds a model with
 // buildMenu() and a small recursive template renders it.
+
+// URL autofill lives on `window` (not on the Alpine component) so it resolves in
+// both connection modals: the create modal sits directly in the workbench scope,
+// but the edit modal is an htmx-swapped fragment with its own `x-data` root that
+// doesn't inherit the component's methods. Alpine expressions fall through to
+// globals, so a window function works in either scope.
+
+// Parse a connection URL like postgresql://user:pass@host:5432/db?sslmode=require
+// into the individual fields. Returns null if it isn't a usable URL.
+window.parseConnUrl = function (url) {
+  url = (url || '').trim();
+  if (!url) return null;
+  let u;
+  try { u = new URL(url); } catch (e) { return null; }
+  if (!u.hostname) return null;
+  let kind = u.protocol.replace(':', '').toLowerCase();
+  if (kind === 'postgresql' || kind === 'postgres' || kind === 'pg') kind = 'postgres';
+  else if (kind === 'redis' || kind === 'rediss' || kind === 'valkey') kind = 'redis';
+  return {
+    kind,
+    host: u.hostname,
+    port: u.port || (kind === 'redis' ? '6379' : '5432'),
+    username: decodeURIComponent(u.username || ''),
+    password: decodeURIComponent(u.password || ''),
+    dbname: decodeURIComponent(u.pathname.replace(/^\//, '')),
+    options: u.search ? u.search.slice(1) : '',
+  };
+};
+
+// Fired when the URL field changes: fill the rest of the form from the URL.
+// Works purely off the form DOM and fires input/change so any x-model-bound
+// fields (kind/port in the create modal) stay in sync with Alpine state.
+window.applyUrl = function (ev) {
+  const p = window.parseConnUrl(ev.target.value);
+  if (!p) return;
+  const form = ev.target.closest('form');
+  if (!form) return;
+  const set = (name, val) => {
+    const el = form.querySelector(`[name="${name}"]`);
+    if (el && val !== undefined && val !== '') {
+      el.value = val;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  };
+  // kind before port: the create modal's kind <select> resets port on change,
+  // so set port last to keep the URL's explicit value.
+  set('kind', p.kind);
+  set('host', p.host);
+  set('username', p.username);
+  set('password', p.password);
+  set('dbname', p.dbname);
+  set('options', p.options);
+  set('port', p.port);
+  const nameEl = form.querySelector('[name="name"]');
+  if (nameEl && !nameEl.value) nameEl.value = (p.username ? p.username + '@' : '') + p.host;
+};
+
 document.addEventListener('alpine:init', () => {
   Alpine.data('workbench', () => ({
     tabs: [],
@@ -69,49 +127,6 @@ document.addEventListener('alpine:init', () => {
       this.modal.kind = kind || 'postgres';
       this.modal.port = this.modal.kind === 'redis' ? '6379' : '5432';
       this.modal.open = true;
-    },
-
-    // Parse a connection URL like postgresql://user:pass@host:5432/db?sslmode=require
-    // into the individual fields. Returns null if it isn't a usable URL.
-    parseConnUrl(url) {
-      url = (url || '').trim();
-      if (!url) return null;
-      let u;
-      try { u = new URL(url); } catch (e) { return null; }
-      if (!u.hostname) return null;
-      let kind = u.protocol.replace(':', '').toLowerCase();
-      if (kind === 'postgresql' || kind === 'postgres' || kind === 'pg') kind = 'postgres';
-      else if (kind === 'redis' || kind === 'rediss' || kind === 'valkey') kind = 'redis';
-      return {
-        kind,
-        host: u.hostname,
-        port: u.port || (kind === 'redis' ? '6379' : '5432'),
-        username: decodeURIComponent(u.username || ''),
-        password: decodeURIComponent(u.password || ''),
-        dbname: decodeURIComponent(u.pathname.replace(/^\//, '')),
-        options: u.search ? u.search.slice(1) : '',
-      };
-    },
-    // Fired when the URL field changes: fill the rest of the form from the URL.
-    applyUrl(ev) {
-      const p = this.parseConnUrl(ev.target.value);
-      if (!p) return;
-      const form = ev.target.closest('form');
-      if (!form) return;
-      const set = (name, val) => {
-        const el = form.querySelector(`[name="${name}"]`);
-        if (el && val !== undefined && val !== '') el.value = val;
-      };
-      set('host', p.host);
-      set('username', p.username);
-      set('password', p.password);
-      set('dbname', p.dbname);
-      set('options', p.options);
-      // kind + port may be x-model-bound (create modal) → sync Alpine state too.
-      if (this.modal && this.modal.open) { this.modal.kind = p.kind; this.modal.port = p.port; }
-      else { set('kind', p.kind); set('port', p.port); }
-      const nameEl = form.querySelector('[name="name"]');
-      if (nameEl && !nameEl.value) nameEl.value = (p.username ? p.username + '@' : '') + p.host;
     },
 
     // ── context menu plumbing ──

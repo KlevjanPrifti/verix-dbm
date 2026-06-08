@@ -193,8 +193,12 @@ table.data tbody tr:hover td { color: var(--hud); }
    ════════════════════════════════════════════════════════════════════════════ */
 [x-cloak] { display: none !important; }
 
-.ide { display: grid; grid-template-columns: 300px 1fr; gap: 1rem; height: 100%; }
-@media (max-width: 900px) { .ide { grid-template-columns: 1fr; height: auto; } }
+/* The workbench fills the chrome-free area. `.container` is a flex item whose
+   height comes from flex:1 (computed `auto`), so a `height:100%` child won't
+   resolve reliably — make this container a flex column and let `.ide` grow. */
+.container:has(.ide) { display: flex; flex-direction: column; overflow: hidden; }
+.ide { display: grid; grid-template-columns: 300px 1fr; gap: 1rem; flex: 1; min-height: 0; }
+@media (max-width: 900px) { .container:has(.ide) { display: block; overflow: auto; } .ide { grid-template-columns: 1fr; height: auto; } }
 
 /* ── Database Explorer ── */
 .explorer { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: 0; }
