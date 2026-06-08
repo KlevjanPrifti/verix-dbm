@@ -336,7 +336,9 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .tb-ico:hover:not(:disabled) { background: rgba(var(--accent-rgb),0.12); }
 .tb-ico:disabled { opacity: .3; cursor: not-allowed; }
 .tb-sep { width: 1px; height: 1.1rem; background: rgba(var(--accent-rgb),0.2); margin: 0 .25rem; }
-.tb-chip { border: 1px solid rgba(var(--accent-rgb),0.25); border-radius: 2px; padding: .1rem .45rem; }
+.tb-chip { border: 1px solid rgba(var(--accent-rgb),0.25); border-radius: 2px; padding: .1rem .45rem; white-space: nowrap; }
+.conn-chip { max-width: 24ch; overflow: hidden; text-overflow: ellipsis; }
+.grid-toolbar { flex-wrap: wrap; row-gap: .35rem; }
 .tb-grow { flex: 1; }
 .filter-bar { display: flex; align-items: center; gap: .5rem; padding: .4rem .5rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.12); }
 .fb-key { white-space: nowrap; color: rgba(var(--accent-rgb),0.7); }
@@ -516,14 +518,23 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
   .modal-body { flex: 1; overflow: auto; }
 
   /* Chrome bars wrap instead of overflowing horizontally */
-  .topbar { flex-wrap: wrap; gap: .6rem 1rem; padding: .6rem .9rem; }
+  .topbar { flex-wrap: wrap; gap: .35rem 1rem; padding: .55rem .8rem; }
+  .brand { font-size: 1.15rem; }
+  .topnav { gap: .9rem; }
+  .userbox { gap: .8rem; font-size: .68rem; }
   .connbar { flex-wrap: wrap; padding: .45rem .9rem; }
   .container { padding: .5rem; }
 
-  /* Grid filter bar stacks WHERE / ORDER BY on narrow screens */
-  .filter-bar { flex-wrap: wrap; }
-  .fb-input { min-width: 120px; }
-  table.data td { max-width: 60vw; }
+  /* Grid toolbar: the long connection chip belongs in the footer on phones —
+     drop it here so the action buttons + status keep one tidy row. */
+  .grid-toolbar { padding: .35rem .5rem; }
+  .grid-toolbar .conn-chip { display: none; }
+
+  /* Filter bar becomes a tidy label | input grid; Apply spans the full width */
+  .filter-bar { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: .4rem .6rem; }
+  .filter-bar > .hud-btn-accent { grid-column: 1 / -1; justify-self: stretch; padding: .5rem; }
+  .fb-input { min-width: 0; width: 100%; }
+  table.data td { max-width: 78vw; }
 
   /* Redis pane: cap the key list so the value area stays reachable */
   .redis-keys { max-height: 38vh; }

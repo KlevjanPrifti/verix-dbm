@@ -157,7 +157,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         <span className="tb-chip hud-label">Tx: Auto</span>
         <span className="tb-grow" />
         {readOnly && <span className="ro">READ-ONLY</span>}
-        {conn && <span className="tb-chip hud-label">{conn.kind}@{conn.host}</span>}
+        {conn && <span className="tb-chip conn-chip hud-label" title={`${conn.kind}@${conn.host}`}>{conn.kind}@{conn.host}</span>}
       </div>
 
       <form className="filter-bar" onSubmit={apply}>

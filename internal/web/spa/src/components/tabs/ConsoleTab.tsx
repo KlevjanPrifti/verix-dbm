@@ -31,7 +31,7 @@ export default function ConsoleTab({ connId, initialSql }: { connId: number; ini
         <div className="console-toolbar">
           <button className="hud-btn-cta sm" type="submit" disabled={running}><Play size={13} /> Run</button>
           {readOnly && <span className="ro">READ-ONLY</span>}
-          {conn && <span className="tb-chip hud-label">{conn.kind}@{conn.host}</span>}
+          {conn && <span className="tb-chip conn-chip hud-label" title={`${conn.kind}@${conn.host}`}>{conn.kind}@{conn.host}</span>}
           {running && <span className="hud-label">running…</span>}
         </div>
         <textarea className="hud-input code console-editor" rows={6} value={sql} onChange={e => setSql(e.target.value)}
