@@ -250,6 +250,8 @@
     <form method="post" action="/connections/{{$c.ID}}" class="modal-body">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       <input type="hidden" name="password_enc" value="{{$c.PasswordEnc}}">
+      <div class="mrow"><label class="hud-label">URL <span class="dim">(paste to autofill the fields below)</span></label>
+        <input class="hud-input code" placeholder="postgresql://user:pass@host:5432/dbname" @change="applyUrl($event)"></div>
       <div class="mrow"><label class="hud-label">Name</label><input class="hud-input" name="name" required value="{{$c.Name}}"></div>
       <div class="mrow"><label class="hud-label">Driver</label>
         <select class="hud-input" name="kind">
@@ -291,6 +293,8 @@
     </div>
     <form method="post" action="/connections" class="modal-body">
       <input type="hidden" name="csrf" value="{{.User.CSRF}}">
+      <div class="mrow"><label class="hud-label">URL <span class="dim">(paste to autofill the fields below)</span></label>
+        <input class="hud-input code" placeholder="postgresql://user:pass@host:5432/dbname" @change="applyUrl($event)"></div>
       <div class="mrow"><label class="hud-label">Name</label><input class="hud-input" name="name" required placeholder="postgres@localhost"></div>
       <div class="mrow"><label class="hud-label">Driver</label>
         <select class="hud-input" name="kind" x-model="modal.kind" @change="modal.port = modal.kind==='redis'?'6379':'5432'">
