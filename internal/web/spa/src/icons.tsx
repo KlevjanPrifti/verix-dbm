@@ -39,5 +39,5 @@ export {
   X, Plus, Minus, MoreHorizontal, RotateCw, PanelLeft, Play, ChevronUp,
   ChevronDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Check, Copy,
   Settings, Trash2, Download, Code, FileCode, Info, Search, Pencil, Eraser,
-  LogOut,
+  LogOut, Filter, FilterX, Maximize2,
 } from 'lucide-react'

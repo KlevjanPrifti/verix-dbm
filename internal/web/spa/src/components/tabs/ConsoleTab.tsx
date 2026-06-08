@@ -7,10 +7,10 @@ import { Play } from '../../icons'
 
 // Postgres query console: run SQL, with a confirmation gate for destructive
 // statements (mirrors the "consolePG" + "queryResult" partials).
-export default function ConsoleTab({ connId }: { connId: number }) {
+export default function ConsoleTab({ connId, initialSql }: { connId: number; initialSql?: string }) {
   const app = useApp()
   const conn = app.connById(connId)
-  const [sql, setSql] = useState('')
+  const [sql, setSql] = useState(initialSql ?? '')
   const [resp, setResp] = useState<QueryResponse | null>(null)
   const [running, setRunning] = useState(false)
   const readOnly = conn ? conn.readOnly || !app.caps.write : false

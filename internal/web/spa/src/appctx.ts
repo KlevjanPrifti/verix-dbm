@@ -15,7 +15,7 @@ export interface NodePayload {
 
 export type TabView =
   | { type: 'grid'; connId: number; schema: string; table: string }
-  | { type: 'console'; connId: number }
+  | { type: 'console'; connId: number; sql?: string }
   | { type: 'redis'; connId: number }
   | { type: 'doc'; connId: number; schema: string; table: string }
   | { type: 'usages'; connId: number; schema: string; table: string }

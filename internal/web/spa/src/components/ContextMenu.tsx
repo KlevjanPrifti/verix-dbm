@@ -37,8 +37,14 @@ export default function ContextMenu({ x, y, payload, onClose }: {
   }, [onClose])
 
   const close = onClose
+  const qq = (s: string) => '"' + s.replace(/"/g, '""') + '"'
   const tab = {
     console: () => app.openTab({ key: `console:${id}`, title: `console [${payload.name}]`, icon: 'console', view: { type: 'console', connId: id } }),
+    // Open a query console seeded with a runnable SELECT for this table.
+    tableQuery: () => app.openTab({
+      key: `query:${id}:${payload.schema}.${payload.table}`, title: `query · ${payload.table}`, icon: 'console',
+      view: { type: 'console', connId: id, sql: `SELECT *\nFROM ${qq(payload.schema!)}.${qq(payload.table!)}\nLIMIT 100;` },
+    }),
     grid: () => app.openTab({ key: `grid:${id}:${payload.schema}.${payload.table}`, title: `${payload.schema}.${payload.table}`, icon: 'grid', view: { type: 'grid', connId: id, schema: payload.schema!, table: payload.table! } }),
     doc: () => app.openTab({ key: `doc:${id}:${payload.schema}.${payload.table}`, title: `doc [${payload.table}]`, icon: 'grid', view: { type: 'doc', connId: id, schema: payload.schema!, table: payload.table! } }),
     usages: () => app.openTab({ key: `usages:${id}:${payload.schema}.${payload.table}`, title: `usages [${payload.table}]`, icon: 'grid', view: { type: 'usages', connId: id, schema: payload.schema!, table: payload.table! } }),
@@ -85,6 +91,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
     } else if (c.type === 'table') {
       m.push({ head: `${c.schema}.${c.table}` })
       m.push({ label: 'Open data', Icon: Table2, key: 'F4', run: tab.grid })
+      m.push({ label: 'New query', Icon: Terminal, run: tab.tableQuery })
       m.push({ label: 'Generate', Icon: Code, children: [
         { label: 'SELECT', Icon: Code, run: () => generate('select') },
         { label: 'INSERT', Icon: Code, run: () => generate('insert') },

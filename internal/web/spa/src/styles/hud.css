@@ -382,6 +382,7 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .mcol.port { max-width: 120px; }
 .modal-foot { display: flex; align-items: center; gap: .6rem; margin-top: .5rem; padding-top: .8rem; border-top: 1px solid rgba(var(--accent-rgb),0.15); }
 .test-result { font-size: .78rem; }
+.value-viewer { margin: 0; max-height: 60vh; overflow: auto; white-space: pre-wrap; word-break: break-word; padding: .8rem; background: rgba(var(--accent-rgb),0.04); border: 1px solid rgba(var(--accent-rgb),0.15); border-radius: 2px; color: var(--hud); font-size: .82rem; }
 
 /* ── Table designer (DataGrip-style Create / Modify table) ── */
 .modal-wide { width: min(1040px, 95vw); height: min(720px, 92vh); display: flex; flex-direction: column; }

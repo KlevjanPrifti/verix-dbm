@@ -60,7 +60,7 @@ function TabContent({ tab }: { tab: TabDef }) {
     case 'grid': return <GridTab connId={v.connId} schema={v.schema} table={v.table} />
     case 'console': {
       const c = app.connById(v.connId)
-      return c?.kind === 'redis' ? <RedisTab connId={v.connId} /> : <ConsoleTab connId={v.connId} />
+      return c?.kind === 'redis' ? <RedisTab connId={v.connId} /> : <ConsoleTab connId={v.connId} initialSql={v.sql} />
     }
     case 'redis': return <RedisTab connId={v.connId} />
     case 'doc': return <DocTab connId={v.connId} schema={v.schema} table={v.table} />
