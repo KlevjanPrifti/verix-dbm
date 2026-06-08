@@ -53,7 +53,11 @@ func (s *Server) Router() http.Handler {
 
 	r.Group(func(r chi.Router) {
 		r.Use(s.auth.Middleware)
-		r.Get("/", s.workbench)
+		// Root serves the React SPA (the current UI). The legacy template
+		// workbench is kept reachable below but no longer the landing page.
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/app", http.StatusFound)
+		})
 		r.Post("/connections", s.createConnection)
 		r.Post("/connections/test", s.testConnection)
 		r.Post("/connections/{id}", s.updateConnection)
