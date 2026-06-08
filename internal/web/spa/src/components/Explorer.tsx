@@ -1,0 +1,232 @@
+import { useEffect, useState } from 'react'
+import { api } from '../api'
+import { useApp, type NodePayload } from '../appctx'
+import type { Column, Connection, Index, Key, Schema } from '../types'
+
+// Database Explorer: a lazy-loaded tree of connections → schemas → tables →
+// columns/keys/indexes. Disclosure uses native <details>; each row wires the
+// shared context menu (right-click + ⋯ kebab).
+
+export default function Explorer({ open }: { open: boolean }) {
+  const app = useApp()
+  return (
+    <aside className={`explorer hud-panel${open ? ' open' : ''}`}>
+      <div className="explorer-head">
+        <span className="hud-label">Database Explorer</span>
+        {app.caps.admin && <NewSourceMenu />}
+      </div>
+      <div className="explorer-tree">
+        {app.conns.length === 0
+          ? <div className="tree-empty dim">No connections.{app.caps.admin ? ' Click ＋ to add one.' : ''}</div>
+          : app.conns.map(c => <ConnNode key={c.id} conn={c} />)}
+      </div>
+    </aside>
+  )
+}
+
+function NewSourceMenu() {
+  const app = useApp()
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [open])
+  return (
+    <div className="menu-wrap" onClick={e => e.stopPropagation()}>
+      <button className="ico-btn" title="New data source" onClick={() => setOpen(o => !o)}>+</button>
+      {open && (
+        <div className="menu">
+          <button type="button" className="menu-item" onClick={() => { setOpen(false); app.openConnModal('postgres') }}>
+            <span className="ico ico-postgres" /> New PostgreSQL
+          </button>
+          <button type="button" className="menu-item" onClick={() => { setOpen(false); app.openConnModal('redis') }}>
+            <span className="ico ico-redis" /> New Redis / Valkey
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ConnNode({ conn }: { conn: Connection }) {
+  const app = useApp()
+  const [data, setData] = useState<{ kind: string; schemas?: Schema[] | null; error?: string } | null>(null)
+  const [openOnce, setOpenOnce] = useState(false)
+  const token = app.refreshToken(conn.id)
+
+  // (Re)load when first expanded, and whenever this conn is asked to refresh.
+  useEffect(() => {
+    if (!openOnce) return
+    api.explorer(conn.id).then(setData).catch(e => setData({ kind: conn.kind, error: String(e.message || e) }))
+  }, [openOnce, token, conn.id, conn.kind])
+
+  const payload: NodePayload = { type: 'conn', connId: conn.id, name: conn.name, kind: conn.kind }
+  const openConsole = () => app.openTab({
+    key: `console:${conn.id}`, title: `console [${conn.name}]`, icon: 'console',
+    view: { type: 'console', connId: conn.id },
+  })
+
+  return (
+    <details className="tree-node conn-node" onToggle={e => { if ((e.target as HTMLDetailsElement).open) setOpenOnce(true) }}>
+      <summary
+        className="tree-row conn-row"
+        onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}
+      >
+        <span className={`ico ico-${conn.kind}`} />
+        <span className="tree-name">{conn.name}<span className="conn-host dim"> · {conn.host}</span></span>
+        <span className="badge">{conn.kind}</span>
+        {conn.readOnly && <span className="ro-dot" title="read-only" />}
+        <span className="row-acts">
+          <button type="button" className="row-act" title="open console"
+            onClick={e => { e.stopPropagation(); e.preventDefault(); openConsole() }}>⌨</button>
+          {app.caps.admin && (
+            <button type="button" className="row-act danger" title="delete"
+              onClick={e => {
+                e.stopPropagation(); e.preventDefault()
+                if (confirm(`Delete connection ${conn.name}?`))
+                  api.deleteConnection(conn.id).then(app.reloadConns).catch(err => app.notify(String(err.message || err), 'error'))
+              }}>✕</button>
+          )}
+        </span>
+        <Kebab payload={payload} />
+      </summary>
+      <div className="node-children">
+        {!data ? <span className="dim loading">loading…</span>
+          : data.error ? <div className="tree-err code">{data.error}</div>
+          : data.kind === 'redis'
+            ? <div className="tree-row leaf" onClick={openConsole}><span className="ico ico-keyspace" /><span className="tree-name">keyspace</span></div>
+            : <SchemaList connId={conn.id} schemas={data.schemas} />}
+      </div>
+    </details>
+  )
+}
+
+function SchemaList({ connId, schemas }: { connId: number; schemas?: Schema[] | null }) {
+  if (!schemas || schemas.length === 0) return <div className="tree-empty dim">no user schemas</div>
+  return <>{schemas.map(s => <SchemaNode key={s.Name} connId={connId} schema={s} />)}</>
+}
+
+function SchemaNode({ connId, schema }: { connId: number; schema: Schema }) {
+  const app = useApp()
+  const payload: NodePayload = { type: 'schema', connId, schema: schema.Name, name: schema.Name }
+  const tables = schema.Tables || []
+  return (
+    <details className="tree-node" open>
+      <summary className="tree-row schema-row"
+        onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
+        <span className="ico ico-schema" /><span className="tree-name">{schema.Name}</span>
+        <span className="count">{tables.length}</span>
+        <Kebab payload={payload} />
+      </summary>
+      <div className="node-children">
+        {tables.map(t => <TableNode key={t.Name} connId={connId} schema={schema.Name} table={t.Name} kind={t.Kind} est={t.EstRows} />)}
+      </div>
+    </details>
+  )
+}
+
+function TableNode({ connId, schema, table, kind, est }: { connId: number; schema: string; table: string; kind: string; est: number }) {
+  const app = useApp()
+  const payload: NodePayload = { type: 'table', connId, schema, table, name: table }
+  const openGrid = () => app.openTab({
+    key: `grid:${connId}:${schema}.${table}`, title: `${schema}.${table}`, icon: 'grid',
+    view: { type: 'grid', connId, schema, table },
+  })
+  return (
+    <details className="tree-node">
+      <summary className="tree-row table-row"
+        onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
+        <span className={`ico ico-${kind}`} />
+        <span className="tree-name table-name" title="click name to open"
+          onClick={e => { e.preventDefault(); openGrid() }}>{table}</span>
+        <span className="est dim">{est}</span>
+        <Kebab payload={payload} />
+      </summary>
+      <div className="node-children">
+        <LeafFolder label="columns" load={() => api.columns(connId, schema, table).then(r => r.columns)}
+          render={(cols: Column[]) => cols.map(c => <ColumnLeaf key={c.name} connId={connId} schema={schema} table={table} col={c} />)} />
+        <LeafFolder label="keys" load={() => api.keys(connId, schema, table).then(r => r.keys || [])}
+          render={(keys: Key[]) => keys.map(k => <KeyLeaf key={k.Name} connId={connId} schema={schema} table={table} k={k} />)} />
+        <LeafFolder label="indexes" load={() => api.indexes(connId, schema, table).then(r => r.indexes || [])}
+          render={(ix: Index[]) => ix.map(i => <IndexLeaf key={i.Name} connId={connId} schema={schema} table={table} ix={i} />)} />
+      </div>
+    </details>
+  )
+}
+
+function LeafFolder<T>({ label, load, render }: { label: string; load: () => Promise<T[]>; render: (items: T[]) => React.ReactNode }) {
+  const [items, setItems] = useState<T[] | null>(null)
+  const [err, setErr] = useState('')
+  return (
+    <details className="tree-node" onToggle={e => {
+      if ((e.target as HTMLDetailsElement).open && items === null && !err)
+        load().then(setItems).catch(x => setErr(String(x.message || x)))
+    }}>
+      <summary className="tree-row"><span className="ico ico-folder" /><span className="tree-name">{label}</span></summary>
+      <div className="node-children">
+        {err ? <div className="tree-err code">{err}</div>
+          : items === null ? <span className="dim loading">…</span>
+          : items.length === 0 ? <div className="tree-empty dim">none</div>
+          : render(items)}
+      </div>
+    </details>
+  )
+}
+
+function ColumnLeaf({ connId, schema, table, col }: { connId: number; schema: string; table: string; col: Column }) {
+  const app = useApp()
+  const payload: NodePayload = { type: 'col', connId, schema, table, name: col.name }
+  return (
+    <div className="tree-row leaf col-leaf" title={`${col.name} · ${col.typeText}${col.notNull ? ' · not null' : ''}`}
+      onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
+      <span className={`ico ico-${col.cat}`} />
+      <span className="tree-name">{col.name}</span>
+      <span className="col-type dim">{col.typeText}</span>
+      <Kebab payload={payload} />
+    </div>
+  )
+}
+
+function KeyLeaf({ connId, schema, table, k }: { connId: number; schema: string; table: string; k: Key }) {
+  const app = useApp()
+  const payload: NodePayload = { type: 'key', connId, schema, table, name: k.Name, def: k.Def }
+  const icon = k.Type === 'foreign' ? 'ico-fkey' : `ico-key${k.Type === 'primary' ? ' pk' : ''}`
+  return (
+    <div className="tree-row leaf" title={k.Def}
+      onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
+      <span className={`ico ${icon}`} />
+      <span className="tree-name">{k.Name}</span>
+      <span className="col-type dim">{k.Cols ? `(${k.Cols}) ` : ''}{k.Type}</span>
+      <Kebab payload={payload} />
+    </div>
+  )
+}
+
+function IndexLeaf({ connId, schema, table, ix }: { connId: number; schema: string; table: string; ix: Index }) {
+  const app = useApp()
+  const payload: NodePayload = { type: 'index', connId, schema, table, name: ix.Name, def: ix.Def }
+  return (
+    <div className="tree-row leaf" title={ix.Def}
+      onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
+      <span className={`ico ico-idx${ix.Primary ? ' pk' : ''}`} />
+      <span className="tree-name">{ix.Name}</span>
+      <span className="col-type dim">{ix.Cols ? `(${ix.Cols})` : ''}{ix.Unique ? ' UNIQUE' : ''}</span>
+      <Kebab payload={payload} />
+    </div>
+  )
+}
+
+// Kebab opens the same context menu as right-click — the touch-friendly path.
+function Kebab({ payload }: { payload: NodePayload }) {
+  const app = useApp()
+  return (
+    <button type="button" className="row-kebab" title="actions"
+      onClick={e => {
+        e.stopPropagation(); e.preventDefault()
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+        app.openCtx(r.left, r.bottom, payload)
+      }}>⋯</button>
+  )
+}

@@ -93,6 +93,11 @@ func (s *Server) Router() http.Handler {
 		r.Post("/c/{id}/redis/cmd", s.redisCmd)
 
 		r.Get("/audit", s.audit)
+
+		// JSON API for the React/Vite SPA, plus the SPA shell + assets.
+		r.Route("/api", s.mountAPI)
+		r.Handle("/app", s.spaHandler())
+		r.Handle("/app/*", s.spaHandler())
 	})
 	return r
 }

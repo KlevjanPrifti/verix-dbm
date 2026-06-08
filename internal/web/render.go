@@ -13,7 +13,6 @@ import (
 	"strings"
 )
 
-//go:embed templates static
 var assets embed.FS
 
 type renderer struct {

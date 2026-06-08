@@ -1,0 +1,845 @@
+package web
+
+// JSON API consumed by the React/Vite SPA (internal/web/spa). It mirrors the
+// HTMX handlers but speaks JSON: same auth middleware, same CSRF (X-CSRF-Token
+// header), same role gating. Mounted under /api by Router().
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
+
+	"verix-dbm/internal/auth"
+	"verix-dbm/internal/postgres"
+	"verix-dbm/internal/redisdb"
+	"verix-dbm/internal/store"
+)
+
+// mountAPI registers the JSON routes. It runs inside the authed group, so every
+// handler can assume auth.FromContext succeeds.
+func (s *Server) mountAPI(r chi.Router) {
+	r.Get("/me", s.apiMe)
+
+	r.Get("/connections", s.apiListConnections)
+	r.Post("/connections", s.apiCreateConnection)
+	r.Post("/connections/test", s.apiTestConnection)
+	r.Get("/connections/{id}", s.apiGetConnection)
+	r.Put("/connections/{id}", s.apiUpdateConnection)
+	r.Delete("/connections/{id}", s.apiDeleteConnection)
+
+	r.Get("/c/{id}/explorer", s.apiExplorer)
+	r.Get("/c/{id}/pg/columns", s.apiColumns)
+	r.Get("/c/{id}/pg/indexes", s.apiIndexes)
+	r.Get("/c/{id}/pg/keys", s.apiKeys)
+	r.Get("/c/{id}/grid", s.apiGrid)
+	r.Post("/c/{id}/pg/query", s.apiQuery)
+	r.Get("/c/{id}/pg/generate", s.apiGenerate)
+	r.Get("/c/{id}/pg/doc", s.apiDoc)
+	r.Get("/c/{id}/pg/usages", s.apiUsages)
+	r.Get("/c/{id}/pg/form", s.apiDDLFormPrefill)
+	r.Post("/c/{id}/pg/ddl/run", s.apiRunForm)
+	r.Post("/c/{id}/pg/table/drop", s.apiDropTable)
+	r.Post("/c/{id}/pg/table/truncate", s.apiTruncate)
+	r.Post("/c/{id}/pg/column/drop", s.apiDropColumn)
+	r.Post("/c/{id}/pg/index/drop", s.apiDropIndex)
+
+	r.Get("/c/{id}/redis/keys", s.apiRedisKeys)
+	r.Get("/c/{id}/redis/value", s.apiRedisValue)
+	r.Post("/c/{id}/redis/cmd", s.apiRedisCmd)
+
+	r.Get("/audit", s.apiAudit)
+}
+
+// ── JSON plumbing ───────────────────────────────────────────────────────────
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func apiErr(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+func readJSON(r *http.Request, v any) error {
+	return json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20)).Decode(v)
+}
+
+// ── DTOs ──────────────────────────────────────────────────────────────────────
+
+type connDTO struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	DBName   string `json:"dbname"`
+	Username string `json:"username"`
+	Options  string `json:"options"`
+	ReadOnly bool   `json:"readOnly"`
+}
+
+func toConnDTO(c store.Connection) connDTO {
+	return connDTO{
+		ID: c.ID, Name: c.Name, Kind: c.Kind, Host: c.Host, Port: c.Port,
+		DBName: c.DBName, Username: c.Username, Options: c.Options, ReadOnly: c.ReadOnly,
+	}
+}
+
+type connInput struct {
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	DBName      string `json:"dbname"`
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	PasswordEnc string `json:"passwordEnc"` // carried for "Save as copy"
+	Options     string `json:"options"`
+	ReadOnly    bool   `json:"readOnly"`
+}
+
+type resultDTO struct {
+	Columns      []string   `json:"columns"`
+	Rows         [][]string `json:"rows"`
+	IsSelect     bool       `json:"isSelect"`
+	RowsAffected int64      `json:"rowsAffected"`
+	Command      string     `json:"command"`
+	Duration     string     `json:"duration"`
+	Truncated    bool       `json:"truncated"`
+}
+
+func toResultDTO(r *postgres.Result) *resultDTO {
+	if r == nil {
+		return nil
+	}
+	return &resultDTO{
+		Columns: r.Columns, Rows: r.Rows, IsSelect: r.IsSelect,
+		RowsAffected: r.RowsAffected, Command: r.Command,
+		Duration: r.Duration.String(), Truncated: r.Truncated,
+	}
+}
+
+type columnDTO struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	TypeText string `json:"typeText"`
+	Cat      string `json:"cat"`
+	NotNull  bool   `json:"notNull"`
+	Default  string `json:"default"`
+	PK       bool   `json:"pk"`
+	AutoInc  bool   `json:"autoInc"`
+}
+
+func toColumnDTO(c postgres.Column) columnDTO {
+	return columnDTO{
+		Name: c.Name, Type: c.Type, TypeText: c.TypeText(), Cat: c.Cat(),
+		NotNull: c.NotNull, Default: c.Default, PK: c.PK, AutoInc: c.AutoInc,
+	}
+}
+
+// ── Session ─────────────────────────────────────────────────────────────────
+
+func (s *Server) apiMe(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.FromContext(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user": map[string]any{
+			"name": u.Name, "email": u.Email, "admin": u.Admin, "write": u.Write,
+		},
+		"csrf": u.CSRF,
+	})
+}
+
+// ── Connections ───────────────────────────────────────────────────────────────
+
+func (s *Server) apiListConnections(w http.ResponseWriter, r *http.Request) {
+	conns, err := s.st.ListConnections(r.Context())
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := make([]connDTO, 0, len(conns))
+	for _, c := range conns {
+		out = append(out, toConnDTO(c))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"connections": out})
+}
+
+func (s *Server) apiGetConnection(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.FromContext(r.Context())
+	if !u.Admin {
+		apiErr(w, http.StatusForbidden, "admin required")
+		return
+	}
+	c, err := s.connFor(r)
+	if err != nil {
+		apiErr(w, http.StatusNotFound, "connection not found")
+		return
+	}
+	// passwordEnc lets the UI carry the ciphertext for "Save as copy".
+	writeJSON(w, http.StatusOK, map[string]any{
+		"connection": toConnDTO(c), "passwordEnc": c.PasswordEnc,
+	})
+}
+
+func (s *Server) apiCreateConnection(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.apiRequireAdmin(w, r)
+	if !ok {
+		return
+	}
+	var in connInput
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	c := store.Connection{
+		Name: in.Name, Kind: in.Kind, Host: in.Host, Port: in.Port,
+		DBName: in.DBName, Username: in.Username, Options: in.Options,
+		ReadOnly: in.ReadOnly, CreatedBy: u.Email,
+	}
+	if in.Password != "" {
+		enc, err := s.box.Encrypt(in.Password)
+		if err != nil {
+			apiErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		c.PasswordEnc = enc
+	} else if in.PasswordEnc != "" {
+		c.PasswordEnc = in.PasswordEnc
+	}
+	id, err := s.st.CreateConnection(r.Context(), c)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: id, Action: "create_connection", Detail: c.Name, Success: true})
+	writeJSON(w, http.StatusOK, map[string]any{"id": id})
+}
+
+func (s *Server) apiUpdateConnection(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.apiRequireAdmin(w, r)
+	if !ok {
+		return
+	}
+	c, err := s.connFor(r)
+	if err != nil {
+		apiErr(w, http.StatusNotFound, "connection not found")
+		return
+	}
+	var in connInput
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	c.Name, c.Kind, c.Host, c.Port = in.Name, in.Kind, in.Host, in.Port
+	c.DBName, c.Username, c.Options, c.ReadOnly = in.DBName, in.Username, in.Options, in.ReadOnly
+	updatePw := false
+	if in.Password != "" {
+		enc, err := s.box.Encrypt(in.Password)
+		if err != nil {
+			apiErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		c.PasswordEnc = enc
+		updatePw = true
+	}
+	if err := s.st.UpdateConnection(r.Context(), c, updatePw); err != nil {
+		apiErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.reg.Forget(c.ID)
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "update_connection", Detail: c.Name, Success: true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) apiDeleteConnection(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.apiRequireAdmin(w, r)
+	if !ok {
+		return
+	}
+	id := idParam(r)
+	if err := s.st.DeleteConnection(r.Context(), id); err != nil {
+		apiErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.reg.Forget(id)
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: id, Action: "delete_connection", Success: true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) apiTestConnection(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.apiRequireAdmin(w, r); !ok {
+		return
+	}
+	var in connInput
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	c := store.Connection{Kind: in.Kind, Host: in.Host, Port: in.Port, DBName: in.DBName, Username: in.Username, Options: in.Options}
+	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
+	defer cancel()
+	var err error
+	if c.Kind == "redis" {
+		err = pingRedis(ctx, c, in.Password)
+	} else {
+		err = pingPG(ctx, c, in.Password)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// ── Explorer tree ───────────────────────────────────────────────────────────
+
+func (s *Server) apiExplorer(w http.ResponseWriter, r *http.Request) {
+	c, err := s.connFor(r)
+	if err != nil {
+		apiErr(w, http.StatusNotFound, "connection not found")
+		return
+	}
+	if c.Kind == "redis" {
+		writeJSON(w, http.StatusOK, map[string]any{"kind": "redis"})
+		return
+	}
+	pool, err := s.reg.PG(r.Context(), c)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"kind": "postgres", "error": "connect: " + err.Error()})
+		return
+	}
+	schemas, err := postgres.Schemas(r.Context(), pool)
+	resp := map[string]any{"kind": "postgres", "schemas": schemas}
+	if err != nil {
+		resp["error"] = err.Error()
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) apiColumns(w http.ResponseWriter, r *http.Request) {
+	_, pool, ok := s.apiPGPool(w, r)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	cols, err := postgres.Columns(r.Context(), pool, q.Get("schema"), q.Get("table"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	out := make([]columnDTO, 0, len(cols))
+	for _, c := range cols {
+		out = append(out, toColumnDTO(c))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"columns": out})
+}
+
+func (s *Server) apiIndexes(w http.ResponseWriter, r *http.Request) {
+	_, pool, ok := s.apiPGPool(w, r)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	ix, err := postgres.Indexes(r.Context(), pool, q.Get("schema"), q.Get("table"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"indexes": ix})
+}
+
+func (s *Server) apiKeys(w http.ResponseWriter, r *http.Request) {
+	_, pool, ok := s.apiPGPool(w, r)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	keys, err := postgres.Keys(r.Context(), pool, q.Get("schema"), q.Get("table"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
+}
+
+// ── Data grid ─────────────────────────────────────────────────────────────────
+
+func (s *Server) apiGrid(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.FromContext(r.Context())
+	c, pool, ok := s.apiPGPool(w, r)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	schema, table := q.Get("schema"), q.Get("table")
+	where, order := q.Get("where"), q.Get("order")
+	page, _ := strconv.Atoi(q.Get("page"))
+	if page < 0 {
+		page = 0
+	}
+	res, err := postgres.BrowseWhere(r.Context(), pool, schema, table, where, order, browseLimit, page*browseLimit, true)
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "pg_browse", Detail: schema + "." + table, Success: err == nil})
+	resp := map[string]any{
+		"result":   toResultDTO(res),
+		"readOnly": c.ReadOnly || !u.Write,
+		"page":     page,
+	}
+	if err != nil {
+		resp["error"] = err.Error()
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ── SQL query console ───────────────────────────────────────────────────────
+
+func (s *Server) apiQuery(w http.ResponseWriter, r *http.Request) {
+	if !s.auth.CheckCSRF(r) {
+		apiErr(w, http.StatusForbidden, "bad csrf")
+		return
+	}
+	u, _ := auth.FromContext(r.Context())
+	c, err := s.connFor(r)
+	if err != nil {
+		apiErr(w, http.StatusNotFound, "connection not found")
+		return
+	}
+	var in struct {
+		SQL     string `json:"sql"`
+		Confirm bool   `json:"confirm"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	sql := strings.TrimSpace(in.SQL)
+	readOnly := c.ReadOnly || !u.Write
+	resp := map[string]any{"readOnly": readOnly}
+	if sql == "" {
+		resp["error"] = "empty statement"
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	if !readOnly && postgres.NeedsConfirm(sql) && !in.Confirm {
+		resp["needConfirm"] = true
+		resp["sql"] = sql
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	pool, err := s.reg.PG(r.Context(), c)
+	if err != nil {
+		resp["error"] = "connect: " + err.Error()
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	res, err := postgres.Query(r.Context(), pool, sql, readOnly)
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "pg_query", Detail: truncate(sql, 500), Success: err == nil})
+	resp["result"] = toResultDTO(res)
+	if err != nil {
+		resp["error"] = err.Error()
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ── Generators / introspection ──────────────────────────────────────────────
+
+func (s *Server) apiGenerate(w http.ResponseWriter, r *http.Request) {
+	_, pool, ok := s.apiPGPool(w, r)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	schema, table := q.Get("schema"), q.Get("table")
+	var (
+		sql string
+		err error
+	)
+	switch q.Get("kind") {
+	case "select":
+		sql, err = postgres.GenSelect(r.Context(), pool, schema, table)
+	case "insert":
+		sql, err = postgres.GenInsert(r.Context(), pool, schema, table)
+	case "update":
+		sql, err = postgres.GenUpdate(r.Context(), pool, schema, table)
+	case "create":
+		sql, err = postgres.CreateTableDDL(r.Context(), pool, schema, table)
+	default:
+		apiErr(w, http.StatusBadRequest, "unknown kind")
+		return
+	}
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sql": sql})
+}
+
+func (s *Server) apiDoc(w http.ResponseWriter, r *http.Request) {
+	_, pool, ok := s.apiPGPool(w, r)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	schema, table := q.Get("schema"), q.Get("table")
+	cols, err := postgres.Columns(r.Context(), pool, schema, table)
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	keys, _ := postgres.Keys(r.Context(), pool, schema, table)
+	indexes, _ := postgres.Indexes(r.Context(), pool, schema, table)
+	comment, _ := postgres.TableComment(r.Context(), pool, schema, table)
+	out := make([]columnDTO, 0, len(cols))
+	for _, c := range cols {
+		out = append(out, toColumnDTO(c))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema": schema, "table": table, "columns": out,
+		"keys": keys, "indexes": indexes, "comment": comment,
+	})
+}
+
+func (s *Server) apiUsages(w http.ResponseWriter, r *http.Request) {
+	_, pool, ok := s.apiPGPool(w, r)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	schema, table := q.Get("schema"), q.Get("table")
+	usages, err := postgres.FindUsages(r.Context(), pool, schema, table)
+	resp := map[string]any{"schema": schema, "table": table, "usages": usages}
+	if err != nil {
+		resp["error"] = err.Error()
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ── DDL ───────────────────────────────────────────────────────────────────────
+
+// apiDDLFormPrefill returns the live column definition so the SPA can prefill
+// the Modify-column modal (other DDL forms need no server-side prefill).
+func (s *Server) apiDDLFormPrefill(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.FromContext(r.Context())
+	if !u.Write {
+		apiErr(w, http.StatusForbidden, "write access required")
+		return
+	}
+	c, err := s.connFor(r)
+	if err != nil {
+		apiErr(w, http.StatusNotFound, "connection not found")
+		return
+	}
+	q := r.URL.Query()
+	resp := map[string]any{"nullable": true}
+	if q.Get("kind") == "modify-column" {
+		if pool, e := s.reg.PG(r.Context(), c); e == nil {
+			if cols, e2 := postgres.Columns(r.Context(), pool, q.Get("schema"), q.Get("table")); e2 == nil {
+				for _, col := range cols {
+					if col.Name == q.Get("column") {
+						resp["name"] = col.Name
+						resp["type"] = col.Type
+						resp["nullable"] = !col.NotNull
+						resp["default"] = col.Default
+					}
+				}
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) apiRunForm(w http.ResponseWriter, r *http.Request) {
+	u, c, pool, ok := s.apiRequireWrite(w, r, false)
+	if !ok {
+		return
+	}
+	var in struct {
+		Kind     string `json:"kind"`
+		Schema   string `json:"schema"`
+		Table    string `json:"table"`
+		Column   string `json:"column"`
+		Name     string `json:"name"`
+		Type     string `json:"type"`
+		Default  string `json:"default"`
+		Columns  string `json:"columns"`
+		Nullable bool   `json:"nullable"`
+		Unique   bool   `json:"unique"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	f := ddlForm{
+		Conn: c, Kind: in.Kind, Schema: in.Schema, Table: in.Table, Column: in.Column,
+		Name: strings.TrimSpace(in.Name), Type: strings.TrimSpace(in.Type),
+		Default: strings.TrimSpace(in.Default), Columns: strings.TrimSpace(in.Columns),
+		Nullable: in.Nullable, Unique: in.Unique,
+	}
+	sql, action, err := buildFormSQL(f)
+	if err == nil {
+		err = s.execDDLAudit(r, u, c, pool, action, sql)
+	}
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) apiDropTable(w http.ResponseWriter, r *http.Request) {
+	s.apiDDLMutate(w, r, true, "pg_ddl_drop_table", func(in ddlBody) string {
+		return "DROP TABLE " + postgres.Qualified(in.Schema, in.Table)
+	})
+}
+
+func (s *Server) apiTruncate(w http.ResponseWriter, r *http.Request) {
+	s.apiDDLMutate(w, r, true, "pg_ddl_truncate", func(in ddlBody) string {
+		return "TRUNCATE TABLE " + postgres.Qualified(in.Schema, in.Table)
+	})
+}
+
+func (s *Server) apiDropColumn(w http.ResponseWriter, r *http.Request) {
+	s.apiDDLMutate(w, r, true, "pg_ddl_drop_column", func(in ddlBody) string {
+		return "ALTER TABLE " + postgres.Qualified(in.Schema, in.Table) + " DROP COLUMN " + postgres.QuoteIdent(in.Column)
+	})
+}
+
+func (s *Server) apiDropIndex(w http.ResponseWriter, r *http.Request) {
+	s.apiDDLMutate(w, r, true, "pg_ddl_drop_index", func(in ddlBody) string {
+		return "DROP INDEX " + postgres.Qualified(in.Schema, in.Name)
+	})
+}
+
+type ddlBody struct {
+	Schema string `json:"schema"`
+	Table  string `json:"table"`
+	Column string `json:"column"`
+	Name   string `json:"name"`
+}
+
+// apiDDLMutate is the JSON twin of the fetch-based confirm endpoints: gate on
+// CSRF + write/admin + read-only, build the statement, exec, audit.
+func (s *Server) apiDDLMutate(w http.ResponseWriter, r *http.Request, admin bool, action string, build func(ddlBody) string) {
+	u, c, pool, ok := s.apiRequireWrite(w, r, admin)
+	if !ok {
+		return
+	}
+	var in ddlBody
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	if err := s.execDDLAudit(r, u, c, pool, action, build(in)); err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// execDDLAudit runs a generated statement and records it (no HX-Trigger header:
+// the SPA refreshes its own tree on success).
+func (s *Server) execDDLAudit(r *http.Request, u auth.User, c store.Connection, pool *pgxpool.Pool, action, sql string) error {
+	_, err := postgres.Exec(r.Context(), pool, sql)
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: action, Detail: truncate(sql, 500), Success: err == nil})
+	return err
+}
+
+// ── Redis ─────────────────────────────────────────────────────────────────────
+
+func (s *Server) apiRedisKeys(w http.ResponseWriter, r *http.Request) {
+	c, err := s.connFor(r)
+	if err != nil {
+		apiErr(w, http.StatusNotFound, "connection not found")
+		return
+	}
+	client, err := s.reg.Redis(r.Context(), c)
+	if err != nil {
+		apiErr(w, http.StatusBadGateway, "connect: "+err.Error())
+		return
+	}
+	cursor, _ := strconv.ParseUint(r.URL.Query().Get("cursor"), 10, 64)
+	page, err := redisdb.Scan(r.Context(), client, orStar(r.URL.Query().Get("match")), cursor, 100)
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"keys": page.Keys, "cursor": page.Cursor})
+}
+
+func (s *Server) apiRedisValue(w http.ResponseWriter, r *http.Request) {
+	c, err := s.connFor(r)
+	if err != nil {
+		apiErr(w, http.StatusNotFound, "connection not found")
+		return
+	}
+	client, err := s.reg.Redis(r.Context(), c)
+	if err != nil {
+		apiErr(w, http.StatusBadGateway, "connect: "+err.Error())
+		return
+	}
+	val, err := redisdb.Get(r.Context(), client, r.URL.Query().Get("key"))
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"value": val})
+}
+
+func (s *Server) apiRedisCmd(w http.ResponseWriter, r *http.Request) {
+	if !s.auth.CheckCSRF(r) {
+		apiErr(w, http.StatusForbidden, "bad csrf")
+		return
+	}
+	u, _ := auth.FromContext(r.Context())
+	c, err := s.connFor(r)
+	if err != nil {
+		apiErr(w, http.StatusNotFound, "connection not found")
+		return
+	}
+	var in struct {
+		Cmd     string `json:"cmd"`
+		Confirm bool   `json:"confirm"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	args := redisdb.ParseArgs(in.Cmd)
+	if len(args) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"error": "empty command"})
+		return
+	}
+	readOnly := c.ReadOnly || !u.Write
+	cmd := strings.ToLower(args[0])
+	if readOnly && !redisReadAllow[cmd] {
+		writeJSON(w, http.StatusOK, map[string]any{"error": "read-only: command '" + cmd + "' is not permitted"})
+		return
+	}
+	if redisdb.NeedsConfirm(args) {
+		if !u.Admin {
+			writeJSON(w, http.StatusOK, map[string]any{"error": "admin required for '" + cmd + "'"})
+			return
+		}
+		if !in.Confirm {
+			writeJSON(w, http.StatusOK, map[string]any{"needConfirm": true, "cmd": in.Cmd})
+			return
+		}
+	}
+	client, err := s.reg.Redis(r.Context(), c)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"error": err.Error()})
+		return
+	}
+	res, err := redisdb.Command(r.Context(), client, args)
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "redis_cmd", Detail: truncate(in.Cmd, 500), Success: err == nil})
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"out": res})
+}
+
+// ── Audit ─────────────────────────────────────────────────────────────────────
+
+type auditDTO struct {
+	TS      string `json:"ts"`
+	User    string `json:"user"`
+	ConnID  int64  `json:"connId"`
+	Action  string `json:"action"`
+	Detail  string `json:"detail"`
+	Success bool   `json:"success"`
+}
+
+func (s *Server) apiAudit(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.FromContext(r.Context())
+	if !u.Admin {
+		apiErr(w, http.StatusForbidden, "admin required")
+		return
+	}
+	rows, err := s.st.ListAudit(r.Context(), 200)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := make([]auditDTO, 0, len(rows))
+	for _, a := range rows {
+		out = append(out, auditDTO{
+			TS: a.TS.Format(time.RFC3339), User: a.User, ConnID: a.ConnID,
+			Action: a.Action, Detail: a.Detail, Success: a.Success,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rows": out})
+}
+
+// ── shared gates ────────────────────────────────────────────────────────────
+
+func (s *Server) apiRequireAdmin(w http.ResponseWriter, r *http.Request) (auth.User, bool) {
+	u, _ := auth.FromContext(r.Context())
+	if !s.auth.CheckCSRF(r) {
+		apiErr(w, http.StatusForbidden, "bad csrf")
+		return u, false
+	}
+	if !u.Admin {
+		apiErr(w, http.StatusForbidden, "admin required")
+		return u, false
+	}
+	return u, true
+}
+
+// apiPGPool resolves the URL's connection + Postgres pool for read endpoints.
+func (s *Server) apiPGPool(w http.ResponseWriter, r *http.Request) (store.Connection, *pgxpool.Pool, bool) {
+	c, err := s.connFor(r)
+	if err != nil {
+		apiErr(w, http.StatusNotFound, "connection not found")
+		return store.Connection{}, nil, false
+	}
+	pool, err := s.reg.PG(r.Context(), c)
+	if err != nil {
+		apiErr(w, http.StatusBadGateway, "connect: "+err.Error())
+		return c, nil, false
+	}
+	return c, pool, true
+}
+
+// apiRequireWrite is the JSON twin of requireWrite: CSRF + write/admin + the
+// connection's read-only flag, then resolve the pool.
+func (s *Server) apiRequireWrite(w http.ResponseWriter, r *http.Request, admin bool) (auth.User, store.Connection, *pgxpool.Pool, bool) {
+	u, _ := auth.FromContext(r.Context())
+	if !s.auth.CheckCSRF(r) {
+		apiErr(w, http.StatusForbidden, "bad csrf")
+		return u, store.Connection{}, nil, false
+	}
+	if admin && !u.Admin {
+		apiErr(w, http.StatusForbidden, "admin required")
+		return u, store.Connection{}, nil, false
+	}
+	if !u.Write {
+		apiErr(w, http.StatusForbidden, "write access required")
+		return u, store.Connection{}, nil, false
+	}
+	c, err := s.connFor(r)
+	if err != nil {
+		apiErr(w, http.StatusNotFound, "connection not found")
+		return u, store.Connection{}, nil, false
+	}
+	if c.ReadOnly {
+		apiErr(w, http.StatusConflict, "connection is read-only")
+		return u, c, nil, false
+	}
+	pool, err := s.reg.PG(r.Context(), c)
+	if err != nil {
+		apiErr(w, http.StatusBadGateway, "connect: "+err.Error())
+		return u, c, nil, false
+	}
+	return u, c, pool, true
+}
+
+var _ = redis.Nil
