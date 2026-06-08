@@ -103,6 +103,24 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
     const m = colMeta?.[col]
     return m && (m.autoInc || m.default) ? '<default>' : '<null>'
   }
+  // Pick the HTML input flavour from the column's SQL type so each cell edits with
+  // the right control (number spinner, date/time pickers, boolean dropdown). All
+  // values are still emitted as SQL literals, which Postgres casts per column.
+  const fieldType = (col: string): 'number' | 'date' | 'datetime-local' | 'time' | 'bool' | 'text' => {
+    const t = (colMeta?.[col]?.type || '').toLowerCase()
+    if (/int|numeric|decimal|real|double|money|serial/.test(t)) return 'number'
+    if (t.includes('timestamp')) return 'datetime-local'   // before date/time: "timestamp" contains both
+    if (t.includes('date')) return 'date'
+    if (t.includes('time')) return 'time'
+    if (t.includes('bool')) return 'bool'
+    return 'text'
+  }
+  // Set/clear one draft cell; an empty value reverts the cell to its placeholder.
+  const setCell = (j: number, value: string) => setDraft(d => {
+    const next = { ...(d || {}) }
+    if (value === '') delete next[j]; else next[j] = value
+    return next
+  })
   const cancelDraft = () => { setDraft(null); setEditing(null) }
   const submitDraft = () => {
     if (!draft) return
@@ -271,18 +289,11 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
                           return (
                             <td key={j} className="code draft-cell" onClick={() => setEditing(j)}>
                               {editing === j ? (
-                                <input className="draft-input code" autoFocus value={v ?? ''}
-                                  onChange={e => setDraft(d => {
-                                    const next = { ...(d || {}) }
-                                    if (e.target.value === '') delete next[j]; else next[j] = e.target.value
-                                    return next
-                                  })}
-                                  onKeyDown={e => {
-                                    // Enter/Tab commit this cell; the toolbar's ↑ submits the whole row.
-                                    if (e.key === 'Enter') { e.preventDefault(); setEditing(j + 1 < cols.length ? j + 1 : null) }
-                                    else if (e.key === 'Escape') { e.preventDefault(); setEditing(null) }
-                                  }}
-                                  onBlur={() => setEditing(null)} />
+                                <DraftField type={fieldType(c)} value={v}
+                                  onChange={val => setCell(j, val)}
+                                  onCancel={() => setEditing(null)}
+                                  // Enter advances to the next cell; the toolbar's ↑ submits the row.
+                                  onNext={() => setEditing(j + 1 < cols.length ? j + 1 : null)} />
                               ) : v !== undefined ? v : <span className="draft-ph dim">{placeholder(c)}</span>}
                             </td>
                           )
@@ -377,6 +388,37 @@ function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuI
           ))}
       </div>
     </>
+  )
+}
+
+// One editable cell of the inline "add row" draft. The control matches the
+// column's SQL type — number spinner, native date/time pickers, a boolean
+// dropdown, or a plain text box. Enter commits + advances, Esc/blur commits.
+function DraftField({ type, value, onChange, onCancel, onNext }: {
+  type: 'number' | 'date' | 'datetime-local' | 'time' | 'bool' | 'text'
+  value: string | undefined
+  onChange: (v: string) => void
+  onCancel: () => void
+  onNext: () => void
+}) {
+  const ref = useRef<HTMLInputElement & HTMLSelectElement>(null)
+  useEffect(() => { ref.current?.focus() }, [])
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); onNext() }
+    else if (e.key === 'Escape') { e.preventDefault(); onCancel() }
+  }
+  if (type === 'bool') return (
+    <select ref={ref} className="draft-input code" value={value ?? ''} onKeyDown={onKeyDown}
+      onBlur={onCancel} onChange={e => onChange(e.target.value)}>
+      <option value="">&lt;default&gt;</option>
+      <option value="true">true</option>
+      <option value="false">false</option>
+    </select>
+  )
+  return (
+    <input ref={ref} className="draft-input code" value={value ?? ''}
+      type={type === 'text' ? 'text' : type} step={type === 'number' ? 'any' : undefined}
+      onKeyDown={onKeyDown} onBlur={onCancel} onChange={e => onChange(e.target.value)} />
   )
 }
 
