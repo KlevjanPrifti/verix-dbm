@@ -273,6 +273,8 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .mi-ico svg, .mi-caret svg, .drawer-toggle svg, .tab-x svg, .th-sort svg,
 .tab-hint svg, .tab-ico svg, .console-toolbar svg { display: block; }
 .mi-ico, .mi-caret, .tab-ico { display: inline-flex; align-items: center; justify-content: center; }
+.mi-ico { width: 1.2em; height: 1.2em; }
+.mi-caret { width: auto; }
 .tab-hint svg { display: inline-block; vertical-align: -2px; }
 .ico-btn, .tb-ico, .tb-ico-btn { display: inline-flex; align-items: center; justify-content: center; }
 .row-act { display: inline-flex; align-items: center; justify-content: center; }
