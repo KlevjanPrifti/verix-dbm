@@ -57,6 +57,21 @@ func (s *Server) Router() http.Handler {
 		r.Get("/c/{id}/grid", s.gridView)
 		r.Get("/c/{id}/console", s.consoleTab)
 
+		// DataGrip-style context-menu actions.
+		// Read-only generators (clipboard text) + info tabs.
+		r.Get("/c/{id}/pg/ddl", s.pgDDL)
+		r.Get("/c/{id}/pg/generate", s.pgGenerate)
+		r.Get("/c/{id}/pg/doc", s.pgDoc)
+		r.Get("/c/{id}/pg/usages", s.pgUsages)
+		r.Get("/c/{id}/export", s.exportTable)
+		// Mutating DDL — guarded by CSRF + write/admin + read-only in the handlers.
+		r.Get("/c/{id}/pg/form", s.pgDDLForm)
+		r.Post("/c/{id}/pg/ddl/run", s.pgRunForm)
+		r.Post("/c/{id}/pg/table/drop", s.pgDropTable)
+		r.Post("/c/{id}/pg/table/truncate", s.pgTruncate)
+		r.Post("/c/{id}/pg/column/drop", s.pgDropColumn)
+		r.Post("/c/{id}/pg/index/drop", s.pgDropIndex)
+
 		// Legacy full-page views (still reachable) + shared HTMX endpoints.
 		r.Get("/c/{id}", s.openConnection)
 		r.Get("/c/{id}/pg", s.pgView)

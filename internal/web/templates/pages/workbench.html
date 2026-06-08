@@ -1,6 +1,7 @@
 {{define "title"}}Workbench{{end}}
 {{define "content"}}
-<div class="ide" x-data="workbench">
+<div class="ide" x-data="workbench"
+     data-admin="{{if .User.Admin}}1{{end}}" data-write="{{if .User.Write}}1{{end}}" data-csrf="{{.User.CSRF}}">
 
   <!-- backdrop behind the off-canvas explorer drawer (mobile only) -->
   <div class="drawer-backdrop" x-show="drawer" x-cloak @click="drawer=false"></div>
@@ -28,7 +29,8 @@
                    hx-get="/c/{{.ID}}/explorer" hx-trigger="click once"
                    hx-target="next .node-children" hx-swap="innerHTML"
                    data-id="{{.ID}}" data-name="{{.Name}}" data-kind="{{.Kind}}"
-                   @contextmenu="openCtx($event,{type:'conn',id:$el.dataset.id,name:$el.dataset.name,kind:$el.dataset.kind})">
+                   @contextmenu="openCtx($event, dataFor($event.currentTarget,'conn'))"
+                   @touchstart="pressStart($event,'conn')" @touchend="pressEnd($event)" @touchmove="pressMove($event)">
             <span class="ico ico-{{.Kind}}"></span>
             <span class="tree-name">{{.Name}}<span class="conn-host dim"> · {{.Host}}</span></span>
             <span class="badge">{{.Kind}}</span>
@@ -81,54 +83,39 @@
     </div>
   </section>
 
-  <!-- ── Right-click context menu ──────────────────────────────────────── -->
-  <div class="ctx-menu" x-show="ctx.open" x-cloak
+  <!-- ── Right-click context menu (data-driven, nested submenus) ─────────── -->
+  <!-- backdrop dims the screen behind the bottom-sheet menu on touch -->
+  <div class="ctx-backdrop" x-show="ctx.open && ctx.sheet" x-cloak @click="closeCtx()"></div>
+
+  <div class="ctx-menu" x-show="ctx.open" x-cloak :class="{sheet: ctx.sheet}"
        @click.outside="closeCtx()" @keydown.escape.window="closeCtx()"
-       :style="`left:${ctx.x}px; top:${ctx.y}px`">
-
-    <template x-if="ctx.type==='conn'">
-      <div>
-        <div class="ctx-head" x-text="ctx.name"></div>
-        <button type="button" class="menu-item" @click="ctxConsole()"><span class="ico ico-console"></span> Query console <span class="ctx-key">Ctrl+⏎</span></button>
-        <button type="button" class="menu-item" @click="ctxRefresh()"><span class="mi-ico">↻</span> Refresh <span class="ctx-key">Ctrl+F5</span></button>
-        <div class="menu-sep"></div>
-        <button type="button" class="menu-item" @click="copy(ctx.name)"><span class="mi-ico">⎘</span> Copy name</button>
-        {{if .User.Admin}}
-        <button type="button" class="menu-item" @click="ctxProps()"><span class="mi-ico">⚙</span> Properties <span class="ctx-key">F4</span></button>
-        <button type="button" class="menu-item" @click="ctxProps()"><span class="mi-ico">⎘</span> Duplicate…</button>
-        <div class="menu-sep"></div>
-        <button type="button" class="menu-item danger"
-                @click="closeCtx(); if(confirm('Remove data source “'+ctx.name+'”?')) $refs['del'+ctx.id].submit()">
-          <span class="mi-ico">✕</span> Remove data source <span class="ctx-key">Del</span>
-        </button>
-        {{end}}
-      </div>
-    </template>
-
-    <template x-if="ctx.type==='schema'">
-      <div>
-        <div class="ctx-head" x-text="ctx.schema"></div>
-        <button type="button" class="menu-item" @click="ctxConsole()"><span class="ico ico-console"></span> Query console</button>
-        <button type="button" class="menu-item" @click="ctxRefresh()"><span class="mi-ico">↻</span> Refresh <span class="ctx-key">Ctrl+F5</span></button>
-        <div class="menu-sep"></div>
-        <button type="button" class="menu-item" @click="copy(ctx.name)"><span class="mi-ico">⎘</span> Copy name</button>
-      </div>
-    </template>
-
-    <template x-if="ctx.type==='table'">
-      <div>
-        <div class="ctx-head"><span x-text="ctx.schema+'.'+ctx.table"></span></div>
-        <button type="button" class="menu-item" @click="ctxBrowse()"><span class="ico ico-table"></span> Open data <span class="ctx-key">F4</span></button>
-        <div class="menu-sep"></div>
-        <button type="button" class="menu-item" @click="copy(ctx.table)"><span class="mi-ico">⎘</span> Copy name</button>
-        <button type="button" class="menu-item" @click="copy(ctx.schema+'.'+ctx.table)"><span class="mi-ico">⎘</span> Copy qualified name</button>
-        <button type="button" class="menu-item" @click="ctxCopySelect()"><span class="mi-ico">▷</span> Copy SELECT</button>
-      </div>
-    </template>
-
-    <template x-if="ctx.type==='col'">
-      <div>
-        <button type="button" class="menu-item" @click="copy(ctx.name)"><span class="mi-ico">⎘</span> Copy name</button>
+       :style="ctx.sheet ? '' : `left:${ctx.x}px; top:${ctx.y}px`">
+    <template x-for="(it,i) in ctx.items" :key="i">
+      <div class="menu-row" @mouseenter="it.children && subEnter(i)" @mouseleave="it.children && subLeave()">
+        <template x-if="it.sep"><div class="menu-sep"></div></template>
+        <template x-if="it.head"><div class="ctx-head" x-text="it.head"></div></template>
+        <template x-if="!it.sep && !it.head">
+          <button type="button" class="menu-item" :class="{'has-children': it.children, danger: it.danger, expanded: ctx.openSub===i}"
+                  @click="itemClick(it,i)">
+            <span class="mi-ico" x-show="it.glyph" x-text="it.glyph"></span>
+            <span x-show="it.icon" :class="it.icon"></span>
+            <span class="mi-label" x-text="it.label"></span>
+            <span class="ctx-key" x-show="it.key" x-text="it.key"></span>
+            <span class="mi-caret" x-show="it.children">▸</span>
+          </button>
+        </template>
+        <!-- one level of fly-out (desktop) / accordion (sheet) submenu -->
+        <template x-if="it.children && ctx.openSub===i">
+          <div class="ctx-submenu" :class="{flip: ctx.subFlip, sheet: ctx.sheet}">
+            <template x-for="(s,j) in it.children" :key="j">
+              <button type="button" class="menu-item" :class="{danger: s.danger}" @click="s.run && s.run()">
+                <span class="mi-ico" x-show="s.glyph" x-text="s.glyph"></span>
+                <span x-show="s.icon" :class="s.icon"></span>
+                <span class="mi-label" x-text="s.label"></span>
+              </button>
+            </template>
+          </div>
+        </template>
       </div>
     </template>
   </div>
@@ -136,6 +123,8 @@
   {{if .User.Admin}}{{template "connModal" .}}{{end}}
   <!-- edit-connection (Properties) modal is loaded here on demand -->
   <div id="editmodal-host"></div>
+  <!-- DDL parameter modals (Add column, Rename, New…) load here on demand -->
+  <div id="ddl-host"></div>
 
 </div>
 {{end}}

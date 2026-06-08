@@ -269,6 +269,24 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .ctx-key { margin-left: auto; font-family: var(--mono); font-size: .6rem; color: rgba(var(--accent-rgb),0.45); padding-left: 1rem; }
 .menu-sep { height: 1px; background: rgba(var(--accent-rgb),0.15); margin: .25rem .15rem; }
 
+/* nested submenus — fly-out on desktop, accordion on touch (.sheet) */
+.menu-row { position: relative; }
+.ctx-menu .menu-item .mi-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.ctx-menu .menu-item.has-children.expanded { background: rgba(var(--accent-rgb),0.12); color: var(--hud); }
+.mi-caret { margin-left: auto; padding-left: .6rem; font-size: .7rem; color: rgba(var(--accent-rgb),0.5); }
+.ctx-submenu { position: absolute; left: 100%; top: 0; margin-left: 2px; min-width: 200px; z-index: 61;
+  background: var(--panel-raised); border: 1px solid rgba(var(--accent-rgb),0.35); border-radius: 2px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: .25rem; max-height: 70vh; overflow: auto; }
+.ctx-submenu.flip { left: auto; right: 100%; margin-left: 0; margin-right: 2px; }
+.ctx-backdrop { display: none; }
+
+/* Quick-documentation / Find-usages tabs */
+.doc-pane { flex: 1; min-height: 0; overflow: auto; }
+.doc-pane .tablewrap { max-height: none; }
+.doc-h { display: block; margin: 1rem 0 .4rem; }
+.doc-list { margin: .2rem 0 .6rem; padding-left: 1.2rem; font-size: .8rem; }
+.doc-list li { margin: .15rem 0; }
+
 /* ── Work area + tabs ── */
 .work { display: flex; flex-direction: column; height: 100%; min-width: 0; }
 .tabbar { display: flex; align-items: stretch; gap: 2px; border-bottom: 1px solid rgba(var(--accent-rgb),0.2); overflow-x: auto; min-height: 2.2rem; }
@@ -392,6 +410,33 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 
   /* Context menu: wider + capped so it never runs off a narrow screen */
   .ctx-menu { min-width: 240px; max-width: 92vw; }
+
+  /* Touch: the menu becomes a bottom sheet; submenus expand inline (accordion) */
+  .ctx-backdrop { display: block; position: fixed; inset: 0; z-index: 59; background: rgba(0,5,12,0.55); backdrop-filter: blur(1px); }
+  .ctx-menu.sheet {
+    left: 0 !important; right: 0; bottom: 0; top: auto !important;
+    width: 100%; max-width: 100%; min-width: 0;
+    border-radius: 12px 12px 0 0; border-bottom: none;
+    padding: .3rem .3rem calc(.3rem + env(safe-area-inset-bottom));
+    max-height: 72vh; overflow: auto;
+  }
+  .ctx-menu.sheet .ctx-head { font-size: .72rem; padding: .65rem .75rem .35rem; }
+  .ctx-submenu.sheet { position: static; left: auto; right: auto; margin: .1rem 0 .2rem .9rem;
+    box-shadow: none; border: none; border-left: 1px solid rgba(var(--accent-rgb),0.2);
+    border-radius: 0; max-height: none; overflow: visible; padding: .1rem 0; min-width: 0; }
+
+  /* Tabs: snap the active one into view as the bar overflows */
+  .tabbar { scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+  .tab { scroll-snap-align: start; }
+
+  /* Data grid scrolls horizontally; sticky row numbers (.rownum) stay put */
+  .grid-body .tablewrap { overflow: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Modals go full-screen so forms are comfortable to fill on a phone */
+  .modal { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0;
+    display: flex; flex-direction: column; }
+  .modal-head { flex-shrink: 0; }
+  .modal-body { flex: 1; overflow: auto; }
 
   /* Chrome bars wrap instead of overflowing horizontally */
   .topbar { flex-wrap: wrap; gap: .6rem 1rem; padding: .6rem .9rem; }

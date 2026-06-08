@@ -7,7 +7,8 @@
   {{$schema := .Name}}
   <details class="tree-node" open>
     <summary class="tree-row schema-row" data-conn="{{$conn.ID}}" data-schema="{{.Name}}"
-             @contextmenu="openCtx($event,{type:'schema',id:$el.dataset.conn,connId:$el.dataset.conn,schema:$el.dataset.schema,name:$el.dataset.schema})">
+             @contextmenu="openCtx($event, dataFor($event.currentTarget,'schema'))"
+             @touchstart="pressStart($event,'schema')" @touchend="pressEnd($event)" @touchmove="pressMove($event)">
       <span class="ico ico-schema"></span><span class="tree-name">{{.Name}}</span><span class="count">{{len .Tables}}</span>
       <button type="button" class="row-kebab" title="actions" @click="kebab($event,'schema')">⋯</button></summary>
     <div class="node-children">
@@ -15,7 +16,8 @@
       <details class="tree-node">
         <summary class="tree-row table-row"
                  data-conn="{{$conn.ID}}" data-schema="{{$schema}}" data-table="{{.Name}}"
-                 @contextmenu="openCtx($event,{type:'table',connId:$el.dataset.conn,schema:$el.dataset.schema,table:$el.dataset.table,name:$el.dataset.table})">
+                 @contextmenu="openCtx($event, dataFor($event.currentTarget,'table'))"
+                 @touchstart="pressStart($event,'table')" @touchend="pressEnd($event)" @touchmove="pressMove($event)">
           <span class="ico ico-{{.Kind}}"></span>
           <span class="tree-name table-name"
                 @click="$event.preventDefault(); openTab({key:'grid:{{$conn.ID}}:{{$schema}}.{{.Name}}',title:'{{$schema}}.{{.Name}}',url:'/c/{{$conn.ID}}/grid?schema={{urlq $schema}}&table={{urlq .Name}}',icon:'grid'})"
@@ -55,37 +57,49 @@
 {{end}}
 
 {{define "nodeColumns"}}
+{{$d := .}}
 {{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
 {{range .Columns}}
   <div class="tree-row leaf col-leaf" title="{{.Name}} · {{.TypeText}}{{if .NotNull}} · not null{{end}}"
-       @contextmenu="openCtx($event,{type:'col',name:$el.dataset.name})" data-name="{{.Name}}">
+       data-conn="{{$d.Conn.ID}}" data-schema="{{$d.Schema}}" data-table="{{$d.Table}}" data-name="{{.Name}}"
+       @contextmenu="openCtx($event, dataFor($event.currentTarget,'col'))"
+       @touchstart="pressStart($event,'col')" @touchend="pressEnd($event)" @touchmove="pressMove($event)">
     <span class="ico ico-{{.Cat}}"></span>
     <span class="tree-name">{{.Name}}</span>
     <span class="col-type dim">{{.TypeText}}</span>
+    <button type="button" class="row-kebab" title="actions" @click="kebab($event,'col')">⋯</button>
   </div>
 {{else}}<div class="tree-empty dim">none</div>{{end}}
 {{end}}
 
 {{define "nodeIndexes"}}
+{{$d := .}}
 {{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
 {{range .Indexes}}
   <div class="tree-row leaf" title="{{.Def}}"
-       @contextmenu="openCtx($event,{type:'col',name:$el.dataset.name})" data-name="{{.Name}}">
+       data-conn="{{$d.Conn.ID}}" data-schema="{{$d.Schema}}" data-table="{{$d.Table}}" data-name="{{.Name}}" data-def="{{.Def}}"
+       @contextmenu="openCtx($event, dataFor($event.currentTarget,'index'))"
+       @touchstart="pressStart($event,'index')" @touchend="pressEnd($event)" @touchmove="pressMove($event)">
     <span class="ico ico-idx{{if .Primary}} pk{{end}}"></span>
     <span class="tree-name">{{.Name}}</span>
     <span class="col-type dim">{{if .Cols}}({{.Cols}}){{end}}{{if .Unique}} UNIQUE{{end}}</span>
+    <button type="button" class="row-kebab" title="actions" @click="kebab($event,'index')">⋯</button>
   </div>
 {{else}}<div class="tree-empty dim">none</div>{{end}}
 {{end}}
 
 {{define "nodeKeys"}}
+{{$d := .}}
 {{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
 {{range .Keys}}
   <div class="tree-row leaf" title="{{.Def}}"
-       @contextmenu="openCtx($event,{type:'col',name:$el.dataset.name})" data-name="{{.Name}}">
+       data-conn="{{$d.Conn.ID}}" data-schema="{{$d.Schema}}" data-table="{{$d.Table}}" data-name="{{.Name}}" data-def="{{.Def}}"
+       @contextmenu="openCtx($event, dataFor($event.currentTarget,'key'))"
+       @touchstart="pressStart($event,'key')" @touchend="pressEnd($event)" @touchmove="pressMove($event)">
     <span class="ico {{if eq .Type "foreign"}}ico-fkey{{else}}ico-key{{if eq .Type "primary"}} pk{{end}}{{end}}"></span>
     <span class="tree-name">{{.Name}}</span>
     <span class="col-type dim">{{if .Cols}}({{.Cols}}) {{end}}{{.Type}}</span>
+    <button type="button" class="row-kebab" title="actions" @click="kebab($event,'key')">⋯</button>
   </div>
 {{else}}<div class="tree-empty dim">none</div>{{end}}
 {{end}}
