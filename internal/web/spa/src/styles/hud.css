@@ -359,6 +359,17 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .th-sort:hover { color: var(--cta); text-decoration: none; }
 td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; background: var(--panel-raised); position: sticky; left: 0; z-index: 2; font-size: .7rem; width: 1%; white-space: nowrap; }
 
+/* inline "add row" draft (DataGrip-style new record) */
+.tb-ico.ok { color: #7bd88f; }
+.tb-ico.ok:hover:not(:disabled) { background: rgba(123,216,143,0.15); }
+.draft-row td { background: rgba(123,216,143,0.06); }
+.draft-row td.rownum { color: #7bd88f; background: rgba(123,216,143,0.1); }
+.draft-cell { cursor: text; }
+.draft-cell:hover { background: rgba(var(--accent-rgb),0.1); }
+.draft-ph { font-style: italic; opacity: .55; }
+.draft-input { width: 100%; box-sizing: border-box; background: var(--panel-raised); border: 1px solid rgba(123,216,143,0.6); border-radius: 2px; color: var(--hud); padding: .15rem .35rem; margin: -.15rem -.2rem; font-size: inherit; }
+.draft-input:focus { outline: none; border-color: #7bd88f; }
+
 /* SQL console tab */
 .console-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .console-form { display: flex; flex-direction: column; }

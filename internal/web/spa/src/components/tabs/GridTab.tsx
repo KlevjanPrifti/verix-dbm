@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
 import { useApp } from '../../appctx'
-import type { GridResponse, QueryResponse } from '../../types'
+import type { Column, GridResponse, QueryResponse } from '../../types'
 import {
   type LucideIcon, Ico, RotateCw, Plus, Minus, ChevronUp, ChevronDown,
   ChevronLeft, ChevronRight, Copy, Maximize2, Filter, FilterX, Info, X,
   SquarePen, TableProperties, Sigma, Undo2, FileCode, Code, Trash2, ArrowRight,
-  Search, Download,
+  Search, Download, ArrowUp,
 } from '../../icons'
 
 interface MenuItem {
@@ -29,6 +29,15 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const [viewer, setViewer] = useState<{ col: string; value: string } | null>(null)
   const [record, setRecord] = useState<number | null>(null)
   const [agg, setAgg] = useState<string | null>(null)
+  // Inline "add row" draft (DataGrip-style). `draft` maps a column index to the
+  // value typed for it; columns absent from the map stay unset and render their
+  // <default>/<null> placeholder. `editing` is the column index currently shown
+  // as a text input. colMeta (notNull/default/autoInc, keyed by name) drives the
+  // placeholder choice.
+  const [draft, setDraft] = useState<Record<number, string> | null>(null)
+  const [editing, setEditing] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [colMeta, setColMeta] = useState<Record<string, Column> | null>(null)
 
   const load = useCallback((p: number, w: string, o: string) => {
     setLoading(true)
@@ -38,6 +47,14 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   }, [connId, schema, table])
 
   useEffect(() => { load(page, where, order) }, [load, page]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Column metadata for the inline editor's placeholders — fetched once per table.
+  useEffect(() => {
+    setColMeta(null); setDraft(null); setEditing(null)
+    api.columns(connId, schema, table)
+      .then(r => setColMeta(Object.fromEntries((r.columns || []).map(c => [c.name, c]))))
+      .catch(() => setColMeta({}))
+  }, [connId, schema, table])
 
   const apply = (e: React.FormEvent) => { e.preventDefault(); setPage(0); load(0, where, order) }
   const sort = (col: string, dir: 'asc' | 'desc') => { const o = `"${col}" ${dir}`; setOrder(o); setPage(0); load(0, where, o) }
@@ -77,9 +94,33 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
     cols.map((c, i) => rows[r][i] === '' ? `${qq(c)} IS NULL` : `${qq(c)} = ${lit(rows[r][i])}`).join('\n  AND ')
   const openSql = (key: string, title: string, sql: string) =>
     app.openTab({ key, title, icon: 'console', view: { type: 'console', connId, sql } })
-  const insertRow = () => openSql(
-    `console:${connId}:insert:${schema}.${table}`, `insert · ${table}`,
-    `INSERT INTO ${qual} (${cols.map(qq).join(', ')})\nVALUES (${cols.map(() => 'NULL').join(', ')});`)
+  // Add row → inline draft (DataGrip-style), not a seeded console. The draft row
+  // renders at the top of the grid; the user fills cells and submits.
+  const insertRow = () => { if (!draft) { setDraft({}); setEditing(null) } }
+  // Placeholder shown for an unset cell: columns with a default (or auto-increment)
+  // get their default when omitted from the INSERT; everything else gets NULL.
+  const placeholder = (col: string) => {
+    const m = colMeta?.[col]
+    return m && (m.autoInc || m.default) ? '<default>' : '<null>'
+  }
+  const cancelDraft = () => { setDraft(null); setEditing(null) }
+  const submitDraft = () => {
+    if (!draft) return
+    const set = Object.keys(draft).map(Number).sort((a, b) => a - b)
+    // Only the cells the user touched go into the INSERT; the rest are omitted so
+    // Postgres applies each column's default (or NULL) — matching the placeholders.
+    const sql = set.length === 0
+      ? `INSERT INTO ${qual} DEFAULT VALUES;`
+      : `INSERT INTO ${qual} (${set.map(i => qq(cols[i])).join(', ')}) VALUES (${set.map(i => lit(draft[i])).join(', ')});`
+    setSaving(true)
+    api.query(connId, sql, true)
+      .then(r => {
+        if (r.error) { app.notify(r.error, 'error'); return }
+        app.notify('row inserted'); setDraft(null); setEditing(null); load(page, where, order)
+      })
+      .catch(e => app.notify(String(e.message || e), 'error'))
+      .finally(() => setSaving(false))
+  }
   const editCell = (r: number, c: number) => openSql(
     `console:${connId}:edit:${schema}.${table}`, `edit · ${table}`,
     `UPDATE ${qual}\nSET ${qq(cols[c])} = ${cellLit(rows[r][c])}\nWHERE ${rowWhere(r)};`)
@@ -177,8 +218,13 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       <div className="grid-toolbar">
         <button className="tb-ico" title="refresh" onClick={() => load(page, where, order)}><RotateCw size={16} /></button>
         <span className="tb-sep" />
-        <button className="tb-ico" title={readOnly ? 'add row (read-only)' : 'add row'} disabled={readOnly} onClick={insertRow}><Plus size={16} /></button>
+        <button className="tb-ico" title={readOnly ? 'add row (read-only)' : 'add row'} disabled={readOnly || !!draft} onClick={insertRow}><Plus size={16} /></button>
         <button className="tb-ico" title={readOnly ? 'remove rows (read-only)' : 'remove rows'} disabled={readOnly} onClick={deleteFiltered}><Minus size={16} /></button>
+        {draft && <>
+          <span className="tb-sep" />
+          <button className="tb-ico ok" title="submit new row" disabled={saving} onClick={submitDraft}><ArrowUp size={16} /></button>
+          <button className="tb-ico" title="discard new row" disabled={saving} onClick={cancelDraft}><X size={16} /></button>
+        </>}
         <span className="tb-sep" />
         <span className="tb-chip hud-label">Tx: Auto</span>
         <span className="tb-grow" />
@@ -199,7 +245,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         {data?.error ? <div className="alert error code">{data.error}</div>
           : !result ? <p className="dim">{loading ? 'loading…' : ''}</p>
           : !result.isSelect ? <p className="ok hud-label">{result.command} · {result.rowsAffected} rows affected · {result.duration}</p>
-          : rows.length === 0 ? <p className="dim">0 rows · {result.duration}</p>
+          : rows.length === 0 && !draft ? <p className="dim">0 rows · {result.duration}</p>
           : (
             <>
               <div className="tablewrap grid-table">
@@ -217,6 +263,32 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
                     ))}
                   </tr></thead>
                   <tbody>
+                    {draft && (
+                      <tr className="draft-row">
+                        <td className="rownum">+</td>
+                        {cols.map((c, j) => {
+                          const v = draft[j]
+                          return (
+                            <td key={j} className="code draft-cell" onClick={() => setEditing(j)}>
+                              {editing === j ? (
+                                <input className="draft-input code" autoFocus value={v ?? ''}
+                                  onChange={e => setDraft(d => {
+                                    const next = { ...(d || {}) }
+                                    if (e.target.value === '') delete next[j]; else next[j] = e.target.value
+                                    return next
+                                  })}
+                                  onKeyDown={e => {
+                                    // Enter/Tab commit this cell; the toolbar's ↑ submits the whole row.
+                                    if (e.key === 'Enter') { e.preventDefault(); setEditing(j + 1 < cols.length ? j + 1 : null) }
+                                    else if (e.key === 'Escape') { e.preventDefault(); setEditing(null) }
+                                  }}
+                                  onBlur={() => setEditing(null)} />
+                              ) : v !== undefined ? v : <span className="draft-ph dim">{placeholder(c)}</span>}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )}
                     {rows.map((row, i) => (
                       <tr key={i}><td className="rownum">{i + 1}</td>{row.map((v, j) => (
                         <td key={j} className="code"
