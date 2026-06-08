@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { api, type ConnInput } from '../api'
 import { useApp } from '../appctx'
 import { X, Check } from '../icons'
+import { DB_KINDS, DEFAULT_KIND, defaultPort, dbKindByScheme } from '../dbkinds'
 
 type Form = ConnInput & { port: number }
 
 const blank = (kind: string): Form => ({
-  name: '', kind, host: '', port: kind === 'redis' ? 6379 : 5432,
+  name: '', kind, host: '', port: defaultPort(kind),
   dbname: '', username: '', password: '', passwordEnc: '', options: '', readOnly: false,
 })
 
@@ -18,13 +19,13 @@ function parseConnUrl(raw: string): Partial<Form> | null {
   let u: URL
   try { u = new URL(url) } catch { return null }
   if (!u.hostname) return null
-  let kind = u.protocol.replace(':', '').toLowerCase()
-  if (kind === 'postgresql' || kind === 'postgres' || kind === 'pg') kind = 'postgres'
-  else if (kind === 'redis' || kind === 'rediss' || kind === 'valkey') kind = 'redis'
+  const scheme = u.protocol.replace(':', '').toLowerCase()
+  const matched = dbKindByScheme(scheme)
+  const kind = matched?.id ?? scheme
   return {
     kind,
     host: u.hostname,
-    port: Number(u.port) || (kind === 'redis' ? 6379 : 5432),
+    port: Number(u.port) || (matched?.defaultPort ?? defaultPort(kind)),
     username: decodeURIComponent(u.username || ''),
     password: decodeURIComponent(u.password || ''),
     dbname: decodeURIComponent(u.pathname.replace(/^\//, '')),
@@ -42,7 +43,7 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
   onSaved: () => void
 }) {
   const app = useApp()
-  const [f, setF] = useState<Form>(blank(initialKind || 'postgres'))
+  const [f, setF] = useState<Form>(blank(initialKind || DEFAULT_KIND))
   const [test, setTest] = useState<{ ok: boolean; msg: string } | null>(null)
   const [err, setErr] = useState('')
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF(p => ({ ...p, [k]: v }))
@@ -106,9 +107,8 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
             <input className="hud-input" required value={f.name} onChange={e => set('name', e.target.value)} placeholder="postgres@localhost" /></div>
           <div className="mrow"><label className="hud-label">Driver</label>
             <select className="hud-input" value={f.kind}
-              onChange={e => { const kind = e.target.value; setF(p => ({ ...p, kind, port: kind === 'redis' ? 6379 : 5432 })) }}>
-              <option value="postgres">PostgreSQL</option>
-              <option value="redis">Redis / Valkey</option>
+              onChange={e => { const kind = e.target.value; setF(p => ({ ...p, kind, port: defaultPort(kind) })) }}>
+              {DB_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
             </select>
           </div>
           <div className="mrow2">

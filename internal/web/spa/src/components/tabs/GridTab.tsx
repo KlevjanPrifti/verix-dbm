@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
 import { useApp } from '../../appctx'
-import type { GridResponse } from '../../types'
+import type { GridResponse, QueryResponse } from '../../types'
 import {
   type LucideIcon, Ico, RotateCw, Plus, Minus, ChevronUp, ChevronDown,
   ChevronLeft, ChevronRight, Copy, Maximize2, Filter, FilterX, Info, X,
+  SquarePen, TableProperties, Sigma, Undo2, FileCode, Code, Trash2, ArrowRight,
+  Search, Download,
 } from '../../icons'
+
+interface MenuItem {
+  label?: string; Icon?: LucideIcon; sep?: boolean; head?: string
+  danger?: boolean; disabled?: boolean; key?: string; run?: () => void; children?: MenuItem[]
+}
 
 // Data grid tab: paginated read-only browse with WHERE / ORDER BY filters and
 // per-column sort arrows. Equivalent to the "grid" + "gridResult" partials.
@@ -17,9 +24,11 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const [page, setPage] = useState(0)
   const [data, setData] = useState<GridResponse | null>(null)
   const [loading, setLoading] = useState(false)
-  // Right-click menu (cell or table-level) + the full-value viewer it can open.
+  // Right-click menu (cell or table-level) and the modals it can open.
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
   const [viewer, setViewer] = useState<{ col: string; value: string } | null>(null)
+  const [record, setRecord] = useState<number | null>(null)
+  const [agg, setAgg] = useState<string | null>(null)
 
   const load = useCallback((p: number, w: string, o: string) => {
     setLoading(true)
@@ -34,52 +43,103 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const sort = (col: string, dir: 'asc' | 'desc') => { const o = `"${col}" ${dir}`; setOrder(o); setPage(0); load(0, where, o) }
 
   const result = data?.result
+  const cols = result?.columns || []
   const rows = result?.rows || []
   const readOnly = data?.readOnly ?? (conn ? conn.readOnly || !app.caps.write : true)
 
-  // ── cell-menu actions ──
+  // ── helpers shared by the menus ──
   const qq = (s: string) => '"' + s.replace(/"/g, '""') + '"'
   const lit = (s: string) => "'" + s.replace(/'/g, "''") + "'"
+  const qual = `${qq(schema)}.${qq(table)}`
+  const whereSuffix = where.trim() ? ` WHERE ${where.trim()}` : ''
   const setFilter = (w: string) => { setWhere(w); setPage(0); load(0, w, order) }
   const openDoc = () => app.openTab({
     key: `doc:${connId}:${schema}.${table}`, title: `doc [${table}]`, icon: 'grid',
     view: { type: 'doc', connId, schema, table },
   })
 
+  // Row → various clipboard formats (the "data extractors").
+  const sqlInsert = (r: number) =>
+    `INSERT INTO ${qual} (${cols.map(qq).join(', ')}) VALUES (${rows[r].map(v => v === '' ? 'NULL' : lit(v)).join(', ')});`
+  const jsonRow = (r: number) => JSON.stringify(Object.fromEntries(cols.map((c, i) => [c, rows[r][i]])))
+  const csvCell = (s: string) => /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+  const csvRow = (r: number) => rows[r].map(csvCell).join(',')
+  const tableTsv = () => [cols.join('\t'), ...rows.map(r => r.join('\t'))].join('\n')
+
+  const copySum = (col: string) =>
+    api.query(connId, `SELECT sum(${qq(col)}) FROM ${qual}${whereSuffix}`, true)
+      .then(r => {
+        if (r.error) return app.notify(r.error, 'error')
+        const v = r.result?.rows?.[0]?.[0]
+        app.copy(v ?? ''); app.notify(`SUM(${col}) = ${v ?? '∅'}`)
+      })
+      .catch(e => app.notify(String(e.message || e), 'error'))
+
+  const fullTextSearch = () => {
+    const term = window.prompt('Full-text search — matches any column (cast to text):')
+    if (!term) return
+    setFilter('(' + cols.map(c => `${qq(c)}::text ILIKE ${lit('%' + term + '%')}`).join(' OR ') + ')')
+  }
+
+  // Cell menu — mirrors the DataGrip data-editor menu. Write-only actions are
+  // present but disabled (this build browses read-only), exactly like DataGrip
+  // greys what the current context can't do.
   function cellItems(r: number, c: number): MenuItem[] {
-    const col = (result?.columns || [])[c] ?? ''
+    const col = cols[c] ?? ''
     const val = rows[r]?.[c] ?? ''
-    const cond = val === '' ? `${qq(col)} IS NULL` : `${qq(col)} = ${lit(val)}`
+    const eq = val === '' ? `${qq(col)} IS NULL` : `${qq(col)} = ${lit(val)}`
+    const neq = val === '' ? `${qq(col)} IS NOT NULL` : `${qq(col)} <> ${lit(val)}`
     return [
       { head: col },
-      { label: 'Copy value', Icon: Copy, run: () => app.copy(val) },
-      { label: 'Copy row', Icon: Copy, run: () => app.copy(rows[r].join('\t')) },
-      { label: 'Copy column name', Icon: Copy, run: () => app.copy(col) },
+      { label: 'Edit', Icon: SquarePen, key: 'Enter', disabled: true },
+      { label: 'Show record view', Icon: TableProperties, run: () => setRecord(r) },
+      { label: 'Open in value editor', Icon: Maximize2, run: () => setViewer({ col, value: val }) },
+      { label: 'Show aggregate view', Icon: Sigma, run: () => setAgg(col) },
       { sep: true },
-      { label: 'Open in value viewer', Icon: Maximize2, run: () => setViewer({ col, value: val }) },
+      { label: 'Revert selected', Icon: Undo2, disabled: true },
+      { label: 'Copy using data extractor (SQL Inserts)', Icon: FileCode, key: 'Ctrl+C', run: () => app.copy(sqlInsert(r)) },
+      { label: 'Change data extractor', Icon: Code, children: [
+        { label: 'SQL Inserts', run: () => app.copy(sqlInsert(r)) },
+        { label: 'JSON', run: () => app.copy(jsonRow(r)) },
+        { label: 'CSV', run: () => app.copy(csvRow(r)) },
+        { label: 'TSV', run: () => app.copy(rows[r].join('\t')) },
+      ] },
+      { label: 'Copy aggregation result (SUM)', Icon: Sigma, key: 'Ctrl+Shift+C', run: () => copySum(col) },
       { sep: true },
-      { label: 'Filter by this value', Icon: Filter, run: () => setFilter(cond) },
-      { label: 'Add to filter (AND)', Icon: Filter, run: () => setFilter(where.trim() ? `${where.trim()} AND ${cond}` : cond) },
-      ...(where ? [{ label: 'Clear filter', Icon: FilterX, run: () => setFilter('') } as MenuItem] : []),
+      { label: 'Add row', Icon: Plus, key: 'Alt+Ins', disabled: true },
+      { label: 'Delete rows', Icon: Trash2, key: 'Ctrl+Y', disabled: true },
       { sep: true },
-      { label: 'Sort ascending', Icon: ChevronUp, run: () => sort(col, 'asc') },
-      { label: 'Sort descending', Icon: ChevronDown, run: () => sort(col, 'desc') },
+      { label: 'Go to', Icon: ArrowRight, children: [
+        { label: 'First page', disabled: page === 0, run: () => setPage(0) },
+        { label: 'Previous page', disabled: page === 0, run: () => setPage(p => Math.max(0, p - 1)) },
+        { label: 'Next page', disabled: rows.length === 0, run: () => setPage(p => p + 1) },
+        { label: 'Refresh', run: () => load(page, where, order) },
+      ] },
+      { label: 'Filter by', Icon: Filter, children: [
+        { label: `${col} equals this value`, run: () => setFilter(eq) },
+        { label: `${col} ≠ this value`, run: () => setFilter(neq) },
+        { label: `${col} IS NULL`, run: () => setFilter(`${qq(col)} IS NULL`) },
+        { label: `${col} IS NOT NULL`, run: () => setFilter(`${qq(col)} IS NOT NULL`) },
+        { label: 'Add to filter (AND)', run: () => setFilter(where.trim() ? `${where.trim()} AND ${eq}` : eq) },
+        ...(where ? [{ label: 'Clear filter', run: () => setFilter('') } as MenuItem] : []),
+      ] },
+      { label: 'Full-text search…', Icon: Search, key: 'Ctrl+Alt+Shift+F', run: fullTextSearch },
+      { label: 'Export table to clipboard', Icon: Download, run: () => app.copy(tableTsv()) },
       { sep: true },
-      { label: 'Quick documentation', Icon: Info, run: openDoc },
+      { label: 'Quick documentation', Icon: Info, key: 'Ctrl+Q', run: openDoc },
     ]
   }
 
   // Table-level menu — shown when right-clicking empty grid space (incl. the
   // 0-rows view), so the menu is reachable even with no cell under the cursor.
   function tableItems(): MenuItem[] {
-    const cols = result?.columns || []
-    const tsv = [cols.join('\t'), ...rows.map(r => r.join('\t'))].join('\n')
     return [
       { head: `${schema}.${table}` },
       { label: 'Refresh', Icon: RotateCw, run: () => load(page, where, order) },
       { sep: true },
       { label: 'Copy column names', Icon: Copy, run: () => app.copy(cols.join('\t')) },
-      { label: 'Export table to clipboard', Icon: Copy, run: () => app.copy(tsv) },
+      { label: 'Export table to clipboard', Icon: Download, run: () => app.copy(tableTsv()) },
+      { label: 'Full-text search…', Icon: Search, run: fullTextSearch },
       ...(where ? [{ label: 'Clear filter', Icon: FilterX, run: () => setFilter('') } as MenuItem] : []),
       { sep: true },
       { label: 'Quick documentation', Icon: Info, run: openDoc },
@@ -120,7 +180,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
                 <table className="data">
                   <thead><tr>
                     <th className="rownum">#</th>
-                    {(result.columns || []).map((c, i) => (
+                    {cols.map((c, i) => (
                       <th key={i}>
                         <span className="th-name">{c}</span>
                         <span className="th-tools">
@@ -156,22 +216,22 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
 
       {menu && <CellMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       {viewer && <ValueViewer col={viewer.col} value={viewer.value} onClose={() => setViewer(null)} />}
+      {record != null && <RecordView cols={cols} row={rows[record] || []} title={`${schema}.${table}`} onClose={() => setRecord(null)} />}
+      {agg && <AggregateView connId={connId} col={agg} sql={`SELECT count(*) AS "rows", count(${qq(agg)}) AS "non null", count(DISTINCT ${qq(agg)}) AS "distinct", min(${qq(agg)}) AS "min", max(${qq(agg)}) AS "max" FROM ${qual}${whereSuffix}`} onClose={() => setAgg(null)} />}
     </div>
   )
 }
 
-interface MenuItem { label?: string; Icon?: LucideIcon; sep?: boolean; head?: string; danger?: boolean; run?: () => void }
-const MW = 230, MH = 360
+const MW = 260, MH = 380
 
-// Lightweight right-click menu for grid cells — reuses the tree menu's styling
-// but is self-contained (no NodePayload), driven by a flat item list.
+// Right-click menu for grid cells / table area — reuses the tree menu's styling
+// and supports one level of fly-out submenus, keyboard-shortcut hints and
+// disabled items (mirrors the DataGrip data-editor menu).
 function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuItem[]; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
+  const [openSub, setOpenSub] = useState<number | null>(null)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    // Close on any pointer/right-click outside the menu. Capture phase so it
-    // fires even when a target stops propagation; a right-click on another cell
-    // closes this menu and re-opens at the new spot in the same event.
     const onDown = (e: Event) => { if (!ref.current?.contains(e.target as Node)) onClose() }
     window.addEventListener('keydown', onKey)
     window.addEventListener('mousedown', onDown, true)
@@ -184,6 +244,8 @@ function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuI
   }, [onClose])
   const left = Math.max(8, Math.min(x, window.innerWidth - MW - 8))
   const top = Math.max(8, Math.min(y, window.innerHeight - MH - 8))
+  const flip = left + MW + 220 > window.innerWidth
+  const fire = (it: MenuItem) => { if (it.disabled || it.children) return; it.run?.(); onClose() }
   return (
     <>
       <div className="ctx-backdrop" onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose() }} />
@@ -191,11 +253,29 @@ function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuI
         {items.map((it, i) => it.sep ? <div key={i} className="menu-sep" />
           : it.head ? <div key={i} className="ctx-head">{it.head}</div>
           : (
-            <button key={i} type="button" className={`menu-item${it.danger ? ' danger' : ''}`}
-              onClick={() => { it.run?.(); onClose() }}>
-              {it.Icon && <span className="mi-ico"><it.Icon size={15} /></span>}
-              <span className="mi-label">{it.label}</span>
-            </button>
+            <div key={i} className="menu-row"
+              onMouseEnter={() => it.children && setOpenSub(i)}
+              onMouseLeave={() => it.children && setOpenSub(s => (s === i ? null : s))}>
+              <button type="button" disabled={it.disabled}
+                className={`menu-item${it.children ? ' has-children' : ''}${it.danger ? ' danger' : ''}${openSub === i ? ' expanded' : ''}`}
+                onClick={() => it.children ? setOpenSub(s => s === i ? null : i) : fire(it)}>
+                {it.Icon && <span className="mi-ico"><it.Icon size={15} /></span>}
+                <span className="mi-label">{it.label}</span>
+                {it.key && <span className="ctx-key">{it.key}</span>}
+                {it.children && <span className="mi-caret"><ChevronRight size={13} /></span>}
+              </button>
+              {it.children && openSub === i && (
+                <div className={`ctx-submenu${flip ? ' flip' : ''}`}>
+                  {it.children.map((s, j) => (
+                    <button key={j} type="button" disabled={s.disabled}
+                      className={`menu-item${s.danger ? ' danger' : ''}`}
+                      onClick={() => { s.run?.(); onClose() }}>
+                      <span className="mi-label">{s.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
       </div>
     </>
@@ -224,6 +304,87 @@ function ValueViewer({ col, value, onClose }: { col: string; value: string; onCl
             <span className="hud-label dim">{value.length} chars</span>
             <span className="tb-grow" />
             <button type="button" className="hud-btn-accent" onClick={() => app.copy(value)}>Copy</button>
+            <button type="button" className="hud-btn-cta" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Record view: the whole row laid out vertically as column → value, handy when a
+// table is wider than the screen.
+function RecordView({ cols, row, title, onClose }: { cols: string[]; row: string[]; title: string; onClose: () => void }) {
+  const app = useApp()
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const asJson = () => app.copy(JSON.stringify(Object.fromEntries(cols.map((c, i) => [c, row[i]])), null, 2))
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal hud-panel hud-panel-glow">
+        <div className="modal-head">
+          <span className="hud-heading">Record · {title}</span>
+          <button type="button" className="ico-btn" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="tablewrap" style={{ maxHeight: '60vh' }}>
+            <table className="data record-view">
+              <tbody>
+                {cols.map((c, i) => (
+                  <tr key={i}>
+                    <td className="rv-key hud-label">{c}</td>
+                    <td className="code rv-val">{row[i] === '' ? <span className="dim">null</span> : row[i]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="modal-foot">
+            <span className="tb-grow" />
+            <button type="button" className="hud-btn-accent" onClick={asJson}>Copy JSON</button>
+            <button type="button" className="hud-btn-cta" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Aggregate view: count / distinct / min / max for a column (honouring the
+// current WHERE), run on open.
+function AggregateView({ connId, col, sql, onClose }: { connId: number; col: string; sql: string; onClose: () => void }) {
+  const [resp, setResp] = useState<QueryResponse | null>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    api.query(connId, sql, true).then(setResp).catch(e => setResp({ readOnly: true, error: String(e.message || e) }))
+    return () => window.removeEventListener('keydown', onKey)
+  }, [connId, sql, onClose])
+  const r = resp?.result
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal hud-panel hud-panel-glow">
+        <div className="modal-head">
+          <span className="hud-heading">Aggregate · {col}</span>
+          <button type="button" className="ico-btn" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="modal-body">
+          {!resp ? <p className="dim">computing…</p>
+            : resp.error ? <div className="alert error code">{resp.error}</div>
+            : r && r.rows?.[0] ? (
+              <table className="data record-view">
+                <tbody>
+                  {(r.columns || []).map((c, i) => (
+                    <tr key={i}><td className="rv-key hud-label">{c}</td><td className="code rv-val">{r.rows![0][i]}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <p className="dim">no result</p>}
+          <div className="modal-foot">
+            <span className="tb-grow" />
             <button type="button" className="hud-btn-cta" onClick={onClose}>Close</button>
           </div>
         </div>

@@ -4,6 +4,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"regexp"
 	"strings"
@@ -407,6 +408,15 @@ func format(v any) string {
 	case string:
 		return x
 	default:
+		// pgx returns several types (numeric, interval, bit, …) as pgtype
+		// structs whose %v is a raw field dump. Most implement driver.Valuer,
+		// which yields the clean scalar (e.g. numeric → "60.5"); recurse so the
+		// resulting string/[]byte/number is formatted normally.
+		if val, ok := x.(driver.Valuer); ok {
+			if dv, err := val.Value(); err == nil && dv != nil {
+				return format(dv)
+			}
+		}
 		return fmt.Sprintf("%v", x)
 	}
 }

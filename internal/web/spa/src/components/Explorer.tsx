@@ -3,6 +3,7 @@ import { api } from '../api'
 import { useApp, type NodePayload } from '../appctx'
 import type { Column, Connection, Index, Key, Schema } from '../types'
 import { Ico, Plus, Terminal, Trash2, MoreHorizontal } from '../icons'
+import { DB_KINDS } from '../dbkinds'
 
 // Database Explorer: a lazy-loaded tree of connections → schemas → tables →
 // columns/keys/indexes. Disclosure uses native <details>; each row wires the
@@ -39,12 +40,12 @@ function NewSourceMenu() {
       <button className="ico-btn" title="New data source" onClick={() => setOpen(o => !o)}><Plus size={16} /></button>
       {open && (
         <div className="menu">
-          <button type="button" className="menu-item" onClick={() => { setOpen(false); app.openConnModal('postgres') }}>
-            <Ico name="postgres" /> New PostgreSQL
-          </button>
-          <button type="button" className="menu-item" onClick={() => { setOpen(false); app.openConnModal('redis') }}>
-            <Ico name="redis" /> New Redis / Valkey
-          </button>
+          {DB_KINDS.map(k => (
+            <button key={k.id} type="button" className="menu-item"
+              onClick={() => { setOpen(false); app.openConnModal(k.id) }}>
+              <Ico name={k.id} /> New {k.label}
+            </button>
+          ))}
         </div>
       )}
     </div>

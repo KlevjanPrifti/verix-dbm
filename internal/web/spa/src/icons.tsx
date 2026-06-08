@@ -13,12 +13,15 @@ import {
   Database, Box, Table2, Eye, Folder, KeyRound, Key, Link2, Hash, Type, Clock,
   ToggleLeft, Braces, Fingerprint, ListTree, Terminal, Columns3, Circle,
 } from 'lucide-react'
+import { DB_KINDS } from './dbkinds'
 
 // Database-object types → icon. Keys match Explorer's dynamic names: connection
-// kinds (postgres/redis), table kinds (table/view/matview), column categories
-// (num/text/time/bool/json/uuid/pk) and the structural folders.
+// kinds (postgres/redis/…, sourced from the dbkinds registry), table kinds
+// (table/view/matview), column categories (num/text/time/bool/json/uuid/pk) and
+// the structural folders. Every connection kind renders the Database glyph.
 const TYPE_ICONS: Record<string, LucideIcon> = {
-  postgres: Database, redis: Database, keyspace: Database,
+  ...Object.fromEntries(DB_KINDS.map(k => [k.id, Database])),
+  keyspace: Database,
   schema: Box, table: Table2, view: Eye, matview: Eye, folder: Folder,
   col: Columns3, pk: KeyRound, key: Key, fkey: Link2, idx: ListTree,
   num: Hash, text: Type, time: Clock, bool: ToggleLeft, json: Braces,
@@ -37,7 +40,8 @@ export {
   Columns3,
   // actions / chrome
   X, Plus, Minus, MoreHorizontal, RotateCw, PanelLeft, Play, ChevronUp,
-  ChevronDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Check, Copy,
-  Settings, Trash2, Download, Code, FileCode, Info, Search, Pencil, Eraser,
-  LogOut, Filter, FilterX, Maximize2,
+  ChevronDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowRight, Check,
+  Copy, Settings, Trash2, Download, Code, FileCode, FileJson, Info, Search,
+  Pencil, SquarePen, Eraser, LogOut, Filter, FilterX, Maximize2, Sigma, Undo2,
+  TableProperties,
 } from 'lucide-react'

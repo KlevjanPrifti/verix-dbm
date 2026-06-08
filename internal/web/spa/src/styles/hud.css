@@ -384,6 +384,15 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .test-result { font-size: .78rem; }
 .value-viewer { margin: 0; max-height: 60vh; overflow: auto; white-space: pre-wrap; word-break: break-word; padding: .8rem; background: rgba(var(--accent-rgb),0.04); border: 1px solid rgba(var(--accent-rgb),0.15); border-radius: 2px; color: var(--hud); font-size: .82rem; }
 
+/* Disabled context-menu items (write-only actions in the read-only data grid) */
+.ctx-menu .menu-item:disabled { opacity: .4; cursor: default; }
+.ctx-menu .menu-item:disabled:hover { background: none; color: var(--hud-dim); }
+
+/* Record / aggregate view — vertical column → value layout */
+.record-view td { border-color: rgba(var(--accent-rgb),0.1); }
+.record-view .rv-key { white-space: nowrap; width: 1%; padding-right: 1.2rem; vertical-align: top; color: rgba(var(--accent-rgb),0.85); }
+.record-view .rv-val { word-break: break-word; color: var(--hud); }
+
 /* ── Table designer (DataGrip-style Create / Modify table) ── */
 .modal-wide { width: min(1040px, 95vw); height: min(720px, 92vh); display: flex; flex-direction: column; }
 .modal-wide .modal-body { flex: 1; min-height: 0; padding: 0; gap: 0; }

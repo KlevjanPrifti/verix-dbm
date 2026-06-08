@@ -8,7 +8,7 @@ export interface Me {
 export interface Connection {
   id: number
   name: string
-  kind: string // "postgres" | "redis"
+  kind: string // a DB_KINDS id — see dbkinds.ts (postgres/cockroach/redshift/redis/…)
   host: string
   port: number
   dbname: string
