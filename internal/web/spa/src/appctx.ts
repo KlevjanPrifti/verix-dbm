@@ -39,6 +39,16 @@ export interface DDLParams {
   column?: string
 }
 
+// Full DataGrip-style table editor — "create" builds a new table, "modify" loads
+// an existing one and emits a diff of ALTERs. Distinct from DDLParams (the small
+// single-field forms) because it drives a much larger, structured dialog.
+export interface TableDesignerParams {
+  connId: number
+  schema: string
+  mode: 'create' | 'modify'
+  table?: string
+}
+
 export interface Caps { admin: boolean; write: boolean; csrf: string }
 
 // AppActions is the imperative surface every component reaches for via useApp().
@@ -56,6 +66,7 @@ export interface AppActions {
   openConnModal: (kind?: string) => void
   openEditModal: (id: number) => void
   openDDL: (p: DDLParams) => void
+  openTableDesigner: (p: TableDesignerParams) => void
   reloadConns: () => void
 }
 

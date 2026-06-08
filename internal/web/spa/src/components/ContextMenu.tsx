@@ -72,7 +72,10 @@ export default function ContextMenu({ x, y, payload, onClose }: {
     } else if (c.type === 'schema') {
       m.push({ head: c.schema! })
       m.push({ label: 'Query console', icon: 'ico ico-console', run: tab.console })
-      if (w) m.push({ label: 'New…', glyph: '＋', children: [{ label: 'Table…', glyph: '▦', run: () => form('new-table') }] })
+      if (w) m.push({ label: 'New…', glyph: '＋', children: [
+        { label: 'Table…', glyph: '▦', run: () => app.openTableDesigner({ connId: id, schema: c.schema!, mode: 'create' }) },
+        { label: 'Table (raw SQL)…', glyph: '▦', run: () => form('new-table') },
+      ] })
       m.push({ label: 'Refresh', glyph: '↻', key: 'Ctrl+F5', run: () => { close(); app.refreshConn(id) } })
       m.push(SEP)
       m.push({ label: 'Copy name', glyph: '⎘', run: () => app.copy(c.schema!) })
@@ -98,6 +101,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
       m.push({ label: 'Find usages', glyph: '⌕', key: 'Alt+F7', run: tab.usages })
       if (w) {
         m.push(SEP)
+        m.push({ label: 'Edit table…', glyph: '✎', key: 'Ctrl+F6', run: () => app.openTableDesigner({ connId: id, schema: c.schema!, table: c.table!, mode: 'modify' }) })
         m.push({ label: 'Modify table', glyph: '✎', children: [
           { label: 'Add column…', glyph: '＋', run: () => form('add-column') },
           { label: 'Create index…', glyph: '⊞', run: () => form('new-index') },

@@ -3,12 +3,14 @@ import { api, setCSRF } from './api'
 import type { Connection, Me } from './types'
 import {
   AppContext, type AppActions, type DDLParams, type NodePayload, type TabDef,
+  type TableDesignerParams,
 } from './appctx'
 import Explorer from './components/Explorer'
 import Tabs from './components/Tabs'
 import ContextMenu from './components/ContextMenu'
 import ConnModal from './components/ConnModal'
 import DDLModal from './components/DDLModal'
+import TableDesigner from './components/TableDesigner'
 import AuditModal from './components/AuditModal'
 import Toasts, { type Notice } from './components/Toasts'
 
@@ -20,6 +22,7 @@ export default function App() {
   const [ctx, setCtx] = useState<{ x: number; y: number; payload: NodePayload } | null>(null)
   const [connModal, setConnModal] = useState<{ mode: 'create'; kind: string } | { mode: 'edit'; id: number } | null>(null)
   const [ddl, setDDL] = useState<DDLParams | null>(null)
+  const [designer, setDesigner] = useState<TableDesignerParams | null>(null)
   const [auditOpen, setAuditOpen] = useState(false)
   const [drawer, setDrawer] = useState(false)
   const [notices, setNotices] = useState<Notice[]>([])
@@ -85,6 +88,7 @@ export default function App() {
     openConnModal: (kind = 'postgres') => setConnModal({ mode: 'create', kind }),
     openEditModal: (id) => setConnModal({ mode: 'edit', id }),
     openDDL: (p) => setDDL(p),
+    openTableDesigner: (p) => setDesigner(p),
     reloadConns,
   }), [me, conns, connById, openTab, closeTab, copy, notify, refreshConn, refreshTokens, reloadConns])
 
@@ -136,6 +140,7 @@ export default function App() {
         />
       )}
       {ddl && <DDLModal params={ddl} onClose={() => setDDL(null)} onApplied={() => { refreshConn(ddl.connId); setDDL(null) }} />}
+      {designer && <TableDesigner params={designer} onClose={() => setDesigner(null)} onApplied={() => { refreshConn(designer.connId); setDesigner(null) }} />}
       {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}
       <Toasts notices={notices} />
     </AppContext.Provider>

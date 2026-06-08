@@ -45,6 +45,7 @@ func (s *Server) mountAPI(r chi.Router) {
 	r.Get("/c/{id}/pg/usages", s.apiUsages)
 	r.Get("/c/{id}/pg/form", s.apiDDLFormPrefill)
 	r.Post("/c/{id}/pg/ddl/run", s.apiRunForm)
+	r.Post("/c/{id}/pg/table/apply", s.apiApplyTable)
 	r.Post("/c/{id}/pg/table/drop", s.apiDropTable)
 	r.Post("/c/{id}/pg/table/truncate", s.apiTruncate)
 	r.Post("/c/{id}/pg/column/drop", s.apiDropColumn)
@@ -587,6 +588,44 @@ func (s *Server) apiRunForm(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		err = s.execDDLAudit(r, u, c, pool, action, sql)
 	}
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// apiApplyTable executes the statement list a table-designer "create"/"modify"
+// produced, atomically (see postgres.ExecScript). The SQL is built and previewed
+// client-side, so this mirrors the query console's trust model — any write user
+// can already run arbitrary DDL there — while adding transactional safety and a
+// single audit entry for the whole edit.
+func (s *Server) apiApplyTable(w http.ResponseWriter, r *http.Request) {
+	u, c, pool, ok := s.apiRequireWrite(w, r, false)
+	if !ok {
+		return
+	}
+	var in struct {
+		Action     string   `json:"action"`
+		Statements []string `json:"statements"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	if len(in.Statements) == 0 {
+		apiErr(w, http.StatusBadRequest, "no statements to run")
+		return
+	}
+	action := in.Action
+	if action == "" {
+		action = "pg_ddl_table"
+	}
+	err := postgres.ExecScript(r.Context(), pool, in.Statements)
+	s.st.AddAudit(r.Context(), store.Audit{
+		User: u.Email, ConnID: c.ID, Action: action,
+		Detail: truncate(strings.Join(in.Statements, "; "), 500), Success: err == nil,
+	})
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
 		return

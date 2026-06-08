@@ -29,6 +29,41 @@ func Exec(ctx context.Context, pool *pgxpool.Pool, sql string) (*Result, error) 
 	return Query(ctx, pool, sql, false)
 }
 
+// ExecScript runs several statements as one atomic transaction. It backs the
+// table designer, where a single "create"/"modify" produces a list of DDL
+// statements (column adds, constraint changes, index rebuilds, a rename…) that
+// must all land together — on any error the whole edit rolls back, so a table
+// is never left half-altered. Blank entries are skipped.
+func ExecScript(ctx context.Context, pool *pgxpool.Pool, stmts []string) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, "SET statement_timeout = '"+defaultStatementTimeout+"'"); err != nil {
+		return err
+	}
+	for _, s := range stmts {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if _, err := tx.Exec(ctx, s); err != nil {
+			return fmt.Errorf("%s: %w", truncateStmt(s), err)
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func truncateStmt(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > 80 {
+		return s[:80] + "…"
+	}
+	return s
+}
+
 // ── Statement generators (read-only: introspect, then build a string) ──────────
 
 // GenSelect builds "SELECT col, … FROM s.t;" listing the real columns.

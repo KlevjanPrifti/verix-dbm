@@ -75,6 +75,9 @@ export const api = {
     get<DDLPrefill>(`/api/c/${id}/pg/form${qs({ kind, schema, table, column })}`),
   runForm: (id: number, body: Record<string, unknown>) =>
     req<{ ok: boolean }>('POST', `/api/c/${id}/pg/ddl/run`, body),
+  // Atomically run the DDL a table-designer create/modify produced.
+  applyTable: (id: number, action: string, statements: string[]) =>
+    req<{ ok: boolean }>('POST', `/api/c/${id}/pg/table/apply`, { action, statements }),
   dropTable: (id: number, schema: string, table: string) =>
     req<{ ok: boolean }>('POST', `/api/c/${id}/pg/table/drop`, { schema, table }),
   truncate: (id: number, schema: string, table: string) =>
