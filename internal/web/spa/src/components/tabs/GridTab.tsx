@@ -88,13 +88,17 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   // are present but disabled (this build browses read-only), exactly like
   // DataGrip greys what the current context can't do.
   function menuItems(r: number, c: number): MenuItem[] {
-    const cell = rows[r] !== undefined
+    // r < 0 is the sentinel for a table-area click (header / blank space) where
+    // there's no cell under the cursor — guard on that rather than rows[r], since
+    // rows[0] always exists when the table has data and would wrongly read as a cell.
+    const cell = r >= 0 && rows[r] !== undefined
     const col = cols[c] ?? ''
     const val = rows[r]?.[c] ?? ''
     const eq = val === '' ? `${qq(col)} IS NULL` : `${qq(col)} = ${lit(val)}`
     const neq = val === '' ? `${qq(col)} IS NOT NULL` : `${qq(col)} <> ${lit(val)}`
     return [
       { head: cell ? col : `${schema}.${table}` },
+      // ── cell-specific actions: need a row + column under the cursor ──
       ...(cell ? [
         { label: 'Edit', Icon: SquarePen, key: 'Enter', disabled: true },
         { label: 'Show record view', Icon: TableProperties, run: () => setRecord(r) },
@@ -111,15 +115,6 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         ] },
         { label: 'Copy aggregation result (SUM)', Icon: Sigma, key: 'Ctrl+Shift+C', run: () => copySum(col) },
         { sep: true },
-        { label: 'Add row', Icon: Plus, key: 'Alt+Ins', disabled: true },
-        { label: 'Delete rows', Icon: Trash2, key: 'Ctrl+Y', disabled: true },
-        { sep: true },
-        { label: 'Go to', Icon: ArrowRight, children: [
-          { label: 'First page', disabled: page === 0, run: () => setPage(0) },
-          { label: 'Previous page', disabled: page === 0, run: () => setPage(p => Math.max(0, p - 1)) },
-          { label: 'Next page', disabled: rows.length === 0, run: () => setPage(p => p + 1) },
-          { label: 'Refresh', run: () => load(page, where, order) },
-        ] },
         { label: 'Filter by', Icon: Filter, children: [
           { label: `${col} equals this value`, run: () => setFilter(eq) },
           { label: `${col} ≠ this value`, run: () => setFilter(neq) },
@@ -130,7 +125,18 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         ] },
         { sep: true },
       ] as MenuItem[] : []),
-      // table-level actions (always shown)
+      // ── row / pagination actions: cell-agnostic, so shown in both contexts ──
+      { label: 'Add row', Icon: Plus, key: 'Alt+Ins', disabled: true },
+      { label: 'Delete rows', Icon: Trash2, key: 'Ctrl+Y', disabled: true },
+      { sep: true },
+      { label: 'Go to', Icon: ArrowRight, children: [
+        { label: 'First page', disabled: page === 0, run: () => setPage(0) },
+        { label: 'Previous page', disabled: page === 0, run: () => setPage(p => Math.max(0, p - 1)) },
+        { label: 'Next page', disabled: rows.length === 0, run: () => setPage(p => p + 1) },
+        { label: 'Refresh', run: () => load(page, where, order) },
+      ] },
+      { sep: true },
+      // ── table-wide actions: always shown ──
       { label: 'Refresh', Icon: RotateCw, run: () => load(page, where, order) },
       { sep: true },
       { label: 'Copy column names', Icon: Copy, run: () => app.copy(cols.join('\t')) },
@@ -165,7 +171,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       </form>
 
       <div className="grid-body"
-        onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, items: menuItems(0, 0) }) }}>
+        onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, items: menuItems(-1, -1) }) }}>
         {data?.error ? <div className="alert error code">{data.error}</div>
           : !result ? <p className="dim">{loading ? 'loading…' : ''}</p>
           : !result.isSelect ? <p className="ok hud-label">{result.command} · {result.rowsAffected} rows affected · {result.duration}</p>
