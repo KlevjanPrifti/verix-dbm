@@ -1,4 +1,5 @@
 import { useApp, type TabDef } from '../appctx'
+import { PanelLeft, Table2, Terminal, X } from '../icons'
 import GridTab from './tabs/GridTab'
 import ConsoleTab from './tabs/ConsoleTab'
 import RedisTab from './tabs/RedisTab'
@@ -19,16 +20,16 @@ export default function Tabs({ tabs, active, onSelect, onClose, onToggleDrawer }
     <section className="work">
       <div className="tabbar">
         <button type="button" className="drawer-toggle" title="Database Explorer"
-          aria-label="Toggle Database Explorer" onClick={onToggleDrawer}>☰</button>
+          aria-label="Toggle Database Explorer" onClick={onToggleDrawer}><PanelLeft size={18} /></button>
         {tabs.map(t => (
           <div key={t.key} className={`tab${active === t.key ? ' on' : ''}`} onClick={() => onSelect(t.key)}>
-            <span className={`tab-ico ti-${t.icon}`} />
+            <span className="tab-ico">{t.icon === 'console' ? <Terminal size={13} /> : <Table2 size={13} />}</span>
             <span className="tab-title">{t.title}</span>
-            <button type="button" className="tab-x" onClick={e => { e.stopPropagation(); onClose(t.key) }}>✕</button>
+            <button type="button" className="tab-x" onClick={e => { e.stopPropagation(); onClose(t.key) }}><X size={13} /></button>
           </div>
         ))}
         {tabs.length === 0 && (
-          <span className="tab-hint hud-label dim">double-click a table to browse · ⌨ opens a console</span>
+          <span className="tab-hint hud-label dim">double-click a table to browse · <Terminal size={12} /> opens a console</span>
         )}
       </div>
 
@@ -38,7 +39,7 @@ export default function Tabs({ tabs, active, onSelect, onClose, onToggleDrawer }
             <div className="welcome-box hud-panel p-4">
               <div className="hud-heading">VERIX<span className="cta">DBM</span></div>
               <p className="dim">Expand a connection in the Database Explorer, double-click a table to browse it,
-                or open a query console with the ⌨ button on a connection.</p>
+                or open a query console with the <Terminal size={13} /> button on a connection.</p>
             </div>
           </div>
         )}

@@ -3,6 +3,7 @@ import { api } from '../../api'
 import { useApp } from '../../appctx'
 import type { QueryResponse } from '../../types'
 import ResultTable from '../ResultTable'
+import { Play } from '../../icons'
 
 // Postgres query console: run SQL, with a confirmation gate for destructive
 // statements (mirrors the "consolePG" + "queryResult" partials).
@@ -28,7 +29,7 @@ export default function ConsoleTab({ connId }: { connId: number }) {
     <div className="console-pane">
       <form className="console-form" onSubmit={onSubmit}>
         <div className="console-toolbar">
-          <button className="hud-btn-cta sm" type="submit" disabled={running}>▷ Run</button>
+          <button className="hud-btn-cta sm" type="submit" disabled={running}><Play size={13} /> Run</button>
           {readOnly && <span className="ro">READ-ONLY</span>}
           {conn && <span className="tb-chip hud-label">{conn.kind}@{conn.host}</span>}
           {running && <span className="hud-label">running…</span>}

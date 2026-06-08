@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { AuditRow } from '../types'
+import { X, Check } from '../icons'
 
 // Audit log (admin-only): the last 200 entries. The old build was a full page;
 // here it's an overlay so the workbench stays put.
@@ -19,7 +20,7 @@ export default function AuditModal({ onClose }: { onClose: () => void }) {
       <div className="modal hud-panel hud-panel-glow" style={{ maxWidth: '60rem', width: '90vw' }}>
         <div className="modal-head">
           <span className="hud-heading">Audit log</span>
-          <button type="button" className="ico-btn" onClick={onClose}>✕</button>
+          <button type="button" className="ico-btn" onClick={onClose}><X size={16} /></button>
         </div>
         <div className="modal-body">
           {err && <div className="alert error code">{err}</div>}
@@ -36,7 +37,7 @@ export default function AuditModal({ onClose }: { onClose: () => void }) {
                       <td>{a.connId || ''}</td>
                       <td className="code">{a.action}</td>
                       <td className="code">{a.detail}</td>
-                      <td>{a.success ? '✓' : '✗'}</td>
+                      <td>{a.success ? <Check size={15} className="ok" /> : <X size={15} className="bad" />}</td>
                     </tr>
                   ))}
                 </tbody>

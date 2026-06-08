@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useApp, type DDLParams } from '../appctx'
+import { X } from '../icons'
 
 const TITLES: Record<string, string> = {
   'add-column': 'Add column', 'modify-column': 'Modify column', 'rename-table': 'Rename table',
@@ -53,7 +54,7 @@ export default function DDLModal({ params, onClose, onApplied }: {
       <div className="modal hud-panel hud-panel-glow">
         <div className="modal-head">
           <span className="hud-heading">{TITLES[kind] || 'DDL'}</span>
-          <button type="button" className="ico-btn" onClick={onClose}>✕</button>
+          <button type="button" className="ico-btn" onClick={onClose}><X size={16} /></button>
         </div>
         <form className="modal-body" onSubmit={submit}>
           {err && <div className="alert error code">{err}</div>}

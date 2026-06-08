@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api'
 import type { DocResponse } from '../../types'
+import { KeyRound } from '../../icons'
 
 // Quick documentation tab: columns + keys + indexes + comment ("docResult").
 export default function DocTab({ connId, schema, table }: { connId: number; schema: string; table: string }) {
@@ -24,7 +25,7 @@ export default function DocTab({ connId, schema, table }: { connId: number; sche
           <tbody>
             {d.columns.map(c => (
               <tr key={c.name}>
-                <td>{c.name}{c.pk ? ' ⚿' : ''}</td>
+                <td>{c.name}{c.pk && <KeyRound size={13} className="ico-pk" style={{ verticalAlign: '-2px', marginLeft: '.3rem' }} />}</td>
                 <td className="code">{c.typeText}</td>
                 <td>{c.notNull ? 'NOT NULL' : 'null'}</td>
                 <td className="code">{c.default}</td>

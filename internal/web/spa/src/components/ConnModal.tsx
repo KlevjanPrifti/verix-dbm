@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type ConnInput } from '../api'
 import { useApp } from '../appctx'
+import { X, Check } from '../icons'
 
 type Form = ConnInput & { port: number }
 
@@ -72,8 +73,8 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
 
   const onTest = () => {
     setTest(null)
-    api.testConnection(f).then(r => setTest({ ok: r.ok, msg: r.ok ? '✓ connection ok' : `✗ ${r.error}` }))
-      .catch(e => setTest({ ok: false, msg: `✗ ${e.message || e}` }))
+    api.testConnection(f).then(r => setTest({ ok: r.ok, msg: r.ok ? 'connection ok' : String(r.error) }))
+      .catch(e => setTest({ ok: false, msg: String(e.message || e) }))
   }
 
   const save = (asCopy: boolean) => (e: React.FormEvent) => {
@@ -95,7 +96,7 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
       <div className="modal hud-panel hud-panel-glow">
         <div className="modal-head">
           <span className="hud-heading">{title}</span>
-          <button type="button" className="ico-btn" onClick={onClose}>✕</button>
+          <button type="button" className="ico-btn" onClick={onClose}><X size={16} /></button>
         </div>
         <form className="modal-body" onSubmit={save(false)}>
           {err && <div className="alert error code">{err}</div>}
@@ -130,7 +131,9 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
           <label className="check"><input type="checkbox" checked={f.readOnly} onChange={e => set('readOnly', e.target.checked)} /> <span className="hud-label">Read-only</span></label>
           <div className="modal-foot">
             <button type="button" className="hud-btn-accent" onClick={onTest}>Test Connection</button>
-            <span className={`test-result ${test ? (test.ok ? 'ok' : 'bad') : ''} hud-label code`}>{test?.msg}</span>
+            <span className={`test-result ${test ? (test.ok ? 'ok' : 'bad') : ''} hud-label code`}>
+              {test && (test.ok ? <Check size={13} /> : <X size={13} />)}{test ? ' ' + test.msg : ''}
+            </span>
             <span className="tb-grow" />
             {mode === 'edit' && (
               <button type="button" className="hud-btn-accent" onClick={e => save(true)(e)}

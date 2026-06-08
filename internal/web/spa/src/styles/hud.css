@@ -245,28 +245,43 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .row-act:hover { background: rgba(var(--accent-rgb),0.15); color: var(--hud); }
 .row-act.danger:hover { background: rgba(255,70,70,0.2); color: #ff9a9a; }
 
-/* Tree icons (monochrome glyphs tinted to the theme) */
-.ico { display: inline-block; width: 1em; flex-shrink: 0; text-align: center; font-size: .9em; }
-.ico-postgres::before { content: "◆"; color: #3b9eff; }
-.ico-redis::before { content: "◆"; color: #45e0a5; }
-.ico-schema::before { content: "▤"; color: rgb(var(--accent-rgb)); }
-.ico-table::before { content: "▦"; color: rgba(var(--accent-rgb),0.85); }
-.ico-view::before, .ico-matview::before { content: "▦"; color: #b48cff; }
-.ico-folder::before { content: "▪"; color: rgba(var(--accent-rgb),0.45); }
-.ico-col::before { content: "▥"; color: rgba(var(--accent-rgb),0.7); }
-.ico-num::before { content: "#"; color: #7fd6ff; font-weight: 700; }
-.ico-text::before { content: "A"; color: #9fe0b5; font-weight: 700; font-size: .8em; }
-.ico-time::before { content: "◷"; color: #ffcf7a; }
-.ico-bool::before { content: "◑"; color: #b48cff; }
-.ico-json::before { content: "{}"; color: #8fbcff; font-size: .72em; }
-.ico-pk::before { content: "⚿"; color: var(--cta); }
-.ico-col.pk::before, .ico-key.pk::before, .ico-idx.pk::before { content: "⚿"; color: var(--cta); }
-.ico-key::before { content: "⚿"; color: rgba(var(--accent-rgb),0.7); }
-.ico-fkey::before { content: "⚿"; color: #b48cff; }
-.ico-idx::before { content: "⊞"; color: rgba(var(--accent-rgb),0.7); }
-.ico-keyspace::before { content: "⊡"; color: #45e0a5; }
-.ico-console::before { content: "⌨"; }
+/* Tree icons — Lucide SVGs, tinted to the theme via currentColor (see icons.tsx) */
+.ico { display: inline-flex; align-items: center; justify-content: center; width: 1.05em; height: 1.05em; flex-shrink: 0; color: rgba(var(--accent-rgb),0.8); }
+.ico svg { width: 100%; height: 100%; stroke-width: 2; }
+.ico-postgres { color: #3b9eff; }
+.ico-redis, .ico-keyspace { color: #45e0a5; }
+.ico-schema { color: rgb(var(--accent-rgb)); }
+.ico-table { color: rgba(var(--accent-rgb),0.85); }
+.ico-view, .ico-matview { color: #b48cff; }
+.ico-folder { color: rgba(var(--accent-rgb),0.5); }
+.ico-col { color: rgba(var(--accent-rgb),0.7); }
+.ico-num { color: #7fd6ff; }
+.ico-text { color: #9fe0b5; }
+.ico-time { color: #ffcf7a; }
+.ico-bool { color: #b48cff; }
+.ico-json { color: #8fbcff; }
+.ico-uuid { color: #c7b3ff; }
+.ico-pk, .ico-col.pk, .ico-key.pk, .ico-idx.pk { color: var(--cta); }
+.ico-key { color: rgba(var(--accent-rgb),0.7); }
+.ico-fkey { color: #b48cff; }
+.ico-idx { color: rgba(var(--accent-rgb),0.7); }
+.ico-console { color: rgba(var(--accent-rgb),0.85); }
 .col-leaf .col-type { margin-left: .5rem; }
+
+/* Button/menu icons render their SVG centered and sized to the control */
+.ico-btn svg, .tb-ico svg, .tb-ico-btn svg, .row-act svg, .row-kebab svg,
+.mi-ico svg, .mi-caret svg, .drawer-toggle svg, .tab-x svg, .th-sort svg,
+.tab-hint svg, .tab-ico svg, .console-toolbar svg { display: block; }
+.mi-ico, .mi-caret, .tab-ico { display: inline-flex; align-items: center; justify-content: center; }
+.tab-hint svg { display: inline-block; vertical-align: -2px; }
+.ico-btn, .tb-ico, .tb-ico-btn { display: inline-flex; align-items: center; justify-content: center; }
+.row-act { display: inline-flex; align-items: center; justify-content: center; }
+/* .row-kebab keeps its own display rules (hidden on desktop, shown on touch) */
+
+/* Inline text+icon controls: keep the SVG vertically centered next to the label */
+.logout-link, .pg-btn, .test-result, .console-toolbar > .hud-btn-cta { display: inline-flex; align-items: center; gap: .3rem; }
+.th-sort { display: inline-flex; align-items: center; }
+.tab-hint svg, .welcome p svg, .test-result svg, td svg { vertical-align: -2px; }
 
 /* Right-click context menu */
 .ctx-menu { position: fixed; z-index: 60; min-width: 220px; background: var(--panel-raised); border: 1px solid rgba(var(--accent-rgb),0.35); border-radius: 2px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: .25rem; }

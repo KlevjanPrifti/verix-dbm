@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { useApp, type TableDesignerParams } from '../appctx'
 import {
+  type LucideIcon, Ico, X, Minus, ArrowUp, ArrowDown, Plus, KeyRound, Columns3,
+  Link2, ListTree, Check as CheckIcon,
+} from '../icons'
+import {
   emptyModel, generateCreate, generateModify, loadModel, uid,
   type Chk, type Col, type FK, type Idx, type TableModel, type Uniq,
 } from '../tableModel'
@@ -113,7 +117,7 @@ export default function TableDesigner({ params, onClose, onApplied }: {
       <div className="modal modal-wide hud-panel hud-panel-glow">
         <div className="modal-head">
           <span className="hud-heading">{title}</span>
-          <button type="button" className="ico-btn" onClick={onClose}>✕</button>
+          <button type="button" className="ico-btn" onClick={onClose}><X size={16} /></button>
         </div>
 
         {loading ? <div className="modal-body"><div className="dim" style={{ padding: '2rem' }}>loading…</div></div> : (
@@ -123,20 +127,20 @@ export default function TableDesigner({ params, onClose, onApplied }: {
               <div className="tdz-side">
                 <div className="tdz-toolbar">
                   <AddMenu onPick={add} />
-                  <button type="button" className="tb-ico-btn danger" title="Remove" disabled={!sel.uid} onClick={removeSel}>−</button>
-                  <button type="button" className="tb-ico-btn" title="Move up" disabled={!canMove} onClick={() => moveCol(-1)}>↑</button>
-                  <button type="button" className="tb-ico-btn" title="Move down" disabled={!canMove} onClick={() => moveCol(1)}>↓</button>
+                  <button type="button" className="tb-ico-btn danger" title="Remove" disabled={!sel.uid} onClick={removeSel}><Minus size={16} /></button>
+                  <button type="button" className="tb-ico-btn" title="Move up" disabled={!canMove} onClick={() => moveCol(-1)}><ArrowUp size={16} /></button>
+                  <button type="button" className="tb-ico-btn" title="Move down" disabled={!canMove} onClick={() => moveCol(1)}><ArrowDown size={16} /></button>
                 </div>
                 <div className="tdz-tree">
                   <div className={`tdz-item root${sel.kind === 'table' ? ' on' : ''}`} onClick={() => setSel({ kind: 'table' })}>
-                    <span className="ico ico-table" /><span>{m.name || 'table_name'}</span>
+                    <Ico name="table" /><span>{m.name || 'table_name'}</span>
                   </div>
 
                   <Folder label="columns" count={m.cols.length} />
                   {m.cols.length === 0 && <div className="tdz-item empty">no columns</div>}
                   {m.cols.map(c => (
                     <div key={c.uid} className={`tdz-item${sel.uid === c.uid ? ' on' : ''}`} onClick={() => setSel({ kind: 'col', uid: c.uid })}>
-                      {c.pk ? <span className="tdz-pk" title="primary key">⚿</span> : <span className="ico ico-col" />}
+                      {c.pk ? <span className="tdz-pk" title="primary key"><KeyRound size={15} /></span> : <Ico name="col" />}
                       <span>{c.name || '(unnamed)'}</span>
                       <span className="it-type">{c.type}</span>
                     </div>
@@ -144,32 +148,32 @@ export default function TableDesigner({ params, onClose, onApplied }: {
 
                   <Folder label="keys" count={m.uniques.length + (m.cols.some(c => c.pk) ? 1 : 0)} />
                   {m.cols.some(c => c.pk) && (
-                    <div className="tdz-item empty"><span className="tdz-pk">⚿</span>&nbsp;PRIMARY KEY ({m.cols.filter(c => c.pk).map(c => c.name).join(', ')})</div>
+                    <div className="tdz-item empty"><span className="tdz-pk"><KeyRound size={14} /></span>&nbsp;PRIMARY KEY ({m.cols.filter(c => c.pk).map(c => c.name).join(', ')})</div>
                   )}
                   {m.uniques.map(u => (
                     <div key={u.uid} className={`tdz-item${sel.uid === u.uid ? ' on' : ''}`} onClick={() => setSel({ kind: 'uniq', uid: u.uid })}>
-                      <span className="ico ico-key" /><span>{u.name}</span><span className="it-type">unique</span>
+                      <Ico name="key" /><span>{u.name}</span><span className="it-type">unique</span>
                     </div>
                   ))}
 
                   <Folder label="foreign keys" count={m.fks.length} />
                   {m.fks.map(f => (
                     <div key={f.uid} className={`tdz-item${sel.uid === f.uid ? ' on' : ''}`} onClick={() => setSel({ kind: 'fk', uid: f.uid })}>
-                      <span className="ico ico-fkey" /><span>{f.name}</span><span className="it-type">{f.refTable || 'fk'}</span>
+                      <Ico name="fkey" /><span>{f.name}</span><span className="it-type">{f.refTable || 'fk'}</span>
                     </div>
                   ))}
 
                   <Folder label="indexes" count={m.indexes.length} />
                   {m.indexes.map(i => (
                     <div key={i.uid} className={`tdz-item${sel.uid === i.uid ? ' on' : ''}`} onClick={() => setSel({ kind: 'idx', uid: i.uid })}>
-                      <span className="ico ico-idx" /><span>{i.name}</span><span className="it-type">{i.unique ? 'unique' : 'index'}</span>
+                      <Ico name="idx" /><span>{i.name}</span><span className="it-type">{i.unique ? 'unique' : 'index'}</span>
                     </div>
                   ))}
 
                   <Folder label="checks" count={m.checks.length} />
                   {m.checks.map(c => (
                     <div key={c.uid} className={`tdz-item${sel.uid === c.uid ? ' on' : ''}`} onClick={() => setSel({ kind: 'chk', uid: c.uid })}>
-                      <span className="ico ico-folder" /><span>{c.name}</span><span className="it-type">check</span>
+                      <span className="ico"><CheckIcon size={15} /></span><span>{c.name}</span><span className="it-type">check</span>
                     </div>
                   ))}
                 </div>
@@ -210,7 +214,7 @@ function pick<T extends { uid: string }>(arr: T[], u: string | undefined, render
 }
 
 function Folder({ label, count }: { label: string; count: number }) {
-  return <div className="tdz-folder"><span className="ico ico-folder" /><span>{label}</span><span className="count">{count}</span></div>
+  return <div className="tdz-folder"><Ico name="folder" /><span>{label}</span><span className="count">{count}</span></div>
 }
 
 // ── add dropdown ──
@@ -222,21 +226,21 @@ function AddMenu({ onPick }: { onPick: (k: Kind) => void }) {
     document.addEventListener('click', close)
     return () => document.removeEventListener('click', close)
   }, [open])
-  const item = (k: Kind, label: string, glyph: string) => (
+  const item = (k: Kind, label: string, Glyph: LucideIcon) => (
     <button type="button" className="menu-item" onClick={() => { setOpen(false); onPick(k) }}>
-      <span className="mi-ico">{glyph}</span> {label}
+      <span className="mi-ico"><Glyph size={15} /></span> {label}
     </button>
   )
   return (
     <div className="tdz-addmenu" onClick={e => e.stopPropagation()}>
-      <button type="button" className="tb-ico-btn" title="Add" onClick={() => setOpen(o => !o)}>＋</button>
+      <button type="button" className="tb-ico-btn" title="Add" onClick={() => setOpen(o => !o)}><Plus size={16} /></button>
       {open && (
         <div className="menu">
-          {item('col', 'Column', '▥')}
-          {item('uniq', 'Unique key', '⚿')}
-          {item('fk', 'Foreign key', '⚿')}
-          {item('idx', 'Index', '⊞')}
-          {item('chk', 'Check', '✓')}
+          {item('col', 'Column', Columns3)}
+          {item('uniq', 'Unique key', KeyRound)}
+          {item('fk', 'Foreign key', Link2)}
+          {item('idx', 'Index', ListTree)}
+          {item('chk', 'Check', CheckIcon)}
         </div>
       )}
     </div>
@@ -255,7 +259,7 @@ function TableProps({ m, patch }: { m: TableModel; patch: (p: Partial<TableModel
   return <>
     <Row label="Name"><input className="hud-input" autoFocus value={m.name} onChange={e => patch({ name: e.target.value })} placeholder="table_name" /></Row>
     <Row label="Comment"><input className="hud-input" value={m.comment} onChange={e => patch({ comment: e.target.value })} /></Row>
-    <div className="hint dim">Use the ＋ toolbar to add columns, keys, foreign keys, indexes and checks. Each node opens here for editing.</div>
+    <div className="hint dim">Use the + toolbar to add columns, keys, foreign keys, indexes and checks. Each node opens here for editing.</div>
   </>
 }
 function ColProps({ c, upd }: { c: Col; upd: (p: Partial<Col>) => void }) {

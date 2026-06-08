@@ -13,6 +13,7 @@ import DDLModal from './components/DDLModal'
 import TableDesigner from './components/TableDesigner'
 import AuditModal from './components/AuditModal'
 import Toasts, { type Notice } from './components/Toasts'
+import { LogOut } from './icons'
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
@@ -111,7 +112,7 @@ export default function App() {
         </nav>
         <div className="userbox hud-label">
           <span className="who">{me.user.name}{me.user.admin ? ' · ADMIN' : me.user.write ? ' · WRITE' : ' · READ'}</span>
-          <a href="/auth/logout">Logout</a>
+          <a href="/auth/logout" className="logout-link"><LogOut size={13} /> Logout</a>
         </div>
       </header>
 
