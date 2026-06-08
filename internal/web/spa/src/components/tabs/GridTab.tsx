@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../api'
 import { useApp } from '../../appctx'
 import type { GridResponse } from '../../types'
@@ -17,8 +17,8 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const [page, setPage] = useState(0)
   const [data, setData] = useState<GridResponse | null>(null)
   const [loading, setLoading] = useState(false)
-  // Right-click cell menu + the full-value viewer it can open.
-  const [menu, setMenu] = useState<{ x: number; y: number; r: number; c: number } | null>(null)
+  // Right-click menu (cell or table-level) + the full-value viewer it can open.
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
   const [viewer, setViewer] = useState<{ col: string; value: string } | null>(null)
 
   const load = useCallback((p: number, w: string, o: string) => {
@@ -69,6 +69,23 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
     ]
   }
 
+  // Table-level menu — shown when right-clicking empty grid space (incl. the
+  // 0-rows view), so the menu is reachable even with no cell under the cursor.
+  function tableItems(): MenuItem[] {
+    const cols = result?.columns || []
+    const tsv = [cols.join('\t'), ...rows.map(r => r.join('\t'))].join('\n')
+    return [
+      { head: `${schema}.${table}` },
+      { label: 'Refresh', Icon: RotateCw, run: () => load(page, where, order) },
+      { sep: true },
+      { label: 'Copy column names', Icon: Copy, run: () => app.copy(cols.join('\t')) },
+      { label: 'Export table to clipboard', Icon: Copy, run: () => app.copy(tsv) },
+      ...(where ? [{ label: 'Clear filter', Icon: FilterX, run: () => setFilter('') } as MenuItem] : []),
+      { sep: true },
+      { label: 'Quick documentation', Icon: Info, run: openDoc },
+    ]
+  }
+
   return (
     <div className="grid-pane">
       <div className="grid-toolbar">
@@ -91,7 +108,8 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         <button className="hud-btn-accent sm" type="submit">apply</button>
       </form>
 
-      <div className="grid-body">
+      <div className="grid-body"
+        onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, items: tableItems() }) }}>
         {data?.error ? <div className="alert error code">{data.error}</div>
           : !result ? <p className="dim">{loading ? 'loading…' : ''}</p>
           : !result.isSelect ? <p className="ok hud-label">{result.command} · {result.rowsAffected} rows affected · {result.duration}</p>
@@ -116,7 +134,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
                     {rows.map((row, i) => (
                       <tr key={i}><td className="rownum">{i + 1}</td>{row.map((v, j) => (
                         <td key={j} className="code"
-                          onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, r: i, c: j }) }}>{v}</td>
+                          onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, items: cellItems(i, j) }) }}>{v}</td>
                       ))}</tr>
                     ))}
                   </tbody>
@@ -136,7 +154,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         {rows.length > 0 && <a className="pg-btn" onClick={() => setPage(p => p + 1)}>next <ChevronRight size={14} /></a>}
       </div>
 
-      {menu && <CellMenu x={menu.x} y={menu.y} items={cellItems(menu.r, menu.c)} onClose={() => setMenu(null)} />}
+      {menu && <CellMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       {viewer && <ValueViewer col={viewer.col} value={viewer.value} onClose={() => setViewer(null)} />}
     </div>
   )
@@ -148,18 +166,28 @@ const MW = 230, MH = 360
 // Lightweight right-click menu for grid cells — reuses the tree menu's styling
 // but is self-contained (no NodePayload), driven by a flat item list.
 function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuItem[]; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    // Close on any pointer/right-click outside the menu. Capture phase so it
+    // fires even when a target stops propagation; a right-click on another cell
+    // closes this menu and re-opens at the new spot in the same event.
+    const onDown = (e: Event) => { if (!ref.current?.contains(e.target as Node)) onClose() }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onDown, true)
+    window.addEventListener('contextmenu', onDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onDown, true)
+      window.removeEventListener('contextmenu', onDown, true)
+    }
   }, [onClose])
   const left = Math.max(8, Math.min(x, window.innerWidth - MW - 8))
   const top = Math.max(8, Math.min(y, window.innerHeight - MH - 8))
   return (
     <>
-      <div className="ctx-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 900 }}
-        onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose() }} />
-      <div className="ctx-menu" style={{ left, top }}>
+      <div className="ctx-backdrop" onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose() }} />
+      <div ref={ref} className="ctx-menu" style={{ left, top }}>
         {items.map((it, i) => it.sep ? <div key={i} className="menu-sep" />
           : it.head ? <div key={i} className="ctx-head">{it.head}</div>
           : (

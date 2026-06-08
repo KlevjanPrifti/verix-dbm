@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { useApp, type DDLKind, type NodePayload } from '../appctx'
 import {
@@ -29,11 +29,21 @@ export default function ContextMenu({ x, y, payload, onClose }: {
   const app = useApp()
   const [openSub, setOpenSub] = useState<number | null>(null)
   const id = payload.connId
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    // Close on any pointer/right-click outside the menu (capture phase, so it
+    // works regardless of stacking context or stopped propagation).
+    const onDown = (e: Event) => { if (!ref.current?.contains(e.target as Node)) onClose() }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onDown, true)
+    window.addEventListener('contextmenu', onDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onDown, true)
+      window.removeEventListener('contextmenu', onDown, true)
+    }
   }, [onClose])
 
   const close = onClose
@@ -159,8 +169,8 @@ export default function ContextMenu({ x, y, payload, onClose }: {
 
   return (
     <>
-      <div className="ctx-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 900 }} onClick={close} onContextMenu={e => { e.preventDefault(); close() }} />
-      <div className="ctx-menu" style={{ left, top }}>
+      <div className="ctx-backdrop" onClick={close} onContextMenu={e => { e.preventDefault(); close() }} />
+      <div ref={ref} className="ctx-menu" style={{ left, top }}>
         {items.map((it, i) => (
           <div key={i} className="menu-row"
             onMouseEnter={() => it.children && setOpenSub(i)}
