@@ -351,6 +351,9 @@ function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuI
       window.removeEventListener('contextmenu', onDown, true)
     }
   }, [onClose])
+  // Phones: render as a full-width bottom sheet (.ctx-menu.sheet) instead of a
+  // positioned pop-up, so a long menu never overflows the narrow viewport.
+  const sheet = window.matchMedia('(max-width: 900px)').matches
   const left = Math.max(8, Math.min(x, window.innerWidth - MW - 8))
   const top = Math.max(8, Math.min(y, window.innerHeight - MH - 8))
   const flip = left + MW + 220 > window.innerWidth
@@ -358,7 +361,7 @@ function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuI
   return (
     <>
       <div className="ctx-backdrop" onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose() }} />
-      <div ref={ref} className="ctx-menu" style={{ left, top }}>
+      <div ref={ref} className={`ctx-menu${sheet ? ' sheet' : ''}`} style={sheet ? undefined : { left, top }}>
         {items.map((it, i) => it.sep ? <div key={i} className="menu-sep" />
           : it.head ? <div key={i} className="ctx-head">{it.head}</div>
           : (
@@ -374,7 +377,7 @@ function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuI
                 {it.children && <span className="mi-caret"><ChevronRight size={13} /></span>}
               </button>
               {it.children && openSub === i && (
-                <div className={`ctx-submenu${flip ? ' flip' : ''}`}>
+                <div className={`ctx-submenu${sheet ? ' sheet' : flip ? ' flip' : ''}`}>
                   {it.children.map((s, j) => (
                     <button key={j} type="button" disabled={s.disabled}
                       className={`menu-item${s.danger ? ' danger' : ''}`}

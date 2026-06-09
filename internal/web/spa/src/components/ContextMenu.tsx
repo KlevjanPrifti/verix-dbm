@@ -163,6 +163,9 @@ export default function ContextMenu({ x, y, payload, onClose }: {
     if (it.run) { it.run(); close() }
   }
 
+  // On phones the menu becomes a full-width bottom sheet (see .ctx-menu.sheet in
+  // hud.css); skip the desktop fly-out positioning so it never runs off-screen.
+  const sheet = window.matchMedia('(max-width: 900px)').matches
   const left = Math.max(8, Math.min(x, window.innerWidth - MW - 8))
   const top = Math.max(8, Math.min(y, window.innerHeight - MH - 8))
   const flip = left + MW + 220 > window.innerWidth
@@ -170,7 +173,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
   return (
     <>
       <div className="ctx-backdrop" onClick={close} onContextMenu={e => { e.preventDefault(); close() }} />
-      <div ref={ref} className="ctx-menu" style={{ left, top }}>
+      <div ref={ref} className={`ctx-menu${sheet ? ' sheet' : ''}`} style={sheet ? undefined : { left, top }}>
         {items.map((it, i) => (
           <div key={i} className="menu-row"
             onMouseEnter={() => it.children && setOpenSub(i)}
@@ -188,7 +191,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
                 </button>
               )}
             {it.children && openSub === i && (
-              <div className={`ctx-submenu${flip ? ' flip' : ''}`}>
+              <div className={`ctx-submenu${sheet ? ' sheet' : flip ? ' flip' : ''}`}>
                 {it.children.map((s, j) => (
                   <button key={j} type="button" className={`menu-item${s.danger ? ' danger' : ''}`}
                     onClick={() => { s.run && s.run(); close() }}>
