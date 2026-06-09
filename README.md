@@ -45,12 +45,17 @@ dependency-free distroless container.
 - Command console with a read-only allowlist and `FLUSH*` confirmation.
 
 ### Auth, security & operations
-- **Keycloak OIDC** login; realm roles map to **admin / write / read**.
-- **DEV mode** (auto-login as a local admin) when OIDC is unconfigured — zero
-  setup for local hacking.
-- Saved connection passwords **AES-256-GCM encrypted at rest** in SQLite.
+- **Keycloak OIDC** login; realm roles map to **admin / write / read**, and
+  access is **deny-by-default** (no role → 403). See [SECURITY.md](SECURITY.md).
+- **DEV mode** (auto-login as a local admin) for local hacking — opt-in only via
+  `DBM_DEV_MODE=true`. In production the app **refuses to start** without OIDC
+  rather than fall back to an open mode.
+- Saved connection passwords **AES-256-GCM encrypted at rest** in SQLite (never
+  sent to the browser); the **audit log redacts** role passwords.
 - **CSRF** on every mutating request (form posts and the SPA's
-  `X-CSRF-Token` header).
+  `X-CSRF-Token` header), including logout.
+- **Security headers** (CSP with `frame-ancestors 'none'`, `nosniff`,
+  `no-referrer`, HSTS over TLS) on every response.
 - **Audit log** of all mutating actions, viewable by admins.
 - **In-process rate limiting** on auth endpoints (brute-force / redirect-spam
   floor).
@@ -87,8 +92,9 @@ dependency-free distroless container.
 ## Run locally (DEV mode, no Keycloak)
 
 ```bash
-# 1. Backend (auto-logged-in as Dev Admin)
-go run ./cmd/server
+# 1. Backend (auto-logged-in as Dev Admin). DEV mode is opt-in and must be set
+#    explicitly — without it (and without OIDC) the server refuses to start.
+DBM_DEV_MODE=true go run ./cmd/server
 
 # 2. Frontend (in another terminal) — Vite dev server proxies /api + /c to :8080
 cd internal/web/spa
@@ -113,8 +119,11 @@ or a Valkey at `127.0.0.1:6379` (username `default`).
 ## Configuration
 
 See [.env.example](.env.example). Key vars: `DBM_BASE_URL`, `DBM_ENC_KEY`
-(64 hex chars — `openssl rand -hex 32`), and the `OIDC_*` set. Leave
-`OIDC_ISSUER`/`OIDC_CLIENT_ID` empty for DEV mode.
+(64 hex chars — `openssl rand -hex 32`), the `OIDC_*` set, and the role names
+(`OIDC_ADMIN_ROLE` / `OIDC_WRITE_ROLE` / `OIDC_READ_ROLE`). For local development
+without Keycloak set `DBM_DEV_MODE=true`. **Read [SECURITY.md](SECURITY.md)
+before deploying** — least-privilege DB roles and the deny-by-default model
+matter for safe operation.
 
 ## Deploy (Dokploy)
 

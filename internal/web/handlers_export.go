@@ -30,6 +30,10 @@ func (s *Server) exportTable(w http.ResponseWriter, r *http.Request) {
 	if format != "json" {
 		format = "csv"
 	}
+	if serverSideBlocked(u, q.Get("where"), q.Get("order")) {
+		http.Error(w, serverSideBlockedMsg, http.StatusForbidden)
+		return
+	}
 
 	res, err := postgres.BrowseWhere(r.Context(), pool, schema, table, q.Get("where"), q.Get("order"), 1000, 0, true)
 	if err != nil {
@@ -63,9 +67,27 @@ func (s *Server) exportTable(w http.ResponseWriter, r *http.Request) {
 	cw := csv.NewWriter(w)
 	cw.Write(res.Columns)
 	for _, row := range res.Rows {
-		cw.Write(row)
+		safe := make([]string, len(row))
+		for i, v := range row {
+			safe[i] = csvSafe(v)
+		}
+		cw.Write(safe)
 	}
 	cw.Flush()
+}
+
+// csvSafe neutralises spreadsheet formula injection: a cell that a spreadsheet
+// would interpret as a formula (starts with = + - @, or a tab/CR) is prefixed
+// with a single quote so it's imported as literal text rather than executed.
+func csvSafe(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + s
+	}
+	return s
 }
 
 // sanitizeFilename keeps the download name to a safe subset of characters.

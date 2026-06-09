@@ -142,7 +142,7 @@ func (s *Server) requireWrite(w http.ResponseWriter, r *http.Request, admin bool
 // (Fetch-based callers ignore the header and refresh themselves.)
 func (s *Server) execDDL(w http.ResponseWriter, r *http.Request, u auth.User, c store.Connection, pool *pgxpool.Pool, action, sql string) error {
 	_, err := postgres.Exec(r.Context(), pool, sql)
-	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: action, Detail: truncate(sql, 500), Success: err == nil})
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: action, Detail: auditDetail(sql), Success: err == nil})
 	if err != nil {
 		return err
 	}

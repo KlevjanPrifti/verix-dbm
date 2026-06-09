@@ -20,7 +20,10 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config: %v", err)
+	}
 
 	if dir := filepath.Dir(cfg.SQLitePath); dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {

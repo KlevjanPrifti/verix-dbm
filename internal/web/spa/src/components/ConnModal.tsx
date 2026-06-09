@@ -8,7 +8,7 @@ type Form = ConnInput & { port: number }
 
 const blank = (kind: string): Form => ({
   name: '', kind, host: '', port: defaultPort(kind),
-  dbname: '', username: '', password: '', passwordEnc: '', options: '', readOnly: false,
+  dbname: '', username: '', password: '', options: '', readOnly: false,
 })
 
 // Parse postgresql://user:pass@host:5432/db?opts into form fields (ported from
@@ -51,7 +51,7 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
   useEffect(() => {
     if (mode === 'edit' && editId != null) {
       api.getConnection(editId).then(r => {
-        setF({ ...r.connection, password: '', passwordEnc: r.passwordEnc })
+        setF({ ...r.connection, password: '' })
       }).catch(e => setErr(String(e.message || e)))
     }
   }, [mode, editId])
@@ -85,6 +85,10 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
     const fail = (x: any) => setErr(String(x.message || x))
     if (mode === 'edit' && editId != null && !asCopy) {
       api.updateConnection(editId, f).then(done).catch(fail)
+    } else if (asCopy && editId != null) {
+      // Duplicate: leave password blank and reference the source so the server
+      // copies its stored credential — the ciphertext never reaches the browser.
+      api.createConnection({ ...f, password: '', copyFrom: editId }).then(done).catch(fail)
     } else {
       api.createConnection(f).then(done).catch(fail)
     }
@@ -127,7 +131,7 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
           <div className="mrow"><label className="hud-label">Database <span className="dim">(pg name / redis db #)</span></label>
             <input className="hud-input" value={f.dbname} onChange={e => set('dbname', e.target.value)} placeholder="postgres" /></div>
           <div className="mrow"><label className="hud-label">Options</label>
-            <input className="hud-input" value={f.options} onChange={e => set('options', e.target.value)} placeholder="sslmode=disable" /></div>
+            <input className="hud-input" value={f.options} onChange={e => set('options', e.target.value)} placeholder="sslmode=verify-full (default: prefer)" /></div>
           <label className="check"><input type="checkbox" checked={f.readOnly} onChange={e => set('readOnly', e.target.checked)} /> <span className="hud-label">Read-only</span></label>
           <div className="modal-foot">
             <button type="button" className="hud-btn-accent" onClick={onTest}>Test Connection</button>

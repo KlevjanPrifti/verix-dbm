@@ -101,16 +101,18 @@ func toConnDTO(c store.Connection) connDTO {
 }
 
 type connInput struct {
-	Name        string `json:"name"`
-	Kind        string `json:"kind"`
-	Host        string `json:"host"`
-	Port        int    `json:"port"`
-	DBName      string `json:"dbname"`
-	Username    string `json:"username"`
-	Password    string `json:"password"`
-	PasswordEnc string `json:"passwordEnc"` // carried for "Save as copy"
-	Options     string `json:"options"`
-	ReadOnly    bool   `json:"readOnly"`
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	DBName   string `json:"dbname"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	// CopyFrom is the source connection id for "Save as copy": the server reuses
+	// that connection's stored ciphertext, so the secret never reaches the client.
+	CopyFrom int64  `json:"copyFrom"`
+	Options  string `json:"options"`
+	ReadOnly bool   `json:"readOnly"`
 }
 
 type resultDTO struct {
@@ -190,10 +192,9 @@ func (s *Server) apiGetConnection(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusNotFound, "connection not found")
 		return
 	}
-	// passwordEnc lets the UI carry the ciphertext for "Save as copy".
-	writeJSON(w, http.StatusOK, map[string]any{
-		"connection": toConnDTO(c), "passwordEnc": c.PasswordEnc,
-	})
+	// The stored password ciphertext is intentionally NOT returned — the browser
+	// never needs it (duplication carries it server-side via copyFrom).
+	writeJSON(w, http.StatusOK, map[string]any{"connection": toConnDTO(c)})
 }
 
 func (s *Server) apiCreateConnection(w http.ResponseWriter, r *http.Request) {
@@ -218,8 +219,12 @@ func (s *Server) apiCreateConnection(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		c.PasswordEnc = enc
-	} else if in.PasswordEnc != "" {
-		c.PasswordEnc = in.PasswordEnc
+	} else if in.CopyFrom > 0 {
+		// "Save as copy": carry the source connection's ciphertext server-side so
+		// the plaintext/ciphertext never round-trips through the browser.
+		if src, err := s.st.GetConnection(r.Context(), in.CopyFrom); err == nil {
+			c.PasswordEnc = src.PasswordEnc
+		}
 	}
 	id, err := s.st.CreateConnection(r.Context(), c)
 	if err != nil {
@@ -388,6 +393,10 @@ func (s *Server) apiGrid(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	schema, table := q.Get("schema"), q.Get("table")
 	where, order := q.Get("where"), q.Get("order")
+	if serverSideBlocked(u, where, order) {
+		apiErr(w, http.StatusForbidden, serverSideBlockedMsg)
+		return
+	}
 	page, _ := strconv.Atoi(q.Get("page"))
 	if page < 0 {
 		page = 0
@@ -434,6 +443,11 @@ func (s *Server) apiQuery(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
+	if serverSideBlocked(u, sql) {
+		resp["error"] = serverSideBlockedMsg
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
 	if !readOnly && postgres.NeedsConfirm(sql) && !in.Confirm {
 		resp["needConfirm"] = true
 		resp["sql"] = sql
@@ -447,7 +461,7 @@ func (s *Server) apiQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := postgres.Query(r.Context(), pool, sql, readOnly)
-	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "pg_query", Detail: truncate(sql, 500), Success: err == nil})
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "pg_query", Detail: auditDetail(sql), Success: err == nil})
 	resp["result"] = toResultDTO(res)
 	if err != nil {
 		resp["error"] = err.Error()
@@ -642,7 +656,7 @@ func (s *Server) apiApplyTable(w http.ResponseWriter, r *http.Request) {
 	err := postgres.ExecScript(r.Context(), pool, in.Statements)
 	s.st.AddAudit(r.Context(), store.Audit{
 		User: u.Email, ConnID: c.ID, Action: action,
-		Detail: truncate(strings.Join(in.Statements, "; "), 500), Success: err == nil,
+		Detail: auditDetail(strings.Join(in.Statements, "; ")), Success: err == nil,
 	})
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
@@ -705,7 +719,7 @@ func (s *Server) apiDDLMutate(w http.ResponseWriter, r *http.Request, admin bool
 // the SPA refreshes its own tree on success).
 func (s *Server) execDDLAudit(r *http.Request, u auth.User, c store.Connection, pool *pgxpool.Pool, action, sql string) error {
 	_, err := postgres.Exec(r.Context(), pool, sql)
-	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: action, Detail: truncate(sql, 500), Success: err == nil})
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: action, Detail: auditDetail(sql), Success: err == nil})
 	return err
 }
 
@@ -714,7 +728,7 @@ func (s *Server) execDDLAudit(r *http.Request, u auth.User, c store.Connection, 
 // rename/owner/privilege edits that compile to more than one statement.
 func (s *Server) execScriptAudit(r *http.Request, u auth.User, c store.Connection, pool *pgxpool.Pool, action string, stmts []string) error {
 	err := postgres.ExecScript(r.Context(), pool, stmts)
-	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: action, Detail: truncate(strings.Join(stmts, "; "), 500), Success: err == nil})
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: action, Detail: auditDetail(strings.Join(stmts, "; ")), Success: err == nil})
 	return err
 }
 
@@ -938,7 +952,7 @@ func (s *Server) apiRedisCmd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := redisdb.Command(r.Context(), client, args)
-	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "redis_cmd", Detail: truncate(in.Cmd, 500), Success: err == nil})
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "redis_cmd", Detail: auditDetail(in.Cmd), Success: err == nil})
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"error": err.Error()})
 		return

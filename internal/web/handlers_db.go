@@ -93,6 +93,11 @@ func (s *Server) pgQuery(w http.ResponseWriter, r *http.Request) {
 		s.rnd.partial(w, "queryResult", out)
 		return
 	}
+	if serverSideBlocked(u, sql) {
+		out.Err = serverSideBlockedMsg
+		s.rnd.partial(w, "queryResult", out)
+		return
+	}
 	if !readOnly && postgres.NeedsConfirm(sql) && !confirm {
 		out.NeedConfirm = true
 		s.rnd.partial(w, "queryResult", out)
@@ -110,7 +115,7 @@ func (s *Server) pgQuery(w http.ResponseWriter, r *http.Request) {
 		out.Err = err.Error()
 	}
 	out.Result = res
-	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "pg_query", Detail: truncate(sql, 500), Success: err == nil})
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "pg_query", Detail: auditDetail(sql), Success: err == nil})
 	s.rnd.partial(w, "queryResult", out)
 }
 
@@ -248,7 +253,7 @@ func (s *Server) redisCmd(w http.ResponseWriter, r *http.Request) {
 	} else {
 		out["Out"] = res
 	}
-	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "redis_cmd", Detail: truncate(r.FormValue("cmd"), 500), Success: err == nil})
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "redis_cmd", Detail: auditDetail(r.FormValue("cmd")), Success: err == nil})
 	s.rnd.partial(w, "redisCmdResult", out)
 }
 

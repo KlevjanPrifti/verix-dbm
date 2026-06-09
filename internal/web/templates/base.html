@@ -20,7 +20,10 @@
     </nav>
     <div class="userbox hud-label">
       <span class="who">{{.User.Name}}{{if .User.Admin}} · ADMIN{{else if .User.Write}} · WRITE{{else}} · READ{{end}}</span>
-      <a href="/auth/logout">Logout</a>
+      <form method="post" action="/auth/logout" class="logout-form">
+        <input type="hidden" name="csrf" value="{{.User.CSRF}}">
+        <button type="submit" class="logout-link">Logout</button>
+      </form>
     </div>
   </header>
 

@@ -154,6 +154,10 @@ func (s *Server) gridView(w http.ResponseWriter, r *http.Request) {
 	if d.Page < 0 {
 		d.Page = 0
 	}
+	if serverSideBlocked(u, d.Where, d.Order) {
+		http.Error(w, serverSideBlockedMsg, http.StatusForbidden)
+		return
+	}
 	// Always browse read-only: the where/order fragments are raw user SQL.
 	res, err := postgres.BrowseWhere(r.Context(), pool, d.Schema, d.Table, d.Where, d.Order, browseLimit, d.Page*browseLimit, true)
 	if err != nil {

@@ -46,6 +46,13 @@ func (s *Server) spaHandler() http.Handler {
 			serveIndex(w)
 			return
 		}
+		// A directory (e.g. /app/assets) would otherwise render an index listing;
+		// fall through to the SPA shell instead of exposing the file tree.
+		if st, e := f.Stat(); e == nil && st.IsDir() {
+			_ = f.Close()
+			serveIndex(w)
+			return
+		}
 		_ = f.Close()
 		// Vite emits content-hashed asset filenames, so they're safe to cache hard.
 		if strings.HasPrefix(p, "assets/") {

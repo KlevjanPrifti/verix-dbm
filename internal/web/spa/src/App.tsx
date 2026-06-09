@@ -132,7 +132,11 @@ export default function App() {
         </nav>
         <div className="userbox hud-label">
           <span className="who">{me.user.name}{me.user.admin ? ' · ADMIN' : me.user.write ? ' · WRITE' : ' · READ'}</span>
-          <a href="/auth/logout" className="logout-link"><LogOut size={13} /> <span className="logout-txt">Logout</span></a>
+          {/* POST + CSRF so a cross-site page can't force a logout. */}
+          <form method="post" action="/auth/logout" className="logout-form">
+            <input type="hidden" name="csrf" value={me.csrf} />
+            <button type="submit" className="logout-link"><LogOut size={13} /> <span className="logout-txt">Logout</span></button>
+          </form>
         </div>
       </header>
 

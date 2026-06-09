@@ -40,14 +40,14 @@ const qs = (o: Record<string, string | number | undefined>) => {
 
 export type ConnInput = {
   name: string; kind: string; host: string; port: number; dbname: string
-  username: string; password?: string; passwordEnc?: string; options: string; readOnly: boolean
+  username: string; password?: string; copyFrom?: number; options: string; readOnly: boolean
 }
 
 export const api = {
   me: () => get<Me>('/api/me'),
 
   listConnections: () => get<{ connections: Connection[] }>('/api/connections'),
-  getConnection: (id: number) => get<{ connection: Connection; passwordEnc: string }>(`/api/connections/${id}`),
+  getConnection: (id: number) => get<{ connection: Connection }>(`/api/connections/${id}`),
   createConnection: (in_: ConnInput) => req<{ id: number }>('POST', '/api/connections', in_),
   updateConnection: (id: number, in_: ConnInput) => req<{ ok: boolean }>('PUT', `/api/connections/${id}`, in_),
   deleteConnection: (id: number) => req<{ ok: boolean }>('DELETE', `/api/connections/${id}`),

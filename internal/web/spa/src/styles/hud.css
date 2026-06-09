@@ -286,6 +286,10 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 
 /* Inline text+icon controls: keep the SVG vertically centered next to the label */
 .logout-link, .pg-btn, .test-result, .console-toolbar > .hud-btn-cta { display: inline-flex; align-items: center; gap: .3rem; }
+/* Logout is a CSRF-protected POST form; keep its button looking like the old link. */
+.logout-form { display: inline-flex; margin: 0; }
+button.logout-link { background: none; border: none; padding: 0; font: inherit; cursor: pointer; color: rgb(var(--accent-rgb)); }
+button.logout-link:hover { text-decoration: underline; }
 .th-sort { display: inline-flex; align-items: center; }
 .tab-hint svg, .welcome p svg, .test-result svg, td svg { vertical-align: -2px; }
 

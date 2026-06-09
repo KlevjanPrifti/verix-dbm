@@ -64,15 +64,27 @@ func (rl *rateLimiter) allow(key string) bool {
 
 // middleware rejects requests from a client IP that exceeds the window with 429.
 func (rl *rateLimiter) middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := r.RemoteAddr
-		if host, _, err := net.SplitHostPort(ip); err == nil {
-			ip = host
-		}
-		if !rl.allow(ip) {
-			http.Error(w, "too many requests", http.StatusTooManyRequests)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return rl.middlewareBy(clientIP)(next)
+}
+
+// middlewareBy is middleware keyed by an arbitrary function (e.g. the session
+// user instead of the IP, so users behind a shared NAT aren't lumped together).
+func (rl *rateLimiter) middlewareBy(key func(*http.Request) string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !rl.allow(key(r)) {
+				http.Error(w, "too many requests", http.StatusTooManyRequests)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func clientIP(r *http.Request) string {
+	ip := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(ip); err == nil {
+		ip = host
+	}
+	return ip
 }

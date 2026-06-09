@@ -38,6 +38,7 @@ func (s *Server) Router() http.Handler {
 		r.Use(middleware.RealIP)
 	}
 	r.Use(middleware.Recoverer)
+	r.Use(securityHeaders(s.cfg))
 
 	r.Handle("/static/*", staticFS())
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
@@ -49,10 +50,17 @@ func (s *Server) Router() http.Handler {
 		r.Get("/auth/login", s.auth.Login)
 		r.Get("/auth/callback", s.auth.Callback)
 	})
-	r.Get("/auth/logout", s.auth.Logout)
+	// Logout is POST + CSRF (not GET) so a cross-site page can't force a logout.
+	r.Post("/auth/logout", s.auth.Logout)
 
+	// A generous per-user limiter on the authed surface — a backstop against a
+	// runaway client or scripted abuse of the query/command endpoints, without
+	// throttling normal interactive use. Keyed by user so a shared egress IP
+	// doesn't pool everyone together.
+	authedLimit := newRateLimiter(600, time.Minute)
 	r.Group(func(r chi.Router) {
 		r.Use(s.auth.Middleware)
+		r.Use(authedLimit.middlewareBy(sessionKey))
 		// Root serves the React SPA (the current UI). The legacy template
 		// workbench is kept reachable below but no longer the landing page.
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) {

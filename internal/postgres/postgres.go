@@ -464,3 +464,23 @@ func format(v any) string {
 func quoteIdent(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
+
+// reServerSide matches SQL that reaches the database host's OS — program
+// execution and server-side file access — none of which a read-only transaction
+// blocks. They depend purely on the connected role's privileges.
+var reServerSide = regexp.MustCompile(`(?is)` +
+	`\bcopy\b[^;]*\bprogram\b` + // COPY … TO/FROM PROGRAM 'cmd'
+	`|\bpg_read_file\b|\bpg_read_binary_file\b|\bpg_ls_dir\b|\bpg_stat_file\b|\bpg_ls_logdir\b|\bpg_ls_waldir\b` +
+	`|\blo_import\b|\blo_export\b` +
+	`|\bpg_execute_server_program\b|\bpg_read_server_files\b|\bpg_write_server_files\b`)
+
+// IsServerSideExec reports whether sql uses a server-side execution / file
+// primitive (COPY … PROGRAM, pg_read_file, large-object import/export, …). These
+// can yield RCE or arbitrary file read on the database host when the connected
+// role is privileged — and a read-only transaction does NOT stop them. Callers
+// block them for non-admin users (defense in depth; the real control is using a
+// least-privileged DB role). This is a deliberately conservative keyword screen,
+// not a SQL parser, so it can over-match — that's the safe direction here.
+func IsServerSideExec(sql string) bool {
+	return reServerSide.MatchString(sql)
+}

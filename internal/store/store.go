@@ -15,18 +15,18 @@ import (
 // Connection is a saved target (Postgres or Redis). Password is stored
 // encrypted (see internal/crypto); the plaintext never touches SQLite.
 type Connection struct {
-	ID           int64
-	Name         string
-	Kind         string // "postgres" | "redis"
-	Host         string
-	Port         int
-	DBName       string // pg database, or redis logical db number as string
-	Username     string
-	PasswordEnc  string
-	Options      string // e.g. "sslmode=disable" (pg) or key prefix hint (redis)
-	ReadOnly     bool
-	CreatedBy    string
-	CreatedAt    time.Time
+	ID          int64
+	Name        string
+	Kind        string // "postgres" | "redis"
+	Host        string
+	Port        int
+	DBName      string // pg database, or redis logical db number as string
+	Username    string
+	PasswordEnc string
+	Options     string // e.g. "sslmode=disable" (pg) or key prefix hint (redis)
+	ReadOnly    bool
+	CreatedBy   string
+	CreatedAt   time.Time
 }
 
 type Audit struct {
@@ -195,7 +195,12 @@ func boolToInt(b bool) int {
 func (c Connection) DSN(password string) string {
 	opts := c.Options
 	if opts == "" {
-		opts = "sslmode=disable"
+		// Default to attempting TLS (falls back to plaintext if the server has no
+		// TLS) instead of disabling it outright — credentials shouldn't cross the
+		// network in the clear by default. For remote/production targets prefer an
+		// explicit sslmode=verify-full in Options. An admin who needs plaintext can
+		// still set sslmode=disable.
+		opts = "sslmode=prefer"
 	}
 	u := url.URL{
 		Scheme:   "postgres",

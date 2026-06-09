@@ -30,9 +30,9 @@ type Value struct {
 	Key   string
 	Type  string
 	TTL   string
-	Text  string     // for string type
+	Text  string      // for string type
 	Pairs [][2]string // for hash / zset (member,score)
-	List  []string   // for list / set
+	List  []string    // for list / set
 }
 
 // Scan returns one page of keys (with type + TTL) matching the pattern.
@@ -95,14 +95,24 @@ func Get(ctx context.Context, c *redis.Client, key string) (*Value, error) {
 	return v, nil
 }
 
-var reFlush = regexp.MustCompile(`(?i)^\s*(flushall|flushdb|shutdown|debug)\b`)
+// reDangerous matches commands that can wipe data, take over the server, or run
+// arbitrary code/scripts on it: data flushes, server-side scripting (EVAL/
+// FUNCTION/FCALL), module loading (native code → RCE), CONFIG (e.g. dir + SAVE
+// to write files), replication/migration takeover, and admin/persistence ops.
+// The handler treats these as admin-only AND confirm-gated, so a plain "write"
+// user can't reach Redis-host compromise.
+var reDangerous = regexp.MustCompile(`(?i)^(flushall|flushdb|shutdown|debug|` +
+	`eval|evalsha|eval_ro|evalsha_ro|fcall|fcall_ro|function|script|` +
+	`module|config|slaveof|replicaof|migrate|restore|swapdb|` +
+	`acl|cluster|failover|save|bgsave|bgrewriteaof|lastsave|reset|latency|monitor)$`)
 
-// NeedsConfirm reports whether a raw command is dangerous enough to confirm.
+// NeedsConfirm reports whether a raw command is dangerous enough that the
+// handler requires admin + an explicit confirmation before running it.
 func NeedsConfirm(args []string) bool {
 	if len(args) == 0 {
 		return false
 	}
-	return reFlush.MatchString(args[0])
+	return reDangerous.MatchString(strings.TrimSpace(args[0]))
 }
 
 // Command runs an arbitrary command and returns a flat string rendering.
