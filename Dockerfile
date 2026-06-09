@@ -9,7 +9,11 @@ COPY internal/web/spa/ ./
 RUN npm run build
 
 # build
-FROM golang:1.25-alpine AS build
+# 1.26-alpine tracks the latest 1.26.x patch, so the binary is built with the
+# current patched standard library (CI's govulncheck enforces this). go.mod pins
+# the minor (go 1.26), which GOTOOLCHAIN=local satisfies from this image with no
+# toolchain download.
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
