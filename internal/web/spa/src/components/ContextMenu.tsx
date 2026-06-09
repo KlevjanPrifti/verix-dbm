@@ -33,6 +33,9 @@ export default function ContextMenu({ x, y, payload, onClose }: {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    // Drop any page text selection so the OS selection handles/indicators don't
+    // float on top of the menu (most visible as a bottom sheet on phones).
+    window.getSelection()?.removeAllRanges()
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     // Close on any pointer/right-click outside the menu (capture phase, so it
     // works regardless of stacking context or stopped propagation).

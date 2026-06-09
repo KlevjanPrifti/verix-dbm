@@ -340,6 +340,9 @@ function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuI
   const ref = useRef<HTMLDivElement>(null)
   const [openSub, setOpenSub] = useState<number | null>(null)
   useEffect(() => {
+    // Drop any page text selection so the OS selection handles/indicators don't
+    // float on top of the menu (most visible as a bottom sheet on phones).
+    window.getSelection()?.removeAllRanges()
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     const onDown = (e: Event) => { if (!ref.current?.contains(e.target as Node)) onClose() }
     window.addEventListener('keydown', onKey)
