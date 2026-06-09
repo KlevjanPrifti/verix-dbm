@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, setCSRF } from './api'
 import type { Connection, Me } from './types'
 import {
-  AppContext, type AppActions, type DDLParams, type NodePayload, type TabDef,
-  type TableDesignerParams,
+  AppContext, type AppActions, type ConfirmSpec, type DDLParams, type DialogRequest,
+  type NodePayload, type PromptSpec, type TabDef, type TableDesignerParams,
 } from './appctx'
 import Explorer from './components/Explorer'
 import Tabs from './components/Tabs'
@@ -12,6 +12,7 @@ import ConnModal from './components/ConnModal'
 import DDLModal from './components/DDLModal'
 import TableDesigner from './components/TableDesigner'
 import AuditModal from './components/AuditModal'
+import Dialog from './components/Dialog'
 import Toasts, { type Notice } from './components/Toasts'
 import { LogOut } from './icons'
 
@@ -28,6 +29,9 @@ export default function App() {
   const [drawer, setDrawer] = useState(false)
   const [notices, setNotices] = useState<Notice[]>([])
   const [refreshTokens, setRefreshTokens] = useState<Record<number, number>>({})
+  // One global HUD dialog at a time; `resolve` settles the promise the
+  // confirm()/prompt() helpers handed back to the caller.
+  const [dialog, setDialog] = useState<{ req: DialogRequest; resolve: (v: string | null) => void } | null>(null)
   const noticeId = useRef(0)
 
   const reloadConns = useCallback(() => {
@@ -48,6 +52,20 @@ export default function App() {
   const copy = useCallback((text: string) => {
     if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => notify('Copied')).catch(() => {})
   }, [notify])
+
+  const confirm = useCallback((spec: ConfirmSpec) => new Promise<string | null>(resolve => {
+    setDialog({
+      req: {
+        kind: 'confirm', title: spec.title, body: spec.body, cancelLabel: spec.cancelLabel,
+        buttons: spec.buttons ?? [{ label: 'OK', value: 'ok', variant: 'cta' }],
+      },
+      resolve,
+    })
+  }), [])
+
+  const prompt = useCallback((spec: PromptSpec) => new Promise<string | null>(resolve => {
+    setDialog({ req: { kind: 'prompt', ...spec }, resolve })
+  }), [])
 
   const openTab = useCallback((t: TabDef) => {
     setTabs(prev => prev.some(x => x.key === t.key) ? prev : [...prev, t])
@@ -83,6 +101,8 @@ export default function App() {
     closeTab,
     copy,
     notify,
+    confirm,
+    prompt,
     refreshConn,
     refreshToken: (id: number) => refreshTokens[id] || 0,
     openCtx: (x, y, payload) => setCtx({ x, y, payload }),
@@ -91,7 +111,7 @@ export default function App() {
     openDDL: (p) => setDDL(p),
     openTableDesigner: (p) => setDesigner(p),
     reloadConns,
-  }), [me, conns, connById, openTab, closeTab, copy, notify, refreshConn, refreshTokens, reloadConns])
+  }), [me, conns, connById, openTab, closeTab, copy, notify, confirm, prompt, refreshConn, refreshTokens, reloadConns])
 
   // Tint the HUD to match the active tab's connection (cyan pg / emerald redis).
   useEffect(() => {
@@ -143,6 +163,7 @@ export default function App() {
       {ddl && <DDLModal params={ddl} onClose={() => setDDL(null)} onApplied={() => { refreshConn(ddl.connId); setDDL(null) }} />}
       {designer && <TableDesigner params={designer} onClose={() => setDesigner(null)} onApplied={() => { refreshConn(designer.connId); setDesigner(null) }} />}
       {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}
+      {dialog && <Dialog req={dialog.req} onResolve={v => { dialog.resolve(v); setDialog(null) }} />}
       <Toasts notices={notices} />
     </AppContext.Provider>
   )

@@ -54,6 +54,18 @@ export interface TableDesignerParams {
 
 export interface Caps { admin: boolean; write: boolean; csrf: string }
 
+// HUD-themed replacements for window.confirm / window.prompt. A button's `value`
+// is what the returned promise resolves to; dismissing (Esc, overlay, Cancel)
+// resolves null. `prompt` resolves the entered text, or null if cancelled.
+export interface DialogButton { label: string; value: string; variant?: 'cta' | 'accent' | 'danger' }
+export interface ConfirmSpec { title: string; body?: string; cancelLabel?: string; buttons?: DialogButton[] }
+export interface PromptSpec { title: string; body?: string; placeholder?: string; initial?: string; submitLabel?: string }
+
+// The fully-resolved request the global <Dialog> renders (defaults applied).
+export type DialogRequest =
+  | { kind: 'confirm'; title: string; body?: string; cancelLabel?: string; buttons: DialogButton[] }
+  | { kind: 'prompt'; title: string; body?: string; placeholder?: string; initial?: string; submitLabel?: string }
+
 // AppActions is the imperative surface every component reaches for via useApp().
 export interface AppActions {
   caps: Caps
@@ -63,6 +75,8 @@ export interface AppActions {
   closeTab: (key: string) => void
   copy: (text: string) => void
   notify: (msg: string, kind?: 'ok' | 'error') => void
+  confirm: (spec: ConfirmSpec) => Promise<string | null>
+  prompt: (spec: PromptSpec) => Promise<string | null>
   refreshConn: (id: number) => void
   refreshToken: (id: number) => number // bump as a refetch dependency for a conn's subtree
   openCtx: (x: number, y: number, payload: NodePayload) => void

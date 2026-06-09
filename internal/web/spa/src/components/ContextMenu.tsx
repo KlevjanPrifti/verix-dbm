@@ -66,9 +66,15 @@ export default function ContextMenu({ x, y, payload, onClose }: {
   const generate = (kind: string) =>
     api.generate(id, kind, payload.schema!, payload.table!).then(r => app.copy(r.sql)).catch(e => app.notify(String(e.message || e), 'error'))
   const form = (kind: DDLKind, column?: string) => app.openDDL({ connId: id, kind, schema: payload.schema || '', table: payload.table || '', column, role: payload.role })
-  const confirmRun = (msg: string, run: () => Promise<unknown>, refresh = false) => {
-    if (!confirm(msg)) return
-    run().then(() => { if (refresh) app.refreshConn(id) }).catch(e => app.notify(String(e.message || e), 'error'))
+  const confirmRun = async (msg: string, run: () => Promise<unknown>, refresh = false) => {
+    const ok = await app.confirm({ title: 'Please confirm', body: msg, buttons: [{ label: 'Confirm', value: 'ok', variant: 'danger' }] })
+    if (!ok) return
+    try {
+      await run()
+      if (refresh) app.refreshConn(id)
+    } catch (e) {
+      app.notify(String((e as Error).message || e), 'error')
+    }
   }
 
   const items = buildMenu()
@@ -184,12 +190,19 @@ export default function ContextMenu({ x, y, payload, onClose }: {
   }
 
   // Dropping a schema needs a second decision: CASCADE (take contained objects
-  // with it) vs RESTRICT (fail if not empty). A plain DROP would error on any
-  // non-empty schema, so ask explicitly rather than silently picking one.
-  function dropSchema(schema: string) {
-    if (!confirm(`Drop schema “${schema}”? This cannot be undone.`)) return
-    const cascade = confirm(`Also drop ALL objects inside “${schema}”?\n\nOK = CASCADE (drop contained tables/views/etc.)\nCancel = RESTRICT (fail if the schema is not empty)`)
-    api.dropSchema(id, schema, cascade).then(() => app.refreshConn(id)).catch(e => app.notify(String(e.message || e), 'error'))
+  // with it) vs RESTRICT (fail if not empty). A plain DROP errors on any
+  // non-empty schema, so offer both explicitly rather than silently picking one.
+  async function dropSchema(schema: string) {
+    const choice = await app.confirm({
+      title: `Drop schema “${schema}”?`,
+      body: 'This cannot be undone. RESTRICT fails if the schema still contains objects; CASCADE drops the schema and everything inside it (tables, views, …).',
+      buttons: [
+        { label: 'Drop (restrict)', value: 'restrict', variant: 'danger' },
+        { label: 'Drop with CASCADE', value: 'cascade', variant: 'danger' },
+      ],
+    })
+    if (!choice) return
+    api.dropSchema(id, schema, choice === 'cascade').then(() => app.refreshConn(id)).catch(e => app.notify(String(e.message || e), 'error'))
   }
 
   const onItem = (it: MenuItem, i: number) => {

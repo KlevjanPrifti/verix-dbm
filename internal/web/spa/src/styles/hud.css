@@ -202,7 +202,11 @@ table.data tbody tr:hover td { color: var(--hud); }
    height comes from flex:1 (computed `auto`), so a `height:100%` child won't
    resolve reliably — make this container a flex column and let `.ide` grow. */
 .container:has(.ide) { display: flex; flex-direction: column; overflow: hidden; }
-.ide { display: grid; grid-template-columns: 300px 1fr; gap: 1rem; flex: 1; min-height: 0; }
+/* grid-template-rows: minmax(0,1fr) — without an explicit row track the single
+   implicit row sizes to content, so .work (and every tab's inner scroll area)
+   grows past the viewport instead of being bounded, and nothing can scroll. The
+   minmax(0,…) floor lets the row shrink below content so inner overflow works. */
+.ide { display: grid; grid-template-columns: 300px 1fr; grid-template-rows: minmax(0, 1fr); gap: 1rem; flex: 1; min-height: 0; }
 @media (max-width: 900px) { .container:has(.ide) { display: block; overflow: auto; } .ide { grid-template-columns: 1fr; height: auto; } }
 
 /* Database Explorer */
@@ -423,6 +427,10 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 /* Table designer (DataGrip-style Create / Modify table) */
 .modal-wide { width: min(1040px, 95vw); height: min(720px, 92vh); display: flex; flex-direction: column; }
 .modal-wide .modal-body { flex: 1; min-height: 0; padding: 0; gap: 0; }
+/* HUD confirm/prompt dialog — narrower than the form modals; body text keeps
+   author-entered line breaks. */
+.dialog { width: min(440px, 92vw); }
+.dialog-body { margin: 0; white-space: pre-line; line-height: 1.5; color: var(--hud-dim); }
 .tdz { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .tdz-top { display: flex; gap: 1rem; align-items: flex-end; padding: .7rem .9rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.12); }
 .tdz-top .mrow { flex: 0 0 auto; }

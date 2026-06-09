@@ -175,8 +175,8 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       })
       .catch(e => app.notify(String(e.message || e), 'error'))
 
-  const fullTextSearch = () => {
-    const term = window.prompt('Full-text search — matches any column (cast to text):')
+  const fullTextSearch = async () => {
+    const term = await app.prompt({ title: 'Full-text search', body: 'Matches any column (cast to text).', placeholder: 'search term', submitLabel: 'Search' })
     if (!term) return
     setFilter('(' + cols.map(c => `${qq(c)}::text ILIKE ${lit('%' + term + '%')}`).join(' OR ') + ')')
   }

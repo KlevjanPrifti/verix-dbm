@@ -85,9 +85,10 @@ function ConnNode({ conn }: { conn: Connection }) {
             onClick={e => { e.stopPropagation(); e.preventDefault(); openConsole() }}><Terminal size={14} /></button>
           {app.caps.admin && (
             <button type="button" className="row-act danger" title="delete"
-              onClick={e => {
+              onClick={async e => {
                 e.stopPropagation(); e.preventDefault()
-                if (confirm(`Delete connection ${conn.name}?`))
+                const ok = await app.confirm({ title: 'Delete connection', body: `Delete connection “${conn.name}”?`, buttons: [{ label: 'Delete', value: 'ok', variant: 'danger' }] })
+                if (ok)
                   api.deleteConnection(conn.id).then(app.reloadConns).catch(err => app.notify(String(err.message || err), 'error'))
               }}><Trash2 size={14} /></button>
           )}
