@@ -216,6 +216,7 @@ type ddlForm struct {
 	Default  string
 	Columns  string
 	Unique   bool
+	Owner string // new-schema: optional AUTHORIZATION role
 	// create-user / create-role fields
 	Password   string
 	Login      bool
@@ -329,7 +330,11 @@ func buildFormSQL(f ddlForm) (sql, action string, err error) {
 		if f.Name == "" {
 			return "", "", fmt.Errorf("schema name is required")
 		}
-		return "CREATE SCHEMA " + postgres.QuoteIdent(f.Name), "pg_ddl_create_schema", nil
+		sql = "CREATE SCHEMA " + postgres.QuoteIdent(f.Name)
+		if f.Owner != "" {
+			sql += " AUTHORIZATION " + postgres.QuoteIdent(f.Owner)
+		}
+		return sql, "pg_ddl_create_schema", nil
 	case "new-table":
 		if f.Name == "" || f.Columns == "" {
 			return "", "", fmt.Errorf("table name and column definitions are required")

@@ -12,6 +12,7 @@ const TITLES: Record<string, string> = {
 interface FormState {
   name: string; type: string; nullable: boolean; default: string; columns: string; unique: boolean
   password: string; login: boolean; createdb: boolean; createrole: boolean; superuser: boolean
+  owner: string
 }
 
 // Parameter modal for form-backed DDL (add/modify column, rename, new schema/
@@ -22,7 +23,7 @@ export default function DDLModal({ params, onClose, onApplied }: {
 }) {
   const app = useApp()
   const { connId, kind, schema, table, column } = params
-  const [f, setF] = useState<FormState>({ name: '', type: '', nullable: true, default: '', columns: '', unique: false, password: '', login: true, createdb: false, createrole: false, superuser: false })
+  const [f, setF] = useState<FormState>({ name: '', type: '', nullable: true, default: '', columns: '', unique: false, password: '', login: true, createdb: false, createrole: false, superuser: false, owner: '' })
   const [err, setErr] = useState('')
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF(p => ({ ...p, [k]: v }))
 
@@ -49,6 +50,7 @@ export default function DDLModal({ params, onClose, onApplied }: {
       name: f.name, type: f.type, default: f.default, columns: f.columns,
       nullable: f.nullable, unique: f.unique,
       password: f.password, login: f.login, createdb: f.createdb, createrole: f.createrole, superuser: f.superuser,
+      owner: f.owner,
     }).then(() => { app.notify('Applied'); onApplied() }).catch(x => setErr(String(x.message || x)))
   }
 
@@ -81,8 +83,10 @@ export default function DDLModal({ params, onClose, onApplied }: {
             <Row label="New name"><input className="hud-input" required value={f.name} onChange={e => set('name', e.target.value)} /></Row>
           </>}
 
-          {kind === 'new-schema' &&
-            <Row label="Schema name"><input className="hud-input" required value={f.name} onChange={e => set('name', e.target.value)} /></Row>}
+          {kind === 'new-schema' && <>
+            <Row label="Schema name"><input className="hud-input" required value={f.name} onChange={e => set('name', e.target.value)} placeholder="reporting" /></Row>
+            <Row label="Owner (optional)"><input className="hud-input" value={f.owner} onChange={e => set('owner', e.target.value)} placeholder="defaults to current role" /></Row>
+          </>}
 
           {kind === 'new-table' && <>
             <Row label="Schema"><input className="hud-input" value={schema} disabled /></Row>

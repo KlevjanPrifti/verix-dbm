@@ -573,6 +573,7 @@ func (s *Server) apiRunForm(w http.ResponseWriter, r *http.Request) {
 		Columns    string `json:"columns"`
 		Nullable   bool   `json:"nullable"`
 		Unique     bool   `json:"unique"`
+		Owner      string `json:"owner"`
 		Password   string `json:"password"`
 		Login      bool   `json:"login"`
 		CreateDB   bool   `json:"createdb"`
@@ -593,6 +594,7 @@ func (s *Server) apiRunForm(w http.ResponseWriter, r *http.Request) {
 		Name: strings.TrimSpace(in.Name), Type: strings.TrimSpace(in.Type),
 		Default: strings.TrimSpace(in.Default), Columns: strings.TrimSpace(in.Columns),
 		Nullable: in.Nullable, Unique: in.Unique,
+		Owner:    strings.TrimSpace(in.Owner),
 		Password: in.Password, Login: in.Login, CreateDB: in.CreateDB, CreateRole: in.CreateRole, Superuser: in.Superuser,
 	}
 	sql, action, err := buildFormSQL(f)
