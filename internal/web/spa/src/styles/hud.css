@@ -307,7 +307,12 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .ctx-backdrop { display: none; }
 
 /* Quick-documentation / Find-usages tabs */
-.doc-pane { flex: 1; min-height: 0; min-width: 0; overflow: auto; }
+/* Doc / Usages tabs use the same two-level scroll recipe as the data grid: an
+   overflow-hidden flex-column pane wrapping a single flex:1 scroller. Scrolling
+   the pane itself (a flex item) proved unreliable, so the inner .doc-scroll owns
+   the vertical scroll and the column/usage tables grow to full height inside it. */
+.doc-pane { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.doc-scroll { flex: 1; min-height: 0; min-width: 0; overflow: auto; }
 .doc-pane .tablewrap { max-height: none; }
 .doc-h { display: block; margin: 1rem 0 .4rem; }
 .doc-list { margin: .2rem 0 .6rem; padding-left: 1.2rem; font-size: .8rem; }
