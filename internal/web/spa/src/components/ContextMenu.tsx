@@ -175,9 +175,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
       <div className="ctx-backdrop" onClick={close} onContextMenu={e => { e.preventDefault(); close() }} />
       <div ref={ref} className={`ctx-menu${sheet ? ' sheet' : ''}`} style={sheet ? undefined : { left, top }}>
         {items.map((it, i) => (
-          <div key={i} className="menu-row"
-            onMouseEnter={() => it.children && setOpenSub(i)}
-            onMouseLeave={() => it.children && setOpenSub(s => (s === i ? null : s))}>
+          <div key={i} className="menu-row">
             {it.sep ? <div className="menu-sep" />
               : it.head ? <div className="ctx-head">{it.head}</div>
               : (

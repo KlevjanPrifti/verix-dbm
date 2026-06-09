@@ -365,9 +365,7 @@ function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuI
         {items.map((it, i) => it.sep ? <div key={i} className="menu-sep" />
           : it.head ? <div key={i} className="ctx-head">{it.head}</div>
           : (
-            <div key={i} className="menu-row"
-              onMouseEnter={() => it.children && setOpenSub(i)}
-              onMouseLeave={() => it.children && setOpenSub(s => (s === i ? null : s))}>
+            <div key={i} className="menu-row">
               <button type="button" disabled={it.disabled}
                 className={`menu-item${it.children ? ' has-children' : ''}${it.danger ? ' danger' : ''}${openSub === i ? ' expanded' : ''}`}
                 onClick={() => it.children ? setOpenSub(s => s === i ? null : i) : fire(it)}>
