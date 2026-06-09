@@ -38,6 +38,10 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const [editing, setEditing] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [colMeta, setColMeta] = useState<Record<string, Column> | null>(null)
+  // Inline edit of an existing cell (double-click / "Edit"): the {row,col} under
+  // edit, and a flag while its UPDATE is in flight.
+  const [edit, setEdit] = useState<{ r: number; c: number } | null>(null)
+  const [savingCell, setSavingCell] = useState(false)
 
   const load = useCallback((p: number, w: string, o: string) => {
     setLoading(true)
@@ -139,9 +143,22 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       .catch(e => app.notify(String(e.message || e), 'error'))
       .finally(() => setSaving(false))
   }
-  const editCell = (r: number, c: number) => openSql(
-    `console:${connId}:edit:${schema}.${table}`, `edit · ${table}`,
-    `UPDATE ${qual}\nSET ${qq(cols[c])} = ${cellLit(rows[r][c])}\nWHERE ${rowWhere(r)};`)
+  // Inline cell edit: commit a single cell with an UPDATE that targets the row by
+  // its current contents (rowWhere — the grid doesn't track a primary key). Run
+  // confirmed automatically (the user opted in by editing) and audited like any
+  // other write; on success we reload so computed/trigger columns stay accurate.
+  const commitEdit = (r: number, c: number, value: string) => {
+    setEdit(null)
+    if (value === (rows[r]?.[c] ?? '')) return // unchanged → no-op
+    setSavingCell(true)
+    api.query(connId, `UPDATE ${qual}\nSET ${qq(cols[c])} = ${cellLit(value)}\nWHERE ${rowWhere(r)};`, true)
+      .then(res => {
+        if (res.error) { app.notify(res.error, 'error'); return }
+        app.notify('cell updated'); load(page, where, order)
+      })
+      .catch(e => app.notify(String(e.message || e), 'error'))
+      .finally(() => setSavingCell(false))
+  }
   const deleteRow = (r: number) => openSql(
     `console:${connId}:delete:${schema}.${table}`, `delete · ${table}`,
     `DELETE FROM ${qual}\nWHERE ${rowWhere(r)};`)
@@ -183,7 +200,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       { head: cell ? col : `${schema}.${table}` },
       // ── cell-specific actions: need a row + column under the cursor ──
       ...(cell ? [
-        { label: 'Edit', Icon: SquarePen, key: 'Enter', disabled: readOnly, run: () => editCell(r, c) },
+        { label: 'Edit', Icon: SquarePen, key: 'F2', disabled: readOnly, run: () => setEdit({ r, c }) },
         { label: 'Show record view', Icon: TableProperties, run: () => setRecord(r) },
         { label: 'Open in value editor', Icon: Maximize2, run: () => setViewer({ col, value: val }) },
         { label: 'Show aggregate view', Icon: Sigma, run: () => setAgg(col) },
@@ -302,8 +319,13 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
                     )}
                     {rows.map((row, i) => (
                       <tr key={i}><td className="rownum">{i + 1}</td>{row.map((v, j) => (
-                        <td key={j} className="code"
-                          onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, items: menuItems(i, j) }) }}>{v}</td>
+                        <td key={j} className={`code${!readOnly ? ' editable-cell' : ''}`}
+                          onDoubleClick={() => { if (!readOnly && !savingCell) setEdit({ r: i, c: j }) }}
+                          onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, items: menuItems(i, j) }) }}>
+                          {edit && edit.r === i && edit.c === j
+                            ? <CellEditor initial={v} onCommit={val => commitEdit(i, j, val)} onCancel={() => setEdit(null)} />
+                            : v}
+                        </td>
                       ))}</tr>
                     ))}
                   </tbody>
@@ -423,6 +445,31 @@ function DraftField({ type, value, onChange, onCancel, onNext }: {
     <input ref={ref} className="draft-input code" value={value ?? ''}
       type={type === 'text' ? 'text' : type} step={type === 'number' ? 'any' : undefined}
       onKeyDown={onKeyDown} onBlur={onCancel} onChange={e => onChange(e.target.value)} />
+  )
+}
+
+// Inline editor for an existing cell. A plain text input prefilled with the
+// cell's current string: the grid stores every value as text and emits it as a
+// SQL literal (Postgres casts per column), so a raw text box round-trips any
+// type without the format-mismatch data-loss a typed date/number picker risks.
+// Enter or blur commits; Esc cancels. A `done` guard stops the blur-after-Enter
+// (or blur-after-Esc) from firing a second commit.
+function CellEditor({ initial, onCommit, onCancel }: {
+  initial: string; onCommit: (v: string) => void; onCancel: () => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  const [v, setV] = useState(initial)
+  const done = useRef(false)
+  useEffect(() => { ref.current?.focus(); ref.current?.select() }, [])
+  const commit = () => { if (done.current) return; done.current = true; onCommit(v) }
+  const cancel = () => { if (done.current) return; done.current = true; onCancel() }
+  return (
+    <input ref={ref} className="draft-input code" value={v}
+      onChange={e => setV(e.target.value)} onBlur={commit}
+      onKeyDown={e => {
+        if (e.key === 'Enter') { e.preventDefault(); commit() }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel() }
+      }} />
   )
 }
 

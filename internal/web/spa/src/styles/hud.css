@@ -368,6 +368,8 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .draft-row td.rownum { color: #7bd88f; background: rgba(123,216,143,0.1); }
 .draft-cell { cursor: text; }
 .draft-cell:hover { background: rgba(var(--accent-rgb),0.1); }
+/* Writable cells advertise inline edit (double-click) with a text cursor. */
+.editable-cell { cursor: text; }
 .draft-ph { font-style: italic; opacity: .55; }
 .draft-input { width: 100%; box-sizing: border-box; background: var(--panel-raised); border: 1px solid rgba(123,216,143,0.6); border-radius: 2px; color: var(--hud); padding: .15rem .35rem; margin: -.15rem -.2rem; font-size: inherit; }
 .draft-input:focus { outline: none; border-color: #7bd88f; }
