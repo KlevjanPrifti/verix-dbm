@@ -519,7 +519,15 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
   .tabbar { scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
   .tab { scroll-snap-align: start; }
 
-  /* Data grid scrolls horizontally; sticky row numbers (.rownum) stay put */
+  /* Keep the workbench a bounded flex column on phones too (line 206 turns it
+     into a scrolling block, which collapses the height chain and leaves the grid
+     with no inner scroll viewport). Restoring the desktop chain lets .tablewrap
+     own the scroll — exactly as it does on desktop. min-width:0 on the flex
+     children lets a wide table scroll inside the pane instead of stretching it. */
+  .container:has(.ide) { display: flex; flex-direction: column; overflow: hidden; }
+  .tab-content, .grid-pane, .grid-body { min-width: 0; }
+
+  /* Data grid scrolls in both directions; sticky row numbers (.rownum) stay put */
   .grid-body .tablewrap { overflow: auto; -webkit-overflow-scrolling: touch; }
 
   /* Modals go full-screen so forms are comfortable to fill on a phone */
