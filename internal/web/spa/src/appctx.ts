@@ -29,7 +29,7 @@ export interface TabDef {
 
 export type DDLKind =
   | 'add-column' | 'modify-column' | 'rename-table'
-  | 'new-schema' | 'new-table' | 'new-index'
+  | 'new-schema' | 'new-table' | 'new-index' | 'create-user'
 
 export interface DDLParams {
   connId: number

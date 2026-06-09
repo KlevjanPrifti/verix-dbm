@@ -563,19 +563,29 @@ func (s *Server) apiRunForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Kind     string `json:"kind"`
-		Schema   string `json:"schema"`
-		Table    string `json:"table"`
-		Column   string `json:"column"`
-		Name     string `json:"name"`
-		Type     string `json:"type"`
-		Default  string `json:"default"`
-		Columns  string `json:"columns"`
-		Nullable bool   `json:"nullable"`
-		Unique   bool   `json:"unique"`
+		Kind       string `json:"kind"`
+		Schema     string `json:"schema"`
+		Table      string `json:"table"`
+		Column     string `json:"column"`
+		Name       string `json:"name"`
+		Type       string `json:"type"`
+		Default    string `json:"default"`
+		Columns    string `json:"columns"`
+		Nullable   bool   `json:"nullable"`
+		Unique     bool   `json:"unique"`
+		Password   string `json:"password"`
+		Login      bool   `json:"login"`
+		CreateDB   bool   `json:"createdb"`
+		CreateRole bool   `json:"createrole"`
+		Superuser  bool   `json:"superuser"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	// Role/user management is cluster-wide and reserved for admins.
+	if in.Kind == "create-user" && !u.Admin {
+		apiErr(w, http.StatusForbidden, "admin required")
 		return
 	}
 	f := ddlForm{
@@ -583,6 +593,7 @@ func (s *Server) apiRunForm(w http.ResponseWriter, r *http.Request) {
 		Name: strings.TrimSpace(in.Name), Type: strings.TrimSpace(in.Type),
 		Default: strings.TrimSpace(in.Default), Columns: strings.TrimSpace(in.Columns),
 		Nullable: in.Nullable, Unique: in.Unique,
+		Password: in.Password, Login: in.Login, CreateDB: in.CreateDB, CreateRole: in.CreateRole, Superuser: in.Superuser,
 	}
 	sql, action, err := buildFormSQL(f)
 	if err == nil {

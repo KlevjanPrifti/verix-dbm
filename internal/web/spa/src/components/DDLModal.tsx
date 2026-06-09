@@ -6,10 +6,12 @@ import { X } from '../icons'
 const TITLES: Record<string, string> = {
   'add-column': 'Add column', 'modify-column': 'Modify column', 'rename-table': 'Rename table',
   'new-schema': 'New schema', 'new-table': 'New table', 'new-index': 'New index',
+  'create-user': 'New user / role',
 }
 
 interface FormState {
   name: string; type: string; nullable: boolean; default: string; columns: string; unique: boolean
+  password: string; login: boolean; createdb: boolean; createrole: boolean; superuser: boolean
 }
 
 // Parameter modal for form-backed DDL (add/modify column, rename, new schema/
@@ -20,7 +22,7 @@ export default function DDLModal({ params, onClose, onApplied }: {
 }) {
   const app = useApp()
   const { connId, kind, schema, table, column } = params
-  const [f, setF] = useState<FormState>({ name: '', type: '', nullable: true, default: '', columns: '', unique: false })
+  const [f, setF] = useState<FormState>({ name: '', type: '', nullable: true, default: '', columns: '', unique: false, password: '', login: true, createdb: false, createrole: false, superuser: false })
   const [err, setErr] = useState('')
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF(p => ({ ...p, [k]: v }))
 
@@ -46,6 +48,7 @@ export default function DDLModal({ params, onClose, onApplied }: {
       kind, schema, table, column,
       name: f.name, type: f.type, default: f.default, columns: f.columns,
       nullable: f.nullable, unique: f.unique,
+      password: f.password, login: f.login, createdb: f.createdb, createrole: f.createrole, superuser: f.superuser,
     }).then(() => { app.notify('Applied'); onApplied() }).catch(x => setErr(String(x.message || x)))
   }
 
@@ -94,6 +97,15 @@ export default function DDLModal({ params, onClose, onApplied }: {
             <Row label="Index name"><input className="hud-input" required value={f.name} onChange={e => set('name', e.target.value)} /></Row>
             <Row label="Columns"><input className="hud-input code" required value={f.columns} onChange={e => set('columns', e.target.value)} placeholder="email · lower(email) · created_at desc" /></Row>
             <Check checked={f.unique} onChange={v => set('unique', v)} label="Unique" />
+          </>}
+
+          {kind === 'create-user' && <>
+            <Row label="Role name"><input className="hud-input" required value={f.name} onChange={e => set('name', e.target.value)} placeholder="reporting" /></Row>
+            <Row label="Password (blank = none)"><input className="hud-input" type="password" autoComplete="new-password" value={f.password} onChange={e => set('password', e.target.value)} /></Row>
+            <Check checked={f.login} onChange={v => set('login', v)} label="Can log in (user)" />
+            <Check checked={f.createdb} onChange={v => set('createdb', v)} label="Create databases" />
+            <Check checked={f.createrole} onChange={v => set('createrole', v)} label="Create roles" />
+            <Check checked={f.superuser} onChange={v => set('superuser', v)} label="Superuser" />
           </>}
 
           <div className="modal-foot">

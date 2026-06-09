@@ -4,6 +4,7 @@ import { useApp, type DDLKind, type NodePayload } from '../appctx'
 import {
   type LucideIcon, Terminal, Plus, Box, RotateCw, Copy, Settings, Trash2, Table2,
   Code, Download, FileCode, Info, Search, Pencil, ListTree, Eraser, ChevronRight,
+  UserPlus,
 } from '../icons'
 
 interface MenuItem {
@@ -75,10 +76,14 @@ export default function ContextMenu({ x, y, payload, onClose }: {
     if (c.type === 'conn') {
       m.push({ head: c.name })
       m.push({ label: 'Query console', Icon: Terminal, key: 'Ctrl+⏎', run: tab.console })
-      if (w) m.push({ label: 'New…', Icon: Plus, children: [
-        { label: 'Query console', Icon: Terminal, run: tab.console },
-        { label: 'Schema…', Icon: Box, run: () => form('new-schema') },
-      ] })
+      if (w) {
+        const newKids: MenuItem[] = [
+          { label: 'Query console', Icon: Terminal, run: tab.console },
+          { label: 'Schema…', Icon: Box, run: () => form('new-schema') },
+        ]
+        if (a) newKids.push({ label: 'User / role…', Icon: UserPlus, run: () => form('create-user') })
+        m.push({ label: 'New…', Icon: Plus, children: newKids })
+      }
       m.push({ label: 'Refresh', Icon: RotateCw, key: 'Ctrl+F5', run: () => { close(); app.refreshConn(id) } })
       m.push(SEP)
       m.push({ label: 'Copy name', Icon: Copy, run: () => app.copy(c.name) })

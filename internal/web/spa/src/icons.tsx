@@ -43,5 +43,5 @@ export {
   ChevronDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowRight, Check,
   Copy, Settings, Trash2, Download, Code, FileCode, FileJson, Info, Search,
   Pencil, SquarePen, Eraser, LogOut, Filter, FilterX, Maximize2, Sigma, Undo2,
-  TableProperties,
+  TableProperties, UserPlus,
 } from 'lucide-react'

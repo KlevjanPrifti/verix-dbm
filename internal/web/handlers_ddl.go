@@ -206,7 +206,7 @@ func (s *Server) pgDropIndex(w http.ResponseWriter, r *http.Request) {
 type ddlForm struct {
 	Conn     store.Connection
 	CSRF     string
-	Kind     string // add-column | modify-column | rename-table | new-schema | new-table | new-index
+	Kind     string // add-column | modify-column | rename-table | new-schema | new-table | new-index | create-user
 	Schema   string
 	Table    string
 	Column   string
@@ -216,7 +216,13 @@ type ddlForm struct {
 	Default  string
 	Columns  string
 	Unique   bool
-	Err      string
+	// create-user / create-role fields
+	Password   string
+	Login      bool
+	CreateDB   bool
+	CreateRole bool
+	Superuser  bool
+	Err        string
 }
 
 // pgDDLForm renders the parameter modal for a DDL action (loaded via HTMX).
@@ -338,6 +344,31 @@ func buildFormSQL(f ddlForm) (sql, action string, err error) {
 			unique = "UNIQUE "
 		}
 		return fmt.Sprintf("CREATE %sINDEX %s ON %s (%s)", unique, postgres.QuoteIdent(f.Name), tbl, f.Columns), "pg_ddl_create_index", nil
+	case "create-user":
+		if f.Name == "" {
+			return "", "", fmt.Errorf("role name is required")
+		}
+		// Build CREATE ROLE … WITH <options>. A role that can log in is what
+		// Postgres calls a "user"; the rest are optional privilege flags.
+		opts := []string{}
+		if f.Login {
+			opts = append(opts, "LOGIN")
+		} else {
+			opts = append(opts, "NOLOGIN")
+		}
+		if f.Superuser {
+			opts = append(opts, "SUPERUSER")
+		}
+		if f.CreateDB {
+			opts = append(opts, "CREATEDB")
+		}
+		if f.CreateRole {
+			opts = append(opts, "CREATEROLE")
+		}
+		if f.Password != "" {
+			opts = append(opts, "PASSWORD "+postgres.QuoteLiteral(f.Password))
+		}
+		return fmt.Sprintf("CREATE ROLE %s WITH %s", postgres.QuoteIdent(f.Name), strings.Join(opts, " ")), "pg_ddl_create_role", nil
 	}
 	return "", "", fmt.Errorf("unknown form kind %q", f.Kind)
 }
