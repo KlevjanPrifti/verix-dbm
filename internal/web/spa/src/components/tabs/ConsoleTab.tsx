@@ -34,20 +34,22 @@ export default function ConsoleTab({ connId, initialSql }: { connId: number; ini
           {conn && <span className="tb-chip conn-chip hud-label" title={`${conn.kind}@${conn.host}`}>{conn.kind}@{conn.host}</span>}
           {running && <span className="hud-label">running…</span>}
         </div>
-        <textarea className="hud-input code console-editor" rows={6} value={sql} onChange={e => setSql(e.target.value)}
+        <textarea className="hud-input code console-editor" value={sql} onChange={e => setSql(e.target.value)}
           onKeyDown={onKey} placeholder="select * from … limit 100;" />
       </form>
-      <div className="console-result">
-        {resp?.error && <div className="alert error code">{resp.error}</div>}
-        {resp?.needConfirm && (
-          <div className="alert warn">
-            <p className="hud-label">This statement looks destructive. Confirm to run:</p>
-            <pre className="code">{resp.sql}</pre>
-            <button className="btn-danger" type="button" onClick={() => run(true)}>Yes, run it</button>
-          </div>
-        )}
-        {resp?.result && <ResultTable r={resp.result} />}
-      </div>
+      {resp && (
+        <div className="console-result">
+          {resp.error && <div className="alert error code">{resp.error}</div>}
+          {resp.needConfirm && (
+            <div className="alert warn">
+              <p className="hud-label">This statement looks destructive. Confirm to run:</p>
+              <pre className="code">{resp.sql}</pre>
+              <button className="btn-danger" type="button" onClick={() => run(true)}>Yes, run it</button>
+            </div>
+          )}
+          {resp.result && <ResultTable r={resp.result} />}
+        </div>
+      )}
     </div>
   )
 }

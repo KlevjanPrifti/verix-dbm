@@ -44,7 +44,7 @@ export default function Tabs({ tabs, active, onSelect, onClose, onToggleDrawer }
           </div>
         )}
         {tabs.map(t => (
-          <div key={t.key} style={{ display: active === t.key ? 'flex' : 'none', flex: 1, minHeight: 0 }}>
+          <div key={t.key} style={{ display: active === t.key ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0 }}>
             <TabContent tab={t} />
           </div>
         ))}

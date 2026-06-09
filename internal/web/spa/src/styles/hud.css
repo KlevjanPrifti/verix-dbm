@@ -307,7 +307,7 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .ctx-backdrop { display: none; }
 
 /* Quick-documentation / Find-usages tabs */
-.doc-pane { flex: 1; min-height: 0; overflow: auto; }
+.doc-pane { flex: 1; min-height: 0; min-width: 0; overflow: auto; }
 .doc-pane .tablewrap { max-height: none; }
 .doc-h { display: block; margin: 1rem 0 .4rem; }
 .doc-list { margin: .2rem 0 .6rem; padding-left: 1.2rem; font-size: .8rem; }
@@ -324,13 +324,13 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .tab-x:hover { opacity: 1; color: #ff9a9a; }
 .tab-hint { display: flex; align-items: center; gap: .3rem; padding: 0 .8rem; }
 .tab-ico { color: rgba(var(--accent-rgb),0.8); }
-.tab-content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.tab-content { flex: 1; min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
 
 .welcome { flex: 1; display: flex; align-items: center; justify-content: center; }
 .welcome-box { max-width: 460px; text-align: center; }
 
 /* Data grid */
-.grid-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.grid-pane { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 .grid-toolbar { display: flex; align-items: center; gap: .3rem; padding: .3rem .5rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.12); }
 .tb-ico { background: none; border: 1px solid transparent; color: rgba(var(--accent-rgb),0.85); cursor: pointer; width: 1.7rem; height: 1.7rem; border-radius: 2px; font-size: .95rem; }
 .tb-ico:hover:not(:disabled) { background: rgba(var(--accent-rgb),0.12); }
@@ -344,8 +344,10 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .fb-key { white-space: nowrap; color: rgba(var(--accent-rgb),0.7); }
 .fb-input { flex: 1; min-width: 60px; background: rgba(var(--accent-rgb),0.05); border: 1px solid rgba(var(--accent-rgb),0.2); border-radius: 2px; color: var(--hud); padding: .3rem .5rem; font-size: .8rem; }
 .fb-input:focus { outline: none; border-color: rgba(var(--accent-rgb),0.6); }
-.grid-body { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
-.grid-body .tablewrap { flex: 1; min-height: 0; max-height: none; border: none; border-radius: 0; }
+.grid-body { flex: 1; min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
+/* The table scrolls in both axes inside here; min-width:0 up the chain (above)
+   lets a table wider than the pane scroll instead of stretching the layout. */
+.grid-body .tablewrap { flex: 1; min-height: 0; min-width: 0; max-height: none; overflow: auto; border: none; border-radius: 0; }
 .grid-footer { display: flex; align-items: center; gap: .6rem; padding: .3rem .6rem; border-top: 1px solid rgba(var(--accent-rgb),0.15); background: var(--panel); }
 .grid-meta { padding: .25rem .6rem; margin: 0; flex-shrink: 0; }
 .pg-btn { cursor: pointer; border: 1px solid rgba(var(--accent-rgb),0.3); border-radius: 2px; padding: .05rem .4rem; color: rgb(var(--accent-rgb)); }
@@ -370,12 +372,17 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .draft-input { width: 100%; box-sizing: border-box; background: var(--panel-raised); border: 1px solid rgba(123,216,143,0.6); border-radius: 2px; color: var(--hud); padding: .15rem .35rem; margin: -.15rem -.2rem; font-size: inherit; }
 .draft-input:focus { outline: none; border-color: #7bd88f; }
 
-/* SQL console tab */
-.console-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.console-form { display: flex; flex-direction: column; }
-.console-toolbar { display: flex; align-items: center; gap: .6rem; padding: .4rem .5rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.12); }
-.console-editor { border: none; border-radius: 0; resize: vertical; min-height: 7rem; background: rgba(var(--accent-rgb),0.03); }
-.console-result { flex: 1; min-height: 0; overflow: auto; padding: .5rem; border-top: 1px solid rgba(var(--accent-rgb),0.12); }
+/* SQL console tab — the editor fills the pane; the result panel only claims
+   space once a query has run (it's not rendered before then), so an empty
+   console is all editor rather than a small box over dead space. */
+.console-pane { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.console-form { flex: 1; min-height: 8rem; display: flex; flex-direction: column; }
+.console-toolbar { flex-shrink: 0; flex-wrap: wrap; row-gap: .35rem; display: flex; align-items: center; gap: .6rem; padding: .4rem .5rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.12); }
+.console-editor { flex: 1; min-height: 6rem; border: none; border-radius: 0; resize: none; background: rgba(var(--accent-rgb),0.03); }
+/* Results sit below, sized to their content but capped so they never push the
+   editor off-screen; the panel itself scrolls when output is tall. */
+.console-result { flex: 0 1 auto; min-height: 0; max-height: 60%; overflow: auto; padding: .5rem; border-top: 1px solid rgba(var(--accent-rgb),0.12); }
+.console-result .tablewrap { max-height: none; border: none; }
 .hud-btn-cta.sm { padding: .35rem .8rem; font-size: .72rem; }
 
 /* Redis tab */
@@ -551,7 +558,7 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
   /* Grid toolbar: the long connection chip belongs in the footer on phones —
      drop it here so the action buttons + status keep one tidy row. */
   .grid-toolbar { padding: .35rem .5rem; }
-  .grid-toolbar .conn-chip { display: none; }
+  .grid-toolbar .conn-chip, .console-toolbar .conn-chip { display: none; }
 
   /* Filter bar becomes a tidy label | input grid; Apply spans the full width */
   .filter-bar { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: .4rem .6rem; }
