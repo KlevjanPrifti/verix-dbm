@@ -528,11 +528,15 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
   .modal-head { flex-shrink: 0; }
   .modal-body { flex: 1; overflow: auto; }
 
-  /* Chrome bars wrap instead of overflowing horizontally */
-  .topbar { flex-wrap: wrap; gap: .35rem 1rem; padding: .55rem .8rem; }
-  .brand { font-size: 1.15rem; }
-  .topnav { gap: .9rem; }
-  .userbox { gap: .8rem; font-size: .68rem; }
+  /* Header stays a single tidy row: fixed brand + nav on the left, the username
+     truncates, and Logout collapses to its icon so nothing wraps or overflows. */
+  .topbar { gap: .7rem; padding: .5rem .7rem; }
+  .brand { font-size: 1.05rem; flex-shrink: 0; }
+  .topnav { gap: .8rem; flex-shrink: 0; }
+  .topnav a.on { display: none; } /* current page — redundant on phones */
+  .userbox { gap: .55rem; font-size: .64rem; min-width: 0; }
+  .userbox .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .logout-link .logout-txt { display: none; } /* icon-only to save width */
   .connbar { flex-wrap: wrap; padding: .45rem .9rem; }
   .container { padding: .5rem; }
 

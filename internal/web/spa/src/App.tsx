@@ -112,7 +112,7 @@ export default function App() {
         </nav>
         <div className="userbox hud-label">
           <span className="who">{me.user.name}{me.user.admin ? ' · ADMIN' : me.user.write ? ' · WRITE' : ' · READ'}</span>
-          <a href="/auth/logout" className="logout-link"><LogOut size={13} /> Logout</a>
+          <a href="/auth/logout" className="logout-link"><LogOut size={13} /> <span className="logout-txt">Logout</span></a>
         </div>
       </header>
 
