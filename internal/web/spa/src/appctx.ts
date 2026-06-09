@@ -1,16 +1,17 @@
 import { createContext, useContext } from 'react'
-import type { Connection } from './types'
+import type { Connection, Role } from './types'
 
 // Tree node identity, sourced from the explorer and fed into the context menu —
 // the React equivalent of the data-* attributes the old Alpine menu read.
 export interface NodePayload {
-  type: 'conn' | 'schema' | 'table' | 'col' | 'key' | 'index'
+  type: 'conn' | 'schema' | 'table' | 'col' | 'key' | 'index' | 'roles' | 'role'
   connId: number
   name: string
   schema?: string
   table?: string
   kind?: string
   def?: string
+  role?: Role // role nodes: full attributes, for the edit form to prefill from
 }
 
 export type TabView =
@@ -30,6 +31,7 @@ export interface TabDef {
 export type DDLKind =
   | 'add-column' | 'modify-column' | 'rename-table'
   | 'new-schema' | 'new-table' | 'new-index' | 'create-user'
+  | 'alter-schema' | 'alter-user'
 
 export interface DDLParams {
   connId: number
@@ -37,6 +39,7 @@ export interface DDLParams {
   schema: string
   table: string
   column?: string
+  role?: Role // alter-user: the role being edited, used to prefill the form
 }
 
 // Full DataGrip-style table editor — "create" builds a new table, "modify" loads

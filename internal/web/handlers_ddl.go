@@ -216,7 +216,7 @@ type ddlForm struct {
 	Default  string
 	Columns  string
 	Unique   bool
-	Owner string // new-schema: optional AUTHORIZATION role
+	Owner    string // new-schema: optional AUTHORIZATION role
 	// create-user / create-role fields
 	Password   string
 	Login      bool
@@ -224,6 +224,18 @@ type ddlForm struct {
 	CreateRole bool
 	Superuser  bool
 	Err        string
+}
+
+// roleAttrs projects the create/alter-role privilege fields onto the shared
+// postgres.RoleAttrs the SQL builders consume.
+func (f ddlForm) roleAttrs() postgres.RoleAttrs {
+	return postgres.RoleAttrs{
+		Login:      f.Login,
+		Super:      f.Superuser,
+		CreateDB:   f.CreateDB,
+		CreateRole: f.CreateRole,
+		Password:   f.Password,
+	}
 }
 
 // pgDDLForm renders the parameter modal for a DDL action (loaded via HTMX).
@@ -264,14 +276,14 @@ func (s *Server) pgRunForm(w http.ResponseWriter, r *http.Request) {
 	}
 	f := ddlForm{
 		Conn: c, CSRF: u.CSRF,
-		Kind:    r.FormValue("kind"),
-		Schema:  r.FormValue("schema"),
-		Table:   r.FormValue("table"),
-		Column:  r.FormValue("column"),
-		Name:    strings.TrimSpace(r.FormValue("name")),
-		Type:    strings.TrimSpace(r.FormValue("type")),
-		Default: strings.TrimSpace(r.FormValue("default")),
-		Columns: strings.TrimSpace(r.FormValue("columns")),
+		Kind:     r.FormValue("kind"),
+		Schema:   r.FormValue("schema"),
+		Table:    r.FormValue("table"),
+		Column:   r.FormValue("column"),
+		Name:     strings.TrimSpace(r.FormValue("name")),
+		Type:     strings.TrimSpace(r.FormValue("type")),
+		Default:  strings.TrimSpace(r.FormValue("default")),
+		Columns:  strings.TrimSpace(r.FormValue("columns")),
 		Nullable: r.FormValue("nullable") == "on",
 		Unique:   r.FormValue("unique") == "on",
 	}
@@ -353,27 +365,7 @@ func buildFormSQL(f ddlForm) (sql, action string, err error) {
 		if f.Name == "" {
 			return "", "", fmt.Errorf("role name is required")
 		}
-		// Build CREATE ROLE … WITH <options>. A role that can log in is what
-		// Postgres calls a "user"; the rest are optional privilege flags.
-		opts := []string{}
-		if f.Login {
-			opts = append(opts, "LOGIN")
-		} else {
-			opts = append(opts, "NOLOGIN")
-		}
-		if f.Superuser {
-			opts = append(opts, "SUPERUSER")
-		}
-		if f.CreateDB {
-			opts = append(opts, "CREATEDB")
-		}
-		if f.CreateRole {
-			opts = append(opts, "CREATEROLE")
-		}
-		if f.Password != "" {
-			opts = append(opts, "PASSWORD "+postgres.QuoteLiteral(f.Password))
-		}
-		return fmt.Sprintf("CREATE ROLE %s WITH %s", postgres.QuoteIdent(f.Name), strings.Join(opts, " ")), "pg_ddl_create_role", nil
+		return postgres.CreateRoleSQL(f.Name, f.roleAttrs()), "pg_ddl_create_role", nil
 	}
 	return "", "", fmt.Errorf("unknown form kind %q", f.Kind)
 }

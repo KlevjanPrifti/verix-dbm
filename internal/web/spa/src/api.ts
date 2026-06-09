@@ -5,7 +5,7 @@
 import type {
   Me, Connection, ExplorerData, Column, Index, Key, GridResponse, QueryResponse,
   DocResponse, UsagesResponse, RedisKeysResponse, RedisValue, RedisCmdResponse,
-  AuditRow, DDLPrefill,
+  AuditRow, DDLPrefill, Role,
 } from './types'
 
 let csrf = ''
@@ -86,6 +86,16 @@ export const api = {
     req<{ ok: boolean }>('POST', `/api/c/${id}/pg/column/drop`, { schema, table, column }),
   dropIndex: (id: number, schema: string, name: string) =>
     req<{ ok: boolean }>('POST', `/api/c/${id}/pg/index/drop`, { schema, name }),
+  dropSchema: (id: number, schema: string, cascade: boolean) =>
+    req<{ ok: boolean }>('POST', `/api/c/${id}/pg/schema/drop`, { schema, cascade }),
+  alterSchema: (id: number, schema: string, newName: string, owner: string) =>
+    req<{ ok: boolean }>('POST', `/api/c/${id}/pg/schema/alter`, { schema, newName, owner }),
+
+  roles: (id: number) => get<{ roles: Role[] | null }>(`/api/c/${id}/pg/roles`),
+  dropRole: (id: number, name: string) =>
+    req<{ ok: boolean }>('POST', `/api/c/${id}/pg/role/drop`, { name }),
+  alterRole: (id: number, body: Record<string, unknown>) =>
+    req<{ ok: boolean }>('POST', `/api/c/${id}/pg/role/alter`, body),
 
   redisKeys: (id: number, match: string, cursor = 0) =>
     get<RedisKeysResponse>(`/api/c/${id}/redis/keys${qs({ match, cursor })}`),

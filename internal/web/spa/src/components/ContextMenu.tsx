@@ -65,7 +65,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
   }
   const generate = (kind: string) =>
     api.generate(id, kind, payload.schema!, payload.table!).then(r => app.copy(r.sql)).catch(e => app.notify(String(e.message || e), 'error'))
-  const form = (kind: DDLKind, column?: string) => app.openDDL({ connId: id, kind, schema: payload.schema || '', table: payload.table || '', column })
+  const form = (kind: DDLKind, column?: string) => app.openDDL({ connId: id, kind, schema: payload.schema || '', table: payload.table || '', column, role: payload.role })
   const confirmRun = (msg: string, run: () => Promise<unknown>, refresh = false) => {
     if (!confirm(msg)) return
     run().then(() => { if (refresh) app.refreshConn(id) }).catch(e => app.notify(String(e.message || e), 'error'))
@@ -103,9 +103,26 @@ export default function ContextMenu({ x, y, payload, onClose }: {
         { label: 'Table…', Icon: Table2, run: () => app.openTableDesigner({ connId: id, schema: c.schema!, mode: 'create' }) },
         { label: 'Table (raw SQL)…', Icon: Code, run: () => form('new-table') },
       ] })
+      if (w) m.push({ label: 'Rename / owner…', Icon: Pencil, run: () => form('alter-schema') })
       m.push({ label: 'Refresh', Icon: RotateCw, key: 'Ctrl+F5', run: () => { close(); app.refreshConn(id) } })
       m.push(SEP)
       m.push({ label: 'Copy name', Icon: Copy, run: () => app.copy(c.schema!) })
+      if (a) {
+        m.push(SEP)
+        m.push({ label: 'Drop schema…', Icon: Trash2, danger: true, run: () => dropSchema(c.schema!) })
+      }
+    } else if (c.type === 'roles') {
+      m.push({ head: 'roles' })
+      if (a) m.push({ label: 'New role / user…', Icon: UserPlus, run: () => form('create-user') })
+      m.push({ label: 'Refresh', Icon: RotateCw, run: () => { close(); app.refreshConn(id) } })
+    } else if (c.type === 'role') {
+      m.push({ head: c.name })
+      m.push({ label: 'Copy name', Icon: Copy, run: () => app.copy(c.name) })
+      if (a) {
+        m.push(SEP)
+        m.push({ label: 'Edit role…', Icon: Pencil, run: () => form('alter-user') })
+        m.push({ label: 'Drop role…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop role “${c.name}”? This cannot be undone.`, () => api.dropRole(id, c.name), true) })
+      }
     } else if (c.type === 'table') {
       m.push({ head: `${c.schema}.${c.table}` })
       m.push({ label: 'Open data', Icon: Table2, key: 'F4', run: tab.grid })
@@ -164,6 +181,15 @@ export default function ContextMenu({ x, y, payload, onClose }: {
   function exportAs(format: string) {
     close()
     api.exportTable(id, payload.schema!, payload.table!, '', '', format).catch(e => app.notify(String(e.message || e), 'error'))
+  }
+
+  // Dropping a schema needs a second decision: CASCADE (take contained objects
+  // with it) vs RESTRICT (fail if not empty). A plain DROP would error on any
+  // non-empty schema, so ask explicitly rather than silently picking one.
+  function dropSchema(schema: string) {
+    if (!confirm(`Drop schema “${schema}”? This cannot be undone.`)) return
+    const cascade = confirm(`Also drop ALL objects inside “${schema}”?\n\nOK = CASCADE (drop contained tables/views/etc.)\nCancel = RESTRICT (fail if the schema is not empty)`)
+    api.dropSchema(id, schema, cascade).then(() => app.refreshConn(id)).catch(e => app.notify(String(e.message || e), 'error'))
   }
 
   const onItem = (it: MenuItem, i: number) => {

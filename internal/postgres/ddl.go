@@ -29,6 +29,97 @@ func Exec(ctx context.Context, pool *pgxpool.Pool, sql string) (*Result, error) 
 	return Query(ctx, pool, sql, false)
 }
 
+// DropSchemaSQL builds DROP SCHEMA, optionally CASCADE (drops contained objects
+// too — the caller is expected to confirm that with the user first).
+func DropSchemaSQL(name string, cascade bool) string {
+	s := "DROP SCHEMA " + quoteIdent(name)
+	if cascade {
+		s += " CASCADE"
+	}
+	return s
+}
+
+// AlterSchemaSQL builds the statement list to rename a schema and/or reassign
+// its owner. Blank/no-op fields are skipped; an empty result means "no change".
+// Owner is applied before any rename so the name in both statements matches.
+func AlterSchemaSQL(name, newName, owner string) []string {
+	var stmts []string
+	if owner != "" {
+		stmts = append(stmts, "ALTER SCHEMA "+quoteIdent(name)+" OWNER TO "+quoteIdent(owner))
+	}
+	if newName != "" && newName != name {
+		stmts = append(stmts, "ALTER SCHEMA "+quoteIdent(name)+" RENAME TO "+quoteIdent(newName))
+	}
+	return stmts
+}
+
+// RoleAttrs is the privilege set the create/alter-role forms collect.
+type RoleAttrs struct {
+	Login      bool
+	Super      bool
+	CreateDB   bool
+	CreateRole bool
+	Password   string // create: "" => no password; alter: "" => leave unchanged
+}
+
+// roleOptions renders the WITH option list for CREATE/ALTER ROLE. When explicit
+// is true (ALTER) it emits the negative form of each unset flag so the role's
+// privileges are set to exactly what the form shows; CREATE omits negatives and
+// relies on Postgres defaults.
+func roleOptions(a RoleAttrs, explicit bool) []string {
+	flag := func(on bool, yes, no string) string {
+		if on {
+			return yes
+		}
+		if explicit {
+			return no
+		}
+		return ""
+	}
+	opts := []string{}
+	for _, o := range []string{
+		flag(a.Login, "LOGIN", "NOLOGIN"),
+		flag(a.Super, "SUPERUSER", "NOSUPERUSER"),
+		flag(a.CreateDB, "CREATEDB", "NOCREATEDB"),
+		flag(a.CreateRole, "CREATEROLE", "NOCREATEROLE"),
+	} {
+		if o != "" {
+			opts = append(opts, o)
+		}
+	}
+	if a.Password != "" {
+		opts = append(opts, "PASSWORD "+QuoteLiteral(a.Password))
+	}
+	return opts
+}
+
+// CreateRoleSQL builds CREATE ROLE … WITH <options>. A role that can log in is
+// what Postgres calls a "user"; the rest are optional privilege flags.
+func CreateRoleSQL(name string, a RoleAttrs) string {
+	opts := roleOptions(a, false)
+	if len(opts) == 0 {
+		return "CREATE ROLE " + quoteIdent(name)
+	}
+	return "CREATE ROLE " + quoteIdent(name) + " WITH " + strings.Join(opts, " ")
+}
+
+// AlterRoleSQL builds the statement list to set a role's privileges/password to
+// exactly what the form shows and, optionally, rename it. RENAME can't share a
+// statement with WITH, so it lands as a separate trailing statement.
+func AlterRoleSQL(name, newName string, a RoleAttrs) []string {
+	var stmts []string
+	if opts := roleOptions(a, true); len(opts) > 0 {
+		stmts = append(stmts, "ALTER ROLE "+quoteIdent(name)+" WITH "+strings.Join(opts, " "))
+	}
+	if newName != "" && newName != name {
+		stmts = append(stmts, "ALTER ROLE "+quoteIdent(name)+" RENAME TO "+quoteIdent(newName))
+	}
+	return stmts
+}
+
+// DropRoleSQL builds DROP ROLE.
+func DropRoleSQL(name string) string { return "DROP ROLE " + quoteIdent(name) }
+
 // ExecScript runs several statements as one atomic transaction. It backs the
 // table designer, where a single "create"/"modify" produces a list of DDL
 // statements (column adds, constraint changes, index rebuilds, a rename…) that

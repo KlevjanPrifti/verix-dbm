@@ -50,6 +50,11 @@ func (s *Server) mountAPI(r chi.Router) {
 	r.Post("/c/{id}/pg/table/truncate", s.apiTruncate)
 	r.Post("/c/{id}/pg/column/drop", s.apiDropColumn)
 	r.Post("/c/{id}/pg/index/drop", s.apiDropIndex)
+	r.Post("/c/{id}/pg/schema/drop", s.apiDropSchema)
+	r.Post("/c/{id}/pg/schema/alter", s.apiAlterSchema)
+	r.Get("/c/{id}/pg/roles", s.apiRoles)
+	r.Post("/c/{id}/pg/role/drop", s.apiDropRole)
+	r.Post("/c/{id}/pg/role/alter", s.apiAlterRole)
 
 	r.Get("/c/{id}/redis/keys", s.apiRedisKeys)
 	r.Get("/c/{id}/redis/value", s.apiRedisValue)
@@ -702,6 +707,148 @@ func (s *Server) execDDLAudit(r *http.Request, u auth.User, c store.Connection, 
 	_, err := postgres.Exec(r.Context(), pool, sql)
 	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: action, Detail: truncate(sql, 500), Success: err == nil})
 	return err
+}
+
+// execScriptAudit runs a statement list atomically (postgres.ExecScript) and
+// records the whole list as one audit entry — the twin of execDDLAudit for the
+// rename/owner/privilege edits that compile to more than one statement.
+func (s *Server) execScriptAudit(r *http.Request, u auth.User, c store.Connection, pool *pgxpool.Pool, action string, stmts []string) error {
+	err := postgres.ExecScript(r.Context(), pool, stmts)
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: action, Detail: truncate(strings.Join(stmts, "; "), 500), Success: err == nil})
+	return err
+}
+
+// Schemas: drop / alter. Dropping a schema can take its tables with it, so it is
+// admin-gated like drop-table; renaming/reassigning owner is a write op.
+
+func (s *Server) apiDropSchema(w http.ResponseWriter, r *http.Request) {
+	u, c, pool, ok := s.apiRequireWrite(w, r, true)
+	if !ok {
+		return
+	}
+	var in struct {
+		Schema  string `json:"schema"`
+		Cascade bool   `json:"cascade"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	if strings.TrimSpace(in.Schema) == "" {
+		apiErr(w, http.StatusBadRequest, "schema is required")
+		return
+	}
+	if err := s.execDDLAudit(r, u, c, pool, "pg_ddl_drop_schema", postgres.DropSchemaSQL(in.Schema, in.Cascade)); err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) apiAlterSchema(w http.ResponseWriter, r *http.Request) {
+	u, c, pool, ok := s.apiRequireWrite(w, r, false)
+	if !ok {
+		return
+	}
+	var in struct {
+		Schema  string `json:"schema"`
+		NewName string `json:"newName"`
+		Owner   string `json:"owner"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	stmts := postgres.AlterSchemaSQL(strings.TrimSpace(in.Schema), strings.TrimSpace(in.NewName), strings.TrimSpace(in.Owner))
+	if len(stmts) == 0 {
+		apiErr(w, http.StatusBadRequest, "nothing to change")
+		return
+	}
+	if err := s.execScriptAudit(r, u, c, pool, "pg_ddl_alter_schema", stmts); err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// Roles: list / drop / alter. Roles are cluster-wide, so every endpoint here is
+// admin-gated (listing too — it exposes the cluster's accounts).
+
+func (s *Server) apiRoles(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.FromContext(r.Context())
+	if !u.Admin {
+		apiErr(w, http.StatusForbidden, "admin required")
+		return
+	}
+	_, pool, ok := s.apiPGPool(w, r)
+	if !ok {
+		return
+	}
+	roles, err := postgres.Roles(r.Context(), pool)
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"roles": roles})
+}
+
+func (s *Server) apiDropRole(w http.ResponseWriter, r *http.Request) {
+	u, c, pool, ok := s.apiRequireWrite(w, r, true)
+	if !ok {
+		return
+	}
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	if strings.TrimSpace(in.Name) == "" {
+		apiErr(w, http.StatusBadRequest, "role name is required")
+		return
+	}
+	if err := s.execDDLAudit(r, u, c, pool, "pg_ddl_drop_role", postgres.DropRoleSQL(in.Name)); err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) apiAlterRole(w http.ResponseWriter, r *http.Request) {
+	u, c, pool, ok := s.apiRequireWrite(w, r, true)
+	if !ok {
+		return
+	}
+	var in struct {
+		Name       string `json:"name"`
+		NewName    string `json:"newName"`
+		Password   string `json:"password"`
+		Login      bool   `json:"login"`
+		CreateDB   bool   `json:"createdb"`
+		CreateRole bool   `json:"createrole"`
+		Superuser  bool   `json:"superuser"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	if strings.TrimSpace(in.Name) == "" {
+		apiErr(w, http.StatusBadRequest, "role name is required")
+		return
+	}
+	stmts := postgres.AlterRoleSQL(strings.TrimSpace(in.Name), strings.TrimSpace(in.NewName), postgres.RoleAttrs{
+		Login: in.Login, Super: in.Superuser, CreateDB: in.CreateDB, CreateRole: in.CreateRole, Password: in.Password,
+	})
+	if len(stmts) == 0 {
+		apiErr(w, http.StatusBadRequest, "nothing to change")
+		return
+	}
+	if err := s.execScriptAudit(r, u, c, pool, "pg_ddl_alter_role", stmts); err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // Redis

@@ -12,6 +12,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   Database, Box, Table2, Eye, Folder, KeyRound, Key, Link2, Hash, Type, Clock,
   ToggleLeft, Braces, Fingerprint, ListTree, Terminal, Columns3, Circle,
+  User, Users,
 } from 'lucide-react'
 import { DB_KINDS } from './dbkinds'
 
@@ -25,7 +26,7 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
   schema: Box, table: Table2, view: Eye, matview: Eye, folder: Folder,
   col: Columns3, pk: KeyRound, key: Key, fkey: Link2, idx: ListTree,
   num: Hash, text: Type, time: Clock, bool: ToggleLeft, json: Braces,
-  uuid: Fingerprint, console: Terminal,
+  uuid: Fingerprint, console: Terminal, roles: Users, role: User,
 }
 
 export function Ico({ name, className }: { name: string; className?: string }) {
@@ -43,5 +44,5 @@ export {
   ChevronDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowRight, Check,
   Copy, Settings, Trash2, Download, Code, FileCode, FileJson, Info, Search,
   Pencil, SquarePen, Eraser, LogOut, Filter, FilterX, Maximize2, Sigma, Undo2,
-  TableProperties, UserPlus,
+  TableProperties, UserPlus, User, Users,
 } from 'lucide-react'

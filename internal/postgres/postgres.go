@@ -15,16 +15,55 @@ import (
 
 // Table is one relation in a schema.
 type Table struct {
-	Schema    string
-	Name      string
-	Kind      string // table | view | matview
-	EstRows   int64
+	Schema  string
+	Name    string
+	Kind    string // table | view | matview
+	EstRows int64
 }
 
 // Schema groups its tables.
 type Schema struct {
 	Name   string
 	Tables []Table
+}
+
+// Role is a cluster role/user (pg_roles). It carries the privilege attributes
+// the role editor prefills from, plus the connection limit and validity the
+// tree shows. Cluster-wide, so the API gates listing/editing to admins.
+type Role struct {
+	Name        string
+	Super       bool
+	CreateDB    bool
+	CreateRole  bool
+	CanLogin    bool
+	Replication bool
+	ConnLimit   int
+	ValidUntil  string
+}
+
+// Roles lists cluster roles (pg_roles), skipping the built-in pg_* predefined
+// roles so the UI shows only user-managed accounts.
+func Roles(ctx context.Context, pool *pgxpool.Pool) ([]Role, error) {
+	const q = `
+SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolcanlogin, rolreplication,
+       rolconnlimit, COALESCE(rolvaliduntil::text, '')
+FROM pg_roles
+WHERE rolname NOT LIKE 'pg\_%'
+ORDER BY rolname`
+	rows, err := pool.Query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Role
+	for rows.Next() {
+		var rl Role
+		if err := rows.Scan(&rl.Name, &rl.Super, &rl.CreateDB, &rl.CreateRole, &rl.CanLogin, &rl.Replication, &rl.ConnLimit, &rl.ValidUntil); err != nil {
+			return nil, err
+		}
+		out = append(out, rl)
+	}
+	return out, rows.Err()
 }
 
 // Result is the outcome of a query: either a row set (IsSelect) or a command tag.

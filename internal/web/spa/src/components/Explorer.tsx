@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useApp, type NodePayload } from '../appctx'
-import type { Column, Connection, Index, Key, Schema } from '../types'
+import type { Column, Connection, Index, Key, Role, Schema } from '../types'
 import { Ico, Plus, Terminal, Trash2, MoreHorizontal } from '../icons'
 import { DB_KINDS } from '../dbkinds'
 
@@ -99,7 +99,7 @@ function ConnNode({ conn }: { conn: Connection }) {
           : data.error ? <div className="tree-err code">{data.error}</div>
           : data.kind === 'redis'
             ? <div className="tree-row leaf" onClick={openConsole}><Ico name="keyspace" /><span className="tree-name">keyspace</span></div>
-            : <SchemaList connId={conn.id} schemas={data.schemas} />}
+            : <><SchemaList connId={conn.id} schemas={data.schemas} />{app.caps.admin && <RolesNode connId={conn.id} />}</>}
       </div>
     </details>
   )
@@ -217,6 +217,64 @@ function IndexLeaf({ connId, schema, table, ix }: { connId: number; schema: stri
       <Kebab payload={payload} />
     </div>
   )
+}
+
+// RolesNode is the admin-only "roles" folder under a Postgres connection: a
+// lazy-loaded list of cluster roles/users. It reloads on the connection's
+// refresh token, so create/edit/drop from the menu shows up immediately.
+function RolesNode({ connId }: { connId: number }) {
+  const app = useApp()
+  const [roles, setRoles] = useState<Role[] | null>(null)
+  const [err, setErr] = useState('')
+  const [openOnce, setOpenOnce] = useState(false)
+  const token = app.refreshToken(connId)
+  useEffect(() => {
+    if (!openOnce) return
+    setErr('')
+    api.roles(connId).then(r => setRoles(r.roles || [])).catch(x => { setErr(String(x.message || x)); setRoles([]) })
+  }, [openOnce, token, connId])
+  const payload: NodePayload = { type: 'roles', connId, name: 'roles' }
+  return (
+    <details className="tree-node" onToggle={e => { if ((e.target as HTMLDetailsElement).open) setOpenOnce(true) }}>
+      <summary className="tree-row"
+        onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
+        <Ico name="roles" /><span className="tree-name">roles</span>
+        {roles && <span className="count">{roles.length}</span>}
+        <Kebab payload={payload} />
+      </summary>
+      <div className="node-children">
+        {err ? <div className="tree-err code">{err}</div>
+          : roles === null ? <span className="dim loading">…</span>
+          : roles.length === 0 ? <div className="tree-empty dim">none</div>
+          : roles.map(r => <RoleLeaf key={r.Name} connId={connId} role={r} />)}
+      </div>
+    </details>
+  )
+}
+
+function RoleLeaf({ connId, role }: { connId: number; role: Role }) {
+  const app = useApp()
+  const payload: NodePayload = { type: 'role', connId, name: role.Name, role }
+  const attrs = roleAttrText(role)
+  return (
+    <div className="tree-row leaf" title={attrs ? `${role.Name} · ${attrs}` : role.Name}
+      onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
+      <Ico name="role" className={role.Super ? 'pk' : undefined} />
+      <span className="tree-name">{role.Name}</span>
+      {attrs && <span className="col-type dim">{attrs}</span>}
+      <Kebab payload={payload} />
+    </div>
+  )
+}
+
+// roleAttrText summarises a role's notable privileges for the tree row.
+function roleAttrText(r: Role): string {
+  const t: string[] = []
+  if (r.Super) t.push('super')
+  if (!r.CanLogin) t.push('nologin')
+  if (r.CreateDB) t.push('createdb')
+  if (r.CreateRole) t.push('createrole')
+  return t.join(' · ')
 }
 
 // Kebab opens the same context menu as right-click — the touch-friendly path.

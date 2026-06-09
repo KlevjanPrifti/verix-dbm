@@ -35,6 +35,18 @@ export interface ExplorerData {
   error?: string
 }
 
+// Mirrors postgres.Role — a cluster role/user with its privilege attributes.
+export interface Role {
+  Name: string
+  Super: boolean
+  CreateDB: boolean
+  CreateRole: boolean
+  CanLogin: boolean
+  Replication: boolean
+  ConnLimit: number
+  ValidUntil: string
+}
+
 export interface Column {
   name: string
   type: string
