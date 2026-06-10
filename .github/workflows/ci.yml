@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  go:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,24 +14,23 @@ jobs:
         with:
           go-version: '1.26'
           check-latest: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Build the SPA first: typechecks the frontend and produces spa/dist,
+      # which internal/web/spa.go embeds via go:embed.
+      - name: install SPA deps
+        run: npm --prefix internal/web/spa ci
+      - name: typecheck + build SPA
+        run: npm --prefix internal/web/spa run build
+      - name: npm audit (high+)
+        run: npm --prefix internal/web/spa audit --audit-level=high
+        continue-on-error: true
+
       - name: go vet
         run: go vet ./...
       - name: go test
         run: go test ./...
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-
-  spa:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: install
-        run: npm --prefix internal/web/spa ci
-      - name: typecheck + build
-        run: npm --prefix internal/web/spa run build
-      - name: npm audit (high+)
-        run: npm --prefix internal/web/spa audit --audit-level=high
-        continue-on-error: true
