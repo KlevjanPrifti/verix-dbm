@@ -192,7 +192,7 @@ func (s *Server) apiGetConnection(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusNotFound, "connection not found")
 		return
 	}
-	// The stored password ciphertext is intentionally NOT returned — the browser
+	// The stored password ciphertext is intentionally NOT returned the browser
 	// never needs it (duplication carries it server-side via copyFrom).
 	writeJSON(w, http.StatusOK, map[string]any{"connection": toConnDTO(c)})
 }
@@ -629,8 +629,8 @@ func (s *Server) apiRunForm(w http.ResponseWriter, r *http.Request) {
 
 // apiApplyTable executes the statement list a table-designer "create"/"modify"
 // produced, atomically (see postgres.ExecScript). The SQL is built and previewed
-// client-side, so this mirrors the query console's trust model — any write user
-// can already run arbitrary DDL there — while adding transactional safety and a
+// client-side, so this mirrors the query console's trust model any write user
+// can already run arbitrary DDL there while adding transactional safety and a
 // single audit entry for the whole edit.
 func (s *Server) apiApplyTable(w http.ResponseWriter, r *http.Request) {
 	u, c, pool, ok := s.apiRequireWrite(w, r, false)
@@ -724,7 +724,7 @@ func (s *Server) execDDLAudit(r *http.Request, u auth.User, c store.Connection, 
 }
 
 // execScriptAudit runs a statement list atomically (postgres.ExecScript) and
-// records the whole list as one audit entry — the twin of execDDLAudit for the
+// records the whole list as one audit entry the twin of execDDLAudit for the
 // rename/owner/privilege edits that compile to more than one statement.
 func (s *Server) execScriptAudit(r *http.Request, u auth.User, c store.Connection, pool *pgxpool.Pool, action string, stmts []string) error {
 	err := postgres.ExecScript(r.Context(), pool, stmts)
@@ -786,7 +786,7 @@ func (s *Server) apiAlterSchema(w http.ResponseWriter, r *http.Request) {
 }
 
 // Roles: list / drop / alter. Roles are cluster-wide, so every endpoint here is
-// admin-gated (listing too — it exposes the cluster's accounts).
+// admin-gated (listing too it exposes the cluster's accounts).
 
 func (s *Server) apiRoles(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.FromContext(r.Context())

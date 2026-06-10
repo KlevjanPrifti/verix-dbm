@@ -15,7 +15,7 @@
       </tbody>
     </table>
   </div>
-  {{if .Keys}}<h4 class="hud-label doc-h">Keys</h4><ul class="doc-list">{{range .Keys}}<li class="code">{{.Name}} — {{.Def}}</li>{{end}}</ul>{{end}}
+  {{if .Keys}}<h4 class="hud-label doc-h">Keys</h4><ul class="doc-list">{{range .Keys}}<li class="code">{{.Name}} {{.Def}}</li>{{end}}</ul>{{end}}
   {{if .Indexes}}<h4 class="hud-label doc-h">Indexes</h4><ul class="doc-list">{{range .Indexes}}<li class="code">{{.Def}}</li>{{end}}</ul>{{end}}
   {{end}}
 </div>

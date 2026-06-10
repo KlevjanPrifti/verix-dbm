@@ -90,7 +90,7 @@ func Get(ctx context.Context, c *redis.Client, key string) (*Value, error) {
 	case "none":
 		return nil, fmt.Errorf("key %q does not exist", key)
 	default:
-		v.Text = fmt.Sprintf("(unsupported type %q — use the command console)", typ)
+		v.Text = fmt.Sprintf("(unsupported type %q use the command console)", typ)
 	}
 	return v, nil
 }

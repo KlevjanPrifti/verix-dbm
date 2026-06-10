@@ -1,4 +1,4 @@
-# verix-dbm — Dokploy production topology.
+# verix-dbm Dokploy production topology.
 # Single Go binary serving the HTMX UI + API. No bundled DB; it connects to the
 # targets you register (incl. your SHARED Postgres/Valkey). It joins the external
 # `shared` network so it can resolve their internal hostnames.
@@ -18,7 +18,7 @@ services:
       # 32-byte key (64 hex chars) that encrypts saved connection passwords.
       # Generate with: openssl rand -hex 32
       DBM_ENC_KEY: ${DBM_ENC_KEY:?DBM_ENC_KEY must be set (64 hex chars)}
-      # Keycloak OIDC — leave OIDC_ISSUER empty ONLY for local dev (auto-admin).
+      # Keycloak OIDC leave OIDC_ISSUER empty ONLY for local dev (auto-admin).
       OIDC_ISSUER: ${OIDC_ISSUER}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}

@@ -13,11 +13,11 @@ import (
 // serverSideBlocked reports whether the given SQL fragments (a console statement,
 // or a grid/export WHERE+ORDER BY) use a server-side execution / file primitive
 // that must be denied to this user. Admins are exempt (they're trusted with the
-// connection's full DB-role privileges); everyone else — including read-only
-// users whose filters would otherwise run such functions — is blocked. The real
+// connection's full DB-role privileges); everyone else including read-only
+// users whose filters would otherwise run such functions is blocked. The real
 // control is using a least-privileged DB role on each connection (see SECURITY.md);
 // this is defense in depth. (H3)
-const serverSideBlockedMsg = "blocked: server-side program execution / file access is restricted to admins — see SECURITY.md"
+const serverSideBlockedMsg = "blocked: server-side program execution / file access is restricted to admins see SECURITY.md"
 
 func serverSideBlocked(u auth.User, fragments ...string) bool {
 	if u.Admin {

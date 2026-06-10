@@ -7,7 +7,7 @@ import DocTab from './tabs/DocTab'
 import UsagesTab from './tabs/UsagesTab'
 
 // The tabbed workspace. Tabs stay mounted (hidden when inactive) so console
-// text and grid filters survive switching — the previous HTMX shell reloaded
+// text and grid filters survive switching the previous HTMX shell reloaded
 // each tab on select and lost that state.
 export default function Tabs({ tabs, active, onSelect, onClose, onToggleDrawer }: {
   tabs: TabDef[]

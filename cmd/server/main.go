@@ -1,4 +1,4 @@
-// verix-dbm — a low-footprint web DB manager for PostgreSQL and Redis/Valkey.
+// verix-dbm a low-footprint web DB manager for PostgreSQL and Redis/Valkey.
 package main
 
 import (

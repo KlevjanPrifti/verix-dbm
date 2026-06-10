@@ -37,7 +37,7 @@ export default function DocTab({ connId, schema, table }: { connId: number; sche
         </div>
         {d.keys && d.keys.length > 0 && (
           <><h4 className="hud-label doc-h">Keys</h4>
-            <ul className="doc-list">{d.keys.map(k => <li key={k.Name} className="code">{k.Name} — {k.Def}</li>)}</ul></>
+            <ul className="doc-list">{d.keys.map(k => <li key={k.Name} className="code">{k.Name} {k.Def}</li>)}</ul></>
         )}
         {d.indexes && d.indexes.length > 0 && (
           <><h4 className="hud-label doc-h">Indexes</h4>

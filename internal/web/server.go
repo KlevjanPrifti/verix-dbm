@@ -53,7 +53,7 @@ func (s *Server) Router() http.Handler {
 	// Logout is POST + CSRF (not GET) so a cross-site page can't force a logout.
 	r.Post("/auth/logout", s.auth.Logout)
 
-	// A generous per-user limiter on the authed surface — a backstop against a
+	// A generous per-user limiter on the authed surface a backstop against a
 	// runaway client or scripted abuse of the query/command endpoints, without
 	// throttling normal interactive use. Keyed by user so a shared egress IP
 	// doesn't pool everyone together.
@@ -87,7 +87,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/c/{id}/pg/doc", s.pgDoc)
 		r.Get("/c/{id}/pg/usages", s.pgUsages)
 		r.Get("/c/{id}/export", s.exportTable)
-		// Mutating DDL — guarded by CSRF + write/admin + read-only in the handlers.
+		// Mutating DDL guarded by CSRF + write/admin + read-only in the handlers.
 		r.Get("/c/{id}/pg/form", s.pgDDLForm)
 		r.Post("/c/{id}/pg/ddl/run", s.pgRunForm)
 		r.Post("/c/{id}/pg/table/drop", s.pgDropTable)

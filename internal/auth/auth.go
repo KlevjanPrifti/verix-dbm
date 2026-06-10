@@ -86,7 +86,7 @@ func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
 		a.provider = p
 		a.verifier = p.Verifier(&oidc.Config{ClientID: cfg.OIDCClientID})
 		// Access tokens are JWTs signed by the same realm but audienced to the
-		// resource server, not the client — so verify signature/issuer/expiry but
+		// resource server, not the client so verify signature/issuer/expiry but
 		// skip the audience check. Used to validate realm roles before trusting them.
 		a.atVerifier = p.Verifier(&oidc.Config{ClientID: cfg.OIDCClientID, SkipClientIDCheck: true})
 		// Pull the RP-initiated logout endpoint out of the discovery document.
@@ -150,7 +150,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 }
 
 // forbidden tells an authenticated user they lack any verix-dbm role. It's a
-// dead end on purpose — redirecting to login would just loop, since they already
+// dead end on purpose redirecting to login would just loop, since they already
 // have a valid session.
 func (a *Authenticator) forbidden(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -215,7 +215,7 @@ func (a *Authenticator) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Keycloak places realm roles in the access token by default and only in the
-	// ID token if a mapper opts in — so merge roles from both. The access token is
+	// ID token if a mapper opts in so merge roles from both. The access token is
 	// signature-verified (atVerifier) before we trust its roles; if it isn't a
 	// verifiable JWT we fall back to the ID token's roles only.
 	roles := claims.RealmAccess.Roles
@@ -384,7 +384,7 @@ func secure(cfg *config.Config) bool {
 // token returns a 192-bit random hex token. A crypto/rand failure is fatal to
 // the request rather than tolerated: returning a predictable (e.g. all-zero)
 // session/CSRF token would be far worse than a 500. Recoverer turns the panic
-// into a failed request, so we fail closed — no token is ever minted weak.
+// into a failed request, so we fail closed no token is ever minted weak.
 func token() string {
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {

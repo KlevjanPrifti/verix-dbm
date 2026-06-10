@@ -1,4 +1,4 @@
-/* verix-dbm — SyncLink "HUD" theme, hand-authored (no Tailwind).
+/* verix-dbm SyncLink "HUD" theme, hand-authored (no Tailwind).
    Tokens + component classes ported from synclink-theme-guide.md §2–§4.
    Fonts: loaded from Google Fonts when online; degrade to system fonts.
    TODO: self-host Share Tech Mono + Inter as woff2 for strict CSP. */
@@ -28,7 +28,7 @@
 * { box-sizing: border-box; }
 
 /* React mounts into #root; body.hud-grid is a full-viewport flex column, so the
-   mount node must grow to fill it — without this the whole app collapses to its
+   mount node must grow to fill it without this the whole app collapses to its
    content height and the Explorer never reaches the bottom of the screen. */
 #root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
@@ -52,7 +52,7 @@ a:hover { text-decoration: underline; }
 ::-webkit-scrollbar-thumb { background: rgba(var(--accent-rgb),0.25); }
 * { scrollbar-width: thin; scrollbar-color: rgba(var(--accent-rgb),0.2) transparent; }
 
-/* Faint cyan grid app shell — full-viewport, IDE-style chrome */
+/* Faint cyan grid app shell full-viewport, IDE-style chrome */
 .hud-grid {
   background-color: var(--ink);
   background-image:
@@ -93,7 +93,7 @@ a:hover { text-decoration: underline; }
 .container { flex: 1; min-height: 0; padding: 1rem 1.25rem; overflow: auto; }
 .container.boxed { max-width: 1280px; margin: 0 auto; width: 100%; padding: 1.75rem 1.5rem; }
 
-/* Panels — flat by default, brackets at the corners */
+/* Panels flat by default, brackets at the corners */
 .hud-panel { position: relative; background: var(--panel); border: 1px solid rgba(var(--accent-rgb),0.25); border-radius: 2px; }
 .hud-panel::before, .hud-panel::after { content: ''; position: absolute; width: 10px; height: 10px; pointer-events: none; }
 .hud-panel::before { top: 0; left: 0; border-top: 2px solid rgba(var(--accent-rgb),0.6); border-left: 2px solid rgba(var(--accent-rgb),0.6); }
@@ -141,7 +141,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .alert.error { border-color: rgba(255,70,70,0.5); background: rgba(255,70,70,0.08); color: #ff9a9a; }
 .alert.warn { border-color: rgba(255,180,50,0.5); background: rgba(255,180,50,0.08); color: #ffcf7a; }
 
-/* Data grids — dense, spreadsheet-like, ruled columns */
+/* Data grids dense, spreadsheet-like, ruled columns */
 .tablewrap { overflow: auto; max-height: 60vh; border: 1px solid rgba(var(--accent-rgb),0.15); border-radius: 2px; }
 table.data { width: 100%; border-collapse: collapse; font-size: .82rem; }
 table.data th { position: sticky; top: 0; z-index: 1; background: var(--panel-raised); font-family: var(--mono); text-transform: uppercase; letter-spacing: .06em; font-size: .64rem; color: rgba(var(--accent-rgb),0.75); text-align: left; padding: .4rem .65rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.3); border-right: 1px solid rgba(var(--accent-rgb),0.08); white-space: nowrap; }
@@ -151,7 +151,7 @@ table.data tbody tr:nth-child(even) { background: rgba(var(--accent-rgb),0.025);
 table.data tbody tr:hover { background: rgba(var(--accent-rgb),0.09); }
 table.data tbody tr:hover td { color: var(--hud); }
 
-/* Workspace (navigator + main) — fills the work area, panes scroll on their own */
+/* Workspace (navigator + main) fills the work area, panes scroll on their own */
 .workspace { display: grid; grid-template-columns: 280px 1fr; gap: 1rem; align-items: stretch; height: 100%; }
 @media (max-width: 900px) { .workspace { grid-template-columns: 1fr; height: auto; } }
 .sidebar { padding: .75rem; height: 100%; min-height: 0; overflow: auto; }
@@ -193,16 +193,16 @@ table.data tbody tr:hover td { color: var(--hud); }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Workbench — DataGrip-style IDE shell (Explorer + tabbed workspace + grid),
+   Workbench DataGrip-style IDE shell (Explorer + tabbed workspace + grid),
    themed entirely with the existing HUD tokens.
    ════════════════════════════════════════════════════════════════════════════ */
 [x-cloak] { display: none !important; }
 
 /* The workbench fills the chrome-free area. `.container` is a flex item whose
    height comes from flex:1 (computed `auto`), so a `height:100%` child won't
-   resolve reliably — make this container a flex column and let `.ide` grow. */
+   resolve reliably make this container a flex column and let `.ide` grow. */
 .container:has(.ide) { display: flex; flex-direction: column; overflow: hidden; }
-/* grid-template-rows: minmax(0,1fr) — without an explicit row track the single
+/* grid-template-rows: minmax(0,1fr) without an explicit row track the single
    implicit row sizes to content, so .work (and every tab's inner scroll area)
    grows past the viewport instead of being bounded, and nothing can scroll. The
    minmax(0,…) floor lets the row shrink below content so inner overflow works. */
@@ -249,7 +249,7 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .row-act:hover { background: rgba(var(--accent-rgb),0.15); color: var(--hud); }
 .row-act.danger:hover { background: rgba(255,70,70,0.2); color: #ff9a9a; }
 
-/* Tree icons — Lucide SVGs, tinted to the theme via currentColor (see icons.tsx) */
+/* Tree icons Lucide SVGs, tinted to the theme via currentColor (see icons.tsx) */
 .ico { display: inline-flex; align-items: center; justify-content: center; width: 1.05em; height: 1.05em; flex-shrink: 0; color: rgba(var(--accent-rgb),0.8); }
 .ico svg { width: 100%; height: 100%; stroke-width: 2; }
 .ico-postgres { color: #3b9eff; }
@@ -303,7 +303,7 @@ button.logout-link:hover { text-decoration: underline; }
 .ctx-key { margin-left: auto; font-family: var(--mono); font-size: .6rem; color: rgba(var(--accent-rgb),0.45); padding-left: 1rem; }
 .menu-sep { height: 1px; background: rgba(var(--accent-rgb),0.15); margin: .25rem .15rem; }
 
-/* nested submenus — fly-out on desktop, accordion on touch (.sheet) */
+/* nested submenus fly-out on desktop, accordion on touch (.sheet) */
 .menu-row { position: relative; }
 .ctx-menu .menu-item .mi-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .ctx-menu .menu-item.has-children.expanded { background: rgba(var(--accent-rgb),0.12); color: var(--hud); }
@@ -387,7 +387,7 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .draft-input { width: 100%; box-sizing: border-box; background: var(--panel-raised); border: 1px solid rgba(123,216,143,0.6); border-radius: 2px; color: var(--hud); padding: .15rem .35rem; margin: -.15rem -.2rem; font-size: inherit; }
 .draft-input:focus { outline: none; border-color: #7bd88f; }
 
-/* SQL console tab — the editor fills the pane; the result panel only claims
+/* SQL console tab the editor fills the pane; the result panel only claims
    space once a query has run (it's not rendered before then), so an empty
    console is all editor rather than a small box over dead space. */
 .console-pane { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
@@ -423,7 +423,7 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .ctx-menu .menu-item:disabled { opacity: .4; cursor: default; }
 .ctx-menu .menu-item:disabled:hover { background: none; color: var(--hud-dim); }
 
-/* Record / aggregate view — vertical column → value layout */
+/* Record / aggregate view vertical column → value layout */
 .record-view td { border-color: rgba(var(--accent-rgb),0.1); }
 .record-view .rv-key { white-space: nowrap; width: 1%; padding-right: 1.2rem; vertical-align: top; color: rgba(var(--accent-rgb),0.85); }
 .record-view .rv-val { word-break: break-word; color: var(--hud); }
@@ -431,7 +431,7 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 /* Table designer (DataGrip-style Create / Modify table) */
 .modal-wide { width: min(1040px, 95vw); height: min(720px, 92vh); display: flex; flex-direction: column; }
 .modal-wide .modal-body { flex: 1; min-height: 0; padding: 0; gap: 0; }
-/* HUD confirm/prompt dialog — narrower than the form modals; body text keeps
+/* HUD confirm/prompt dialog narrower than the form modals; body text keeps
    author-entered line breaks. */
 .dialog { width: min(440px, 92vw); }
 .dialog-body { margin: 0; white-space: pre-line; line-height: 1.5; color: var(--hud-dim); }
@@ -476,7 +476,7 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Mobile / touch — the workbench is a desktop IDE, so on small screens the
+   Mobile / touch the workbench is a desktop IDE, so on small screens the
    explorer becomes an off-canvas drawer, right-click menus get a ⋯ button, and
    hover-only affordances are promoted to always-visible with bigger tap targets.
    ════════════════════════════════════════════════════════════════════════════ */
@@ -548,7 +548,7 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
   /* Keep the workbench a bounded flex column on phones too (line 206 turns it
      into a scrolling block, which collapses the height chain and leaves the grid
      with no inner scroll viewport). Restoring the desktop chain lets .tablewrap
-     own the scroll — exactly as it does on desktop. min-width:0 on the flex
+     own the scroll exactly as it does on desktop. min-width:0 on the flex
      children lets a wide table scroll inside the pane instead of stretching it. */
   .container:has(.ide) { display: flex; flex-direction: column; overflow: hidden; }
   .tab-content, .grid-pane, .grid-body { min-width: 0; }
@@ -567,7 +567,7 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
   .topbar { gap: .7rem; padding: .5rem .7rem; }
   .brand { font-size: 1.05rem; flex-shrink: 0; }
   .topnav { gap: .8rem; flex-shrink: 0; }
-  .topnav a.on { display: none; } /* current page — redundant on phones */
+  .topnav a.on { display: none; } /* current page redundant on phones */
   .userbox { gap: .55rem; font-size: .64rem; min-width: 0; }
   .userbox .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .logout-link .logout-txt { display: none; } /* icon-only to save width */

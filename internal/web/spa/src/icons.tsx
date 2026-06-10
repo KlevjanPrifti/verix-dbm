@@ -1,11 +1,11 @@
-// Central icon set — every glyph in the app is a Lucide icon, so the UI stays
+// Central icon set every glyph in the app is a Lucide icon, so the UI stays
 // visually consistent and crisp at any zoom (SVG, not font glyphs).
 //
 // Two surfaces:
-//   • <Ico name="…" /> — type/category icons for the Explorer tree + designer.
+//   • <Ico name="…" /> type/category icons for the Explorer tree + designer.
 //     Colour comes from the `.ico-<name>` CSS classes (theme-aware), the SVG
 //     inherits it via currentColor.
-//   • The re-exported Lucide components below — used directly for toolbar
+//   • The re-exported Lucide components below used directly for toolbar
 //     buttons, the context menu, tabs, etc.
 
 import type { LucideIcon } from 'lucide-react'

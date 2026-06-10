@@ -4,11 +4,11 @@
 // special-cased Redis path. Every handler dispatches `kind == "redis"` → Redis,
 // everything else → PostgreSQL. So any database that speaks the PostgreSQL wire
 // protocol (CockroachDB, Greenplum, Redshift, …) works through the existing
-// engine for free — it only needs an entry here.
+// engine for free it only needs an entry here.
 //
 // To add a new PG-wire-compatible type: add one row with engine 'postgres'.
 // A genuinely different SQL/NoSQL engine additionally needs backend support
-// (a new introspection package + handler dispatch) — see the README/notes.
+// (a new introspection package + handler dispatch) see the README/notes.
 
 export type Engine = 'postgres' | 'redis'
 

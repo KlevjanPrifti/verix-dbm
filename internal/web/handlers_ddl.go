@@ -105,7 +105,7 @@ func (s *Server) pgUsages(w http.ResponseWriter, r *http.Request) {
 
 // requireWrite resolves the connection + pool while enforcing CSRF, write/admin
 // role, and the connection's read-only flag. It writes the error response and
-// returns ok=false on any failure — the client-side menu gating is UX only.
+// returns ok=false on any failure the client-side menu gating is UX only.
 func (s *Server) requireWrite(w http.ResponseWriter, r *http.Request, admin bool) (auth.User, store.Connection, *pgxpool.Pool, bool) {
 	u, _ := auth.FromContext(r.Context())
 	if !s.auth.CheckCSRF(r) {
@@ -137,7 +137,7 @@ func (s *Server) requireWrite(w http.ResponseWriter, r *http.Request, admin bool
 	return u, c, pool, true
 }
 
-// execDDL runs a generated statement, audits it, and — on success — asks the
+// execDDL runs a generated statement, audits it, and on success asks the
 // client to refresh the affected connection's subtree via an HX-Trigger header.
 // (Fetch-based callers ignore the header and refresh themselves.)
 func (s *Server) execDDL(w http.ResponseWriter, r *http.Request, u auth.User, c store.Connection, pool *pgxpool.Pool, action, sql string) error {

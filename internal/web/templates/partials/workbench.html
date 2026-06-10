@@ -46,7 +46,7 @@
 {{end}}
 {{end}}
 
-{{/* Explorer: a Redis connection — a single console entry */}}
+{{/* Explorer: a Redis connection a single console entry */}}
 {{define "explorerRedis"}}
 {{$conn := .Conn}}
 {{if .Err}}<div class="tree-err code">{{.Err}}</div>{{end}}
@@ -238,7 +238,7 @@
 {{if .OK}}<span class="ok hud-label">✓ connection ok</span>{{else}}<span class="bad hud-label code">✗ {{.Err}}</span>{{end}}
 {{end}}
 
-{{/* Edit existing connection (Properties) — loaded via HTMX */}}
+{{/* Edit existing connection (Properties) loaded via HTMX */}}
 {{define "connEditModal"}}
 {{$c := .Conn}}
 <div class="modal-overlay" x-data="{open:true}" x-show="open" @keydown.escape.window="open=false">

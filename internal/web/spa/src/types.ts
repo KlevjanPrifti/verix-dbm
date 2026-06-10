@@ -8,7 +8,7 @@ export interface Me {
 export interface Connection {
   id: number
   name: string
-  kind: string // a DB_KINDS id — see dbkinds.ts (postgres/cockroach/redshift/redis/…)
+  kind: string // a DB_KINDS id see dbkinds.ts (postgres/cockroach/redshift/redis/…)
   host: string
   port: number
   dbname: string
@@ -35,7 +35,7 @@ export interface ExplorerData {
   error?: string
 }
 
-// Mirrors postgres.Role — a cluster role/user with its privilege attributes.
+// Mirrors postgres.Role a cluster role/user with its privilege attributes.
 export interface Role {
   Name: string
   Super: boolean

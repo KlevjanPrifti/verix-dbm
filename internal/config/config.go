@@ -34,7 +34,7 @@ type Config struct {
 	TrustProxy bool
 
 	// DevMode auto-logs every request in as a local admin (no Keycloak). It must
-	// be requested explicitly via DBM_DEV_MODE=true — a missing OIDC config no
+	// be requested explicitly via DBM_DEV_MODE=true a missing OIDC config no
 	// longer silently disables auth (that would fail open in production).
 	DevMode bool
 }
@@ -64,7 +64,7 @@ func Load() (*Config, error) {
 	}
 
 	if c.DevMode {
-		log.Println("config: DBM_DEV_MODE=true — DEV mode, auto-login as a local admin. NEVER enable this in production.")
+		log.Println("config: DBM_DEV_MODE=true DEV mode, auto-login as a local admin. NEVER enable this in production.")
 		return c, nil
 	}
 	// Production: OIDC must be fully configured or we refuse to start. Booting
@@ -74,7 +74,7 @@ func Load() (*Config, error) {
 			"or set DBM_DEV_MODE=true for local development. Refusing to start with auth disabled")
 	}
 	if c.OpenRead {
-		log.Println("config: DBM_OPEN_READ=true — every authenticated realm user is granted READ access to all connections.")
+		log.Println("config: DBM_OPEN_READ=true every authenticated realm user is granted READ access to all connections.")
 	}
 	return c, nil
 }

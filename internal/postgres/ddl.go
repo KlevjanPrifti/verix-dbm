@@ -30,7 +30,7 @@ func Exec(ctx context.Context, pool *pgxpool.Pool, sql string) (*Result, error) 
 }
 
 // DropSchemaSQL builds DROP SCHEMA, optionally CASCADE (drops contained objects
-// too — the caller is expected to confirm that with the user first).
+// too the caller is expected to confirm that with the user first).
 func DropSchemaSQL(name string, cascade bool) string {
 	s := "DROP SCHEMA " + quoteIdent(name)
 	if cascade {
@@ -123,7 +123,7 @@ func DropRoleSQL(name string) string { return "DROP ROLE " + quoteIdent(name) }
 // ExecScript runs several statements as one atomic transaction. It backs the
 // table designer, where a single "create"/"modify" produces a list of DDL
 // statements (column adds, constraint changes, index rebuilds, a rename…) that
-// must all land together — on any error the whole edit rolls back, so a table
+// must all land together on any error the whole edit rolls back, so a table
 // is never left half-altered. Blank entries are skipped.
 func ExecScript(ctx context.Context, pool *pgxpool.Pool, stmts []string) error {
 	tx, err := pool.Begin(ctx)

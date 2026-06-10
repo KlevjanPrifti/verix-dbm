@@ -13,7 +13,7 @@ import (
 
 // exportTable streams a table's rows (honouring the grid's WHERE/ORDER filters)
 // as a CSV or JSON download. It reuses the read-only browse path, so the same
-// 1000-row cap applies — the download is a convenience snapshot, not a dump.
+// 1000-row cap applies the download is a convenience snapshot, not a dump.
 func (s *Server) exportTable(w http.ResponseWriter, r *http.Request) {
 	if !s.auth.CheckCSRF(r) {
 		http.Error(w, "bad csrf", http.StatusForbidden)

@@ -5,7 +5,7 @@
 // CREATE TABLE (+ indexes/comment); "modify" diffs the edited model against the
 // snapshot captured at load and emits only the ALTERs needed. SQL generation
 // lives here (not in a component) so the preview and the executed statements are
-// produced by exactly one code path — what you see is what runs.
+// produced by exactly one code path what you see is what runs.
 
 import type { DocResponse } from './types'
 

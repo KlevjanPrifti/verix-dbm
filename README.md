@@ -3,7 +3,7 @@
 A low-footprint, self-hostable **web database manager** for **PostgreSQL** and
 **Redis/Valkey**. It ships as a single static Go binary with a React workbench
 UI baked in (`go:embed`), Keycloak OIDC login, and the SyncLink "HUD" theme.
-The whole app — backend, JSON API, and the compiled frontend — is one
+The whole app backend, JSON API, and the compiled frontend is one
 dependency-free distroless container.
 
 ---
@@ -11,19 +11,19 @@ dependency-free distroless container.
 ## What it can do
 
 ### DataGrip-style workbench (React SPA, served at `/app`)
-- **Database Explorer** — a lazy-loaded tree of connections → schemas → tables →
+- **Database Explorer** a lazy-loaded tree of connections → schemas → tables →
   columns / keys / indexes, with right-click + kebab (`⋯`) context menus on every
   node.
-- **Tabbed workspace** — open as many tabs as you like, side by side:
-  - **Grid** — paginated, read-only table browse with `WHERE` / `ORDER BY`
+- **Tabbed workspace** open as many tabs as you like, side by side:
+  - **Grid** paginated, read-only table browse with `WHERE` / `ORDER BY`
     filters and per-column sort arrows.
-  - **Console (Postgres)** — run SQL with read/write modes, a 30s statement
+  - **Console (Postgres)** run SQL with read/write modes, a 30s statement
     timeout, a 1000-row result cap, and a confirmation gate for destructive
     statements (`DROP`/`TRUNCATE`, unguarded `DELETE`/`UPDATE`).
-  - **Doc** — quick documentation view: columns, keys, indexes, and table
+  - **Doc** quick documentation view: columns, keys, indexes, and table
     comment.
-  - **Usages** — find-usages: inbound foreign keys that reference a table.
-  - **Redis/Valkey** — keyspace browser + command console (see below).
+  - **Usages** find-usages: inbound foreign keys that reference a table.
+  - **Redis/Valkey** keyspace browser + command console (see below).
 - **Toasts, modals, and context menus** for connection CRUD, DDL forms, and the
   audit log.
 
@@ -34,10 +34,10 @@ dependency-free distroless container.
 - **Code generators** (one click → clipboard): `CREATE TABLE` DDL, `SELECT`,
   `INSERT`, `UPDATE` skeletons.
 - **Form-backed DDL**: add / modify column, rename table, create schema / table /
-  index, drop table / column / index, truncate — all admin/write-gated and
+  index, drop table / column / index, truncate all admin/write-gated and
   audited.
 - **CSV / JSON export** of a table's rows (honours the grid's `WHERE`/`ORDER BY`,
-  same 1000-row cap — a convenience snapshot, not a full dump).
+  same 1000-row cap a convenience snapshot, not a full dump).
 
 ### Redis / Valkey
 - `SCAN`-based keyspace browser with `MATCH` (prefix-friendly).
@@ -47,7 +47,7 @@ dependency-free distroless container.
 ### Auth, security & operations
 - **Keycloak OIDC** login; realm roles map to **admin / write / read**, and
   access is **deny-by-default** (no role → 403). See [SECURITY.md](SECURITY.md).
-- **DEV mode** (auto-login as a local admin) for local hacking — opt-in only via
+- **DEV mode** (auto-login as a local admin) for local hacking opt-in only via
   `DBM_DEV_MODE=true`. In production the app **refuses to start** without OIDC
   rather than fall back to an open mode.
 - Saved connection passwords **AES-256-GCM encrypted at rest** in SQLite (never
@@ -66,19 +66,19 @@ dependency-free distroless container.
 ## Technologies used
 
 **Backend (Go 1.25)**
-- [chi](https://github.com/go-chi/chi) — HTTP router
-- [pgx v5](https://github.com/jackc/pgx) — PostgreSQL driver + introspection
-- [go-redis v9](https://github.com/redis/go-redis) — Redis/Valkey client
-- [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) — **pure-Go**
+- [chi](https://github.com/go-chi/chi) HTTP router
+- [pgx v5](https://github.com/jackc/pgx) PostgreSQL driver + introspection
+- [go-redis v9](https://github.com/redis/go-redis) Redis/Valkey client
+- [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) **pure-Go**
   SQLite (no cgo → fully static binary) for connection + audit metadata
-- [go-oidc](https://github.com/coreos/go-oidc) + `golang.org/x/oauth2` — Keycloak
+- [go-oidc](https://github.com/coreos/go-oidc) + `golang.org/x/oauth2` Keycloak
   OIDC
-- `crypto/aes` (GCM) — credential encryption
-- `html/template` — legacy server-rendered pages (the React SPA is the primary UI)
+- `crypto/aes` (GCM) credential encryption
+- `html/template` legacy server-rendered pages (the React SPA is the primary UI)
 
 **Frontend (`internal/web/spa`)**
 - [React 18](https://react.dev) + [TypeScript 5](https://www.typescriptlang.org)
-- [Vite 5](https://vite.dev) (base `/app/`, content-hashed assets) — built to
+- [Vite 5](https://vite.dev) (base `/app/`, content-hashed assets) built to
   `dist/` and embedded via `go:embed`
 - Custom HUD theme (`src/styles/hud.css`)
 
@@ -93,10 +93,10 @@ dependency-free distroless container.
 
 ```bash
 # 1. Backend (auto-logged-in as Dev Admin). DEV mode is opt-in and must be set
-#    explicitly — without it (and without OIDC) the server refuses to start.
+#    explicitly without it (and without OIDC) the server refuses to start.
 DBM_DEV_MODE=true go run ./cmd/server
 
-# 2. Frontend (in another terminal) — Vite dev server proxies /api + /c to :8080
+# 2. Frontend (in another terminal) Vite dev server proxies /api + /c to :8080
 cd internal/web/spa
 npm install
 npm run dev
@@ -119,10 +119,10 @@ or a Valkey at `127.0.0.1:6379` (username `default`).
 ## Configuration
 
 See [.env.example](.env.example). Key vars: `DBM_BASE_URL`, `DBM_ENC_KEY`
-(64 hex chars — `openssl rand -hex 32`), the `OIDC_*` set, and the role names
+(64 hex chars `openssl rand -hex 32`), the `OIDC_*` set, and the role names
 (`OIDC_ADMIN_ROLE` / `OIDC_WRITE_ROLE` / `OIDC_READ_ROLE`). For local development
 without Keycloak set `DBM_DEV_MODE=true`. **Read [SECURITY.md](SECURITY.md)
-before deploying** — least-privilege DB roles and the deny-by-default model
+before deploying** least-privilege DB roles and the deny-by-default model
 matter for safe operation.
 
 ## Deploy (Dokploy)
@@ -160,15 +160,15 @@ internal/web/spa    React + TypeScript + Vite workbench (embedded via go:embed)
 ## Roadmap
 
 ### More features
-- **Inline grid editing** — edit / insert / delete rows directly in the data grid
+- **Inline grid editing** edit / insert / delete rows directly in the data grid
   (today writes go through the SQL/command console or form-backed DDL).
 - **Saved queries library** and query history per connection.
-- **Per-connection ACLs** — finer-grained access than the global admin/write/read
+- **Per-connection ACLs** finer-grained access than the global admin/write/read
   roles.
 - **Full table export** beyond the 1000-row snapshot cap (streamed dump, server-
   side pagination).
 - **Schema diff / migration helpers** built on the existing DDL generators.
-- **Redis editing** — type-aware value editors (SET/HSET/LPUSH/…) with the same
+- **Redis editing** type-aware value editors (SET/HSET/LPUSH/…) with the same
   confirmation gating as Postgres.
 - Self-host fonts (currently Google Fonts `@import`) for a strict CSP.
 - Move sessions out of memory (currently lost on restart) to the shared
@@ -182,5 +182,5 @@ internal/web/spa    React + TypeScript + Vite workbench (embedded via go:embed)
 
 The connection layer (`internal/conn` registry + per-engine packages like
 `internal/postgres` and `internal/redisdb`) is structured so a new engine is a
-new package plus its API/UI tabs — adding databases shouldn't require touching
+new package plus its API/UI tabs adding databases shouldn't require touching
 the auth, crypto, or workbench shell.

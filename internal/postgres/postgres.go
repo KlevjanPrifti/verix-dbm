@@ -81,7 +81,7 @@ const defaultStatementTimeout = "30s"
 
 // Schemas lists non-system schemas with their relations and estimated row
 // counts. It LEFT JOINs from pg_namespace so empty schemas (e.g. a fresh
-// "public") still appear — that lets the UI distinguish an empty database from
+// "public") still appear that lets the UI distinguish an empty database from
 // a failed/misdirected connection.
 func Schemas(ctx context.Context, pool *pgxpool.Pool) ([]Schema, error) {
 	const q = `
@@ -465,8 +465,8 @@ func quoteIdent(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
 
-// reServerSide matches SQL that reaches the database host's OS — program
-// execution and server-side file access — none of which a read-only transaction
+// reServerSide matches SQL that reaches the database host's OS program
+// execution and server-side file access none of which a read-only transaction
 // blocks. They depend purely on the connected role's privileges.
 var reServerSide = regexp.MustCompile(`(?is)` +
 	`\bcopy\b[^;]*\bprogram\b` + // COPY … TO/FROM PROGRAM 'cmd'
@@ -477,10 +477,10 @@ var reServerSide = regexp.MustCompile(`(?is)` +
 // IsServerSideExec reports whether sql uses a server-side execution / file
 // primitive (COPY … PROGRAM, pg_read_file, large-object import/export, …). These
 // can yield RCE or arbitrary file read on the database host when the connected
-// role is privileged — and a read-only transaction does NOT stop them. Callers
+// role is privileged and a read-only transaction does NOT stop them. Callers
 // block them for non-admin users (defense in depth; the real control is using a
 // least-privileged DB role). This is a deliberately conservative keyword screen,
-// not a SQL parser, so it can over-match — that's the safe direction here.
+// not a SQL parser, so it can over-match that's the safe direction here.
 func IsServerSideExec(sql string) bool {
 	return reServerSide.MatchString(sql)
 }

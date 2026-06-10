@@ -95,7 +95,7 @@ func staticFS() http.Handler {
 		log.Fatalf("render: static sub: %v", err)
 	}
 	// embed.FS reports a zero ModTime, so http.FileServer emits no
-	// Last-Modified/ETag and browsers fall back to heuristic caching — which
+	// Last-Modified/ETag and browsers fall back to heuristic caching which
 	// serves stale JS/CSS across deploys (e.g. a cached workbench.js missing a
 	// newly added global). Precompute a content-hash ETag so there's a real
 	// validator, and send Cache-Control: no-cache so the browser revalidates on

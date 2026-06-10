@@ -10,7 +10,7 @@ import (
 // rateLimiter is a tiny in-process fixed-window limiter keyed by client IP. It's
 // sized for an internal admin tool (few clients); state is bounded by periodic
 // pruning of expired windows. It guards the auth endpoints against brute-force
-// and redirect spam — not a substitute for an edge WAF on a hostile-internet
+// and redirect spam not a substitute for an edge WAF on a hostile-internet
 // deployment, but a sensible floor.
 type rateLimiter struct {
 	mu     sync.Mutex

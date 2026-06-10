@@ -278,7 +278,7 @@ function roleAttrText(r: Role): string {
   return t.join(' · ')
 }
 
-// Kebab opens the same context menu as right-click — the touch-friendly path.
+// Kebab opens the same context menu as right-click the touch-friendly path.
 function Kebab({ payload }: { payload: NodePayload }) {
   const app = useApp()
   return (

@@ -33,7 +33,7 @@ function parseConnUrl(raw: string): Partial<Form> | null {
   }
 }
 
-// Data Sources & Drivers modal — create a new connection or edit an existing
+// Data Sources & Drivers modal create a new connection or edit an existing
 // one. Replaces the "connModal" / "connEditModal" partials.
 export default function ConnModal({ mode, editId, initialKind, onClose, onSaved }: {
   mode: 'create' | 'edit'
@@ -87,7 +87,7 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
       api.updateConnection(editId, f).then(done).catch(fail)
     } else if (asCopy && editId != null) {
       // Duplicate: leave password blank and reference the source so the server
-      // copies its stored credential — the ciphertext never reaches the browser.
+      // copies its stored credential the ciphertext never reaches the browser.
       api.createConnection({ ...f, password: '', copyFrom: editId }).then(done).catch(fail)
     } else {
       api.createConnection(f).then(done).catch(fail)

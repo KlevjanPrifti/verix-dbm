@@ -196,7 +196,7 @@ func (c Connection) DSN(password string) string {
 	opts := c.Options
 	if opts == "" {
 		// Default to attempting TLS (falls back to plaintext if the server has no
-		// TLS) instead of disabling it outright — credentials shouldn't cross the
+		// TLS) instead of disabling it outright credentials shouldn't cross the
 		// network in the clear by default. For remote/production targets prefer an
 		// explicit sslmode=verify-full in Options. An admin who needs plaintext can
 		// still set sslmode=disable.

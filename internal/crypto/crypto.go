@@ -25,7 +25,7 @@ func New(key string) (*Box, error) {
 		if _, err := rand.Read(raw); err != nil {
 			return nil, err
 		}
-		log.Println("crypto: DBM_ENC_KEY not set — using an EPHEMERAL key; stored credentials will be unreadable after restart")
+		log.Println("crypto: DBM_ENC_KEY not set using an EPHEMERAL key; stored credentials will be unreadable after restart")
 	case len(key) == 64:
 		b, err := hex.DecodeString(key)
 		if err != nil {

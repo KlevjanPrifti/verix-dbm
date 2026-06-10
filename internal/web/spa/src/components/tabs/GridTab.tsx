@@ -52,7 +52,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
 
   useEffect(() => { load(page, where, order) }, [load, page]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Column metadata for the inline editor's placeholders — fetched once per table.
+  // Column metadata for the inline editor's placeholders fetched once per table.
   useEffect(() => {
     setColMeta(null); setDraft(null); setEditing(null)
     api.columns(connId, schema, table)
@@ -89,7 +89,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
 
   // ── write actions ──
   // The grid is a browser, not an inline editor, so write actions seed a query
-  // console with a runnable statement the user reviews and runs — reusing the
+  // console with a runnable statement the user reviews and runs reusing the
   // console's confirm gate + audit trail (same pattern as "query table").
   const cellLit = (v: string) => (v === '' ? 'NULL' : lit(v))
   // Best-effort row identifier: AND of every column = its value. The grid doesn't
@@ -130,7 +130,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
     if (!draft) return
     const set = Object.keys(draft).map(Number).sort((a, b) => a - b)
     // Only the cells the user touched go into the INSERT; the rest are omitted so
-    // Postgres applies each column's default (or NULL) — matching the placeholders.
+    // Postgres applies each column's default (or NULL) matching the placeholders.
     const sql = set.length === 0
       ? `INSERT INTO ${qual} DEFAULT VALUES;`
       : `INSERT INTO ${qual} (${set.map(i => qq(cols[i])).join(', ')}) VALUES (${set.map(i => lit(draft[i])).join(', ')});`
@@ -144,7 +144,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       .finally(() => setSaving(false))
   }
   // Inline cell edit: commit a single cell with an UPDATE that targets the row by
-  // its current contents (rowWhere — the grid doesn't track a primary key). Run
+  // its current contents (rowWhere the grid doesn't track a primary key). Run
   // confirmed automatically (the user opted in by editing) and audited like any
   // other write; on success we reload so computed/trigger columns stay accurate.
   const commitEdit = (r: number, c: number, value: string) => {
@@ -181,7 +181,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
     setFilter('(' + cols.map(c => `${qq(c)}::text ILIKE ${lit('%' + term + '%')}`).join(' OR ') + ')')
   }
 
-  // Unified right-click menu — mirrors the DataGrip data-editor menu. One menu
+  // Unified right-click menu mirrors the DataGrip data-editor menu. One menu
   // serves both cell and table-area clicks: the cell-specific block only appears
   // when there's a row under the cursor (rows[r] exists); otherwise it collapses
   // to the table-level actions with a schema.table header. Write actions are
@@ -189,7 +189,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   // connection they stay greyed, exactly like DataGrip.
   function menuItems(r: number, c: number): MenuItem[] {
     // r < 0 is the sentinel for a table-area click (header / blank space) where
-    // there's no cell under the cursor — guard on that rather than rows[r], since
+    // there's no cell under the cursor guard on that rather than rows[r], since
     // rows[0] always exists when the table has data and would wrongly read as a cell.
     const cell = r >= 0 && rows[r] !== undefined
     const col = cols[c] ?? ''
@@ -355,7 +355,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
 
 const MW = 260, MH = 380
 
-// Right-click menu for grid cells / table area — reuses the tree menu's styling
+// Right-click menu for grid cells / table area reuses the tree menu's styling
 // and supports one level of fly-out submenus, keyboard-shortcut hints and
 // disabled items (mirrors the DataGrip data-editor menu).
 function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuItem[]; onClose: () => void }) {
@@ -418,7 +418,7 @@ function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuI
 }
 
 // One editable cell of the inline "add row" draft. The control matches the
-// column's SQL type — number spinner, native date/time pickers, a boolean
+// column's SQL type number spinner, native date/time pickers, a boolean
 // dropdown, or a plain text box. Enter commits + advances, Esc/blur commits.
 function DraftField({ type, value, onChange, onCancel, onNext }: {
   type: 'number' | 'date' | 'datetime-local' | 'time' | 'bool' | 'text'
