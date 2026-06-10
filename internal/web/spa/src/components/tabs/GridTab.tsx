@@ -6,8 +6,13 @@ import {
   type LucideIcon, Ico, RotateCw, Plus, Minus, ChevronUp, ChevronDown,
   ChevronLeft, ChevronRight, Copy, Maximize2, Filter, FilterX, Info, X,
   SquarePen, TableProperties, Sigma, Undo2, FileCode, Code, Trash2, ArrowRight,
-  Search, Download, ArrowUp,
+  Search, Download, ArrowUp, Check,
 } from '../../icons'
+
+// Transaction mode for the data grid. 'auto' commits each write immediately
+// (the historical behaviour); 'manual' queues inserts/edits/deletes locally and
+// commits them as one atomic transaction (server-side postgres.ExecScript).
+type TxMode = 'auto' | 'manual'
 
 interface MenuItem {
   label?: string; Icon?: LucideIcon; sep?: boolean; head?: string
@@ -42,6 +47,16 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   // edit, and a flag while its UPDATE is in flight.
   const [edit, setEdit] = useState<{ r: number; c: number } | null>(null)
   const [savingCell, setSavingCell] = useState(false)
+  // Transaction mode + the change set queued while in 'manual' mode. Edits are
+  // keyed row index -> (col index -> new value) so multiple cells in one row
+  // coalesce into a single UPDATE; deletes are a set of row indices; inserts are
+  // the same draft maps submitDraft builds. All index into the current `rows`,
+  // which is never reloaded until commit/rollback, so the indices stay valid.
+  const [txMode, setTxMode] = useState<TxMode>('auto')
+  const [pendingEdits, setPendingEdits] = useState<Record<number, Record<number, string>>>({})
+  const [pendingDeletes, setPendingDeletes] = useState<Set<number>>(new Set())
+  const [pendingInserts, setPendingInserts] = useState<Record<number, string>[]>([])
+  const [committing, setCommitting] = useState(false)
 
   const load = useCallback((p: number, w: string, o: string) => {
     setLoading(true)
@@ -55,6 +70,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   // Column metadata for the inline editor's placeholders fetched once per table.
   useEffect(() => {
     setColMeta(null); setDraft(null); setEditing(null)
+    setPendingEdits({}); setPendingDeletes(new Set()); setPendingInserts([])
     api.columns(connId, schema, table)
       .then(r => setColMeta(Object.fromEntries((r.columns || []).map(c => [c.name, c]))))
       .catch(() => setColMeta({}))
@@ -128,6 +144,12 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const cancelDraft = () => { setDraft(null); setEditing(null) }
   const submitDraft = () => {
     if (!draft) return
+    // Manual mode: queue the draft as a pending insert instead of running it.
+    if (txMode === 'manual') {
+      setPendingInserts(p => [...p, draft]); setDraft(null); setEditing(null)
+      app.notify('insert queued')
+      return
+    }
     const set = Object.keys(draft).map(Number).sort((a, b) => a - b)
     // Only the cells the user touched go into the INSERT; the rest are omitted so
     // Postgres applies each column's default (or NULL) matching the placeholders.
@@ -149,6 +171,19 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   // other write; on success we reload so computed/trigger columns stay accurate.
   const commitEdit = (r: number, c: number, value: string) => {
     setEdit(null)
+    // Manual mode: stash the new value as a pending edit (or drop it when the
+    // value is reverted to the original) and update the cell display locally.
+    if (txMode === 'manual') {
+      const original = rows[r]?.[c] ?? ''
+      setPendingEdits(p => {
+        const row = { ...(p[r] || {}) }
+        if (value === original) delete row[c]; else row[c] = value
+        const next = { ...p }
+        if (Object.keys(row).length === 0) delete next[r]; else next[r] = row
+        return next
+      })
+      return
+    }
     if (value === (rows[r]?.[c] ?? '')) return // unchanged → no-op
     setSavingCell(true)
     api.query(connId, `UPDATE ${qual}\nSET ${qq(cols[c])} = ${cellLit(value)}\nWHERE ${rowWhere(r)};`, true)
@@ -159,12 +194,83 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       .catch(e => app.notify(String(e.message || e), 'error'))
       .finally(() => setSavingCell(false))
   }
-  const deleteRow = (r: number) => openSql(
-    `console:${connId}:delete:${schema}.${table}`, `delete · ${table}`,
-    `DELETE FROM ${qual}\nWHERE ${rowWhere(r)};`)
+  const deleteRow = (r: number) => {
+    // Manual mode: mark the row for deletion and drop any pending edits on it
+    // (an UPDATE then DELETE of the same row in one tx would mis-target, since
+    // the DELETE's WHERE matches the row's original, now-updated, contents).
+    if (txMode === 'manual') {
+      setPendingDeletes(p => new Set(p).add(r))
+      setPendingEdits(p => { const next = { ...p }; delete next[r]; return next })
+      return
+    }
+    openSql(
+      `console:${connId}:delete:${schema}.${table}`, `delete · ${table}`,
+      `DELETE FROM ${qual}\nWHERE ${rowWhere(r)};`)
+  }
   const deleteFiltered = () => openSql(
     `console:${connId}:delete:${schema}.${table}`, `delete · ${table}`,
     `DELETE FROM ${qual}${whereSuffix || '\nWHERE /* add a condition */ false'};`)
+
+  // ── manual transaction (Tx: Manual) ──
+  // Rows with at least one surviving edit (a deleted row's edits are ignored).
+  const editedRows = Object.keys(pendingEdits).map(Number)
+    .filter(r => !pendingDeletes.has(r) && Object.keys(pendingEdits[r]).length > 0)
+  const pendingCount = editedRows.length + pendingDeletes.size + pendingInserts.length
+  const clearPending = () => {
+    setPendingEdits({}); setPendingDeletes(new Set()); setPendingInserts([])
+    setDraft(null); setEditing(null); setEdit(null)
+  }
+  // Build the ordered statement list for the queued change set: per-row UPDATEs
+  // (coalesced cells), then DELETEs, then INSERTs. Each row op targets its row by
+  // full original contents (rowWhere) since the grid tracks no primary key.
+  const txStatements = (): string[] => {
+    const out: string[] = []
+    for (const r of editedRows) {
+      const sets = Object.keys(pendingEdits[r]).map(Number)
+        .map(c => `${qq(cols[c])} = ${cellLit(pendingEdits[r][c])}`)
+      out.push(`UPDATE ${qual}\nSET ${sets.join(', ')}\nWHERE ${rowWhere(r)};`)
+    }
+    for (const r of pendingDeletes) out.push(`DELETE FROM ${qual}\nWHERE ${rowWhere(r)};`)
+    for (const d of pendingInserts) {
+      const set = Object.keys(d).map(Number).sort((a, b) => a - b)
+      out.push(set.length === 0
+        ? `INSERT INTO ${qual} DEFAULT VALUES;`
+        : `INSERT INTO ${qual} (${set.map(i => qq(cols[i])).join(', ')}) VALUES (${set.map(i => lit(d[i])).join(', ')});`)
+    }
+    return out
+  }
+  // Switch modes. Refuse to leave manual mode while changes are queued so they
+  // are never silently dropped; the user must commit or roll back first.
+  const toggleTx = () => {
+    if (txMode === 'auto') { setTxMode('manual'); return }
+    if (pendingCount > 0) { app.notify('commit or roll back queued changes first', 'error'); return }
+    setTxMode('auto')
+  }
+  const commitTx = async (confirm = false) => {
+    const stmts = txStatements()
+    if (stmts.length === 0) return
+    setCommitting(true)
+    try {
+      const res = await api.execTx(connId, stmts, confirm)
+      if (res.needConfirm) {
+        const ok = await app.confirm({
+          title: 'Confirm transaction',
+          body: 'This batch contains a destructive statement (DROP/TRUNCATE or an unfiltered DELETE/UPDATE). Commit anyway?',
+          buttons: [{ label: 'Commit', value: 'ok', variant: 'danger' }],
+        })
+        if (ok) await commitTx(true)
+        return
+      }
+      const n = res.count ?? stmts.length
+      app.notify(`committed ${n} change${n === 1 ? '' : 's'}`)
+      clearPending(); load(page, where, order)
+    } catch (e) {
+      app.notify(String((e as Error).message || e), 'error')
+    } finally {
+      setCommitting(false)
+    }
+  }
+  const rollbackTx = () => { clearPending(); app.notify('queued changes discarded') }
 
   const copySum = (col: string) =>
     api.query(connId, `SELECT sum(${qq(col)}) FROM ${qual}${whereSuffix}`, true)
@@ -261,7 +367,20 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
           <button className="tb-ico" title="discard new row" disabled={saving} onClick={cancelDraft}><X size={16} /></button>
         </>}
         <span className="tb-sep" />
-        <span className="tb-chip hud-label">Tx: Auto</span>
+        <button type="button" className={`tb-chip hud-label tx-chip${txMode === 'manual' ? ' manual' : ''}`}
+          disabled={readOnly}
+          title={txMode === 'manual'
+            ? 'Manual commit: queue changes and commit/roll back as one transaction. Click to switch to auto-commit.'
+            : 'Auto-commit: each change is applied immediately. Click to switch to manual transactions.'}
+          onClick={toggleTx}>
+          Tx: {txMode === 'manual' ? 'Manual' : 'Auto'}{txMode === 'manual' && pendingCount > 0 ? ` · ${pendingCount}` : ''}
+        </button>
+        {txMode === 'manual' && <>
+          <button className="tb-ico ok" title={`commit ${pendingCount} change(s)`}
+            disabled={pendingCount === 0 || committing} onClick={() => commitTx()}><Check size={16} /></button>
+          <button className="tb-ico" title="roll back queued changes"
+            disabled={pendingCount === 0 || committing} onClick={rollbackTx}><Undo2 size={16} /></button>
+        </>}
         <span className="tb-grow" />
         {readOnly && <span className="ro">READ-ONLY</span>}
         {conn && <span className="tb-chip conn-chip hud-label" title={`${conn.kind}@${conn.host}`}>{conn.kind}@{conn.host}</span>}
@@ -317,21 +436,38 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
                         })}
                       </tr>
                     )}
-                    {rows.map((row, i) => (
-                      <tr key={i}><td className="rownum">{i + 1}</td>{row.map((v, j) => (
-                        <td key={j} className={`code${!readOnly ? ' editable-cell' : ''}`}
-                          onDoubleClick={() => { if (!readOnly && !savingCell) setEdit({ r: i, c: j }) }}
+                    {/* Pending inserts (manual tx): rendered at the top like the live draft. */}
+                    {pendingInserts.map((d, idx) => (
+                      <tr key={`pi${idx}`} className="row-pending-ins">
+                        <td className="rownum" title="queued insert">+</td>
+                        {cols.map((c, j) => (
+                          <td key={j} className="code">
+                            {d[j] !== undefined ? d[j] : <span className="draft-ph dim">{placeholder(c)}</span>}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                    {rows.map((row, i) => {
+                      const del = pendingDeletes.has(i)
+                      const redits = pendingEdits[i]
+                      return (
+                      <tr key={i} className={del ? 'row-pending-del' : ''}><td className="rownum">{i + 1}</td>{row.map((v, j) => {
+                        const pend = redits?.[j]
+                        const display = pend !== undefined ? pend : v
+                        return (
+                        <td key={j} className={`code${!readOnly ? ' editable-cell' : ''}${pend !== undefined ? ' cell-dirty' : ''}`}
+                          onDoubleClick={() => { if (!readOnly && !savingCell && !del) setEdit({ r: i, c: j }) }}
                           onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, items: menuItems(i, j) }) }}>
                           {edit && edit.r === i && edit.c === j
-                            ? <CellEditor initial={v} onCommit={val => commitEdit(i, j, val)} onCancel={() => setEdit(null)} />
-                            : v}
+                            ? <CellEditor initial={display} onCommit={val => commitEdit(i, j, val)} onCancel={() => setEdit(null)} />
+                            : display}
                         </td>
-                      ))}</tr>
-                    ))}
+                      )})}</tr>
+                    )})}
                   </tbody>
                 </table>
               </div>
-              <p className="grid-meta hud-label dim">{rows.length} rows{result.truncated ? ' · truncated at 1000' : ''} · {result.duration}</p>
+              <p className="grid-meta hud-label dim">{rows.length} rows{result.truncated ? ' · truncated at 1000' : ''} · {result.duration}{pendingCount > 0 ? ` · ${pendingCount} change(s) queued` : ''}</p>
             </>
           )}
       </div>

@@ -389,6 +389,18 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 /* Writable cells advertise inline edit (double-click) with a text cursor. */
 .editable-cell { cursor: text; }
 .draft-ph { font-style: italic; opacity: .55; }
+/* Tx chip: clickable mode toggle; amber while in manual (uncommitted) mode. */
+.tx-chip { background: none; cursor: pointer; font: inherit; color: rgba(var(--accent-rgb),0.85); }
+.tx-chip:hover:not(:disabled) { background: rgba(var(--accent-rgb),0.12); }
+.tx-chip:disabled { opacity: .4; cursor: not-allowed; }
+.tx-chip.manual { color: #e6c07b; border-color: rgba(230,192,123,0.6); }
+.tx-chip.manual:hover:not(:disabled) { background: rgba(230,192,123,0.15); }
+/* Queued manual-tx changes: dirty cell, pending insert row, pending delete row. */
+.cell-dirty { background: rgba(230,192,123,0.16); box-shadow: inset 2px 0 0 #e6c07b; }
+.row-pending-ins td { background: rgba(123,216,143,0.06); }
+.row-pending-ins td.rownum { color: #7bd88f; background: rgba(123,216,143,0.1); }
+.row-pending-del td { background: rgba(255,70,70,0.08); text-decoration: line-through; opacity: .7; }
+.row-pending-del td.rownum { color: #ff9a9a; background: rgba(255,70,70,0.12); text-decoration: none; }
 .draft-input { width: 100%; box-sizing: border-box; background: var(--panel-raised); border: 1px solid rgba(123,216,143,0.6); border-radius: 2px; color: var(--hud); padding: .15rem .35rem; margin: -.15rem -.2rem; font-size: inherit; }
 .draft-input:focus { outline: none; border-color: #7bd88f; }
 

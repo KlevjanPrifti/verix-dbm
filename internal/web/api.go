@@ -40,6 +40,7 @@ func (s *Server) mountAPI(r chi.Router) {
 	r.Get("/c/{id}/pg/keys", s.apiKeys)
 	r.Get("/c/{id}/grid", s.apiGrid)
 	r.Post("/c/{id}/pg/query", s.apiQuery)
+	r.Post("/c/{id}/pg/tx", s.apiExecTx)
 	r.Get("/c/{id}/pg/generate", s.apiGenerate)
 	r.Get("/c/{id}/pg/doc", s.apiDoc)
 	r.Get("/c/{id}/pg/usages", s.apiUsages)
@@ -467,6 +468,58 @@ func (s *Server) apiQuery(w http.ResponseWriter, r *http.Request) {
 		resp["error"] = err.Error()
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// apiExecTx runs a batch of write statements as one atomic transaction. It backs
+// the grid's "Tx: Manual" mode, where row inserts/edits/deletes are queued in the
+// browser and committed together so they all land or all roll back. Same guards
+// as apiQuery: CSRF, write + read-only gating, the server-side program/file
+// block, and a destructive-statement confirm gate applied across the whole batch.
+func (s *Server) apiExecTx(w http.ResponseWriter, r *http.Request) {
+	u, c, pool, ok := s.apiRequireWrite(w, r, false)
+	if !ok {
+		return
+	}
+	var in struct {
+		Statements []string `json:"statements"`
+		Confirm    bool     `json:"confirm"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	stmts := make([]string, 0, len(in.Statements))
+	for _, st := range in.Statements {
+		if st = strings.TrimSpace(st); st != "" {
+			stmts = append(stmts, st)
+		}
+	}
+	if len(stmts) == 0 {
+		apiErr(w, http.StatusBadRequest, "no statements to commit")
+		return
+	}
+	if serverSideBlocked(u, stmts...) {
+		apiErr(w, http.StatusForbidden, serverSideBlockedMsg)
+		return
+	}
+	if !in.Confirm {
+		for _, st := range stmts {
+			if postgres.NeedsConfirm(st) {
+				writeJSON(w, http.StatusOK, map[string]any{"needConfirm": true})
+				return
+			}
+		}
+	}
+	err := postgres.ExecScript(r.Context(), pool, stmts)
+	s.st.AddAudit(r.Context(), store.Audit{
+		User: u.Email, ConnID: c.ID, Action: "pg_tx",
+		Detail: auditDetail(strings.Join(stmts, "; ")), Success: err == nil,
+	})
+	if err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "count": len(stmts)})
 }
 
 // Generators / introspection
