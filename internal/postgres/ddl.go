@@ -132,6 +132,13 @@ func ExecScript(ctx context.Context, pool *pgxpool.Pool, stmts []string) error {
 	}
 	defer tx.Rollback(ctx)
 
+	// Force read-write: a pooled connection may carry default_transaction_read_only
+	// from a prior read-only query, which would otherwise start this DDL
+	// transaction read-only and fail with SQLSTATE 25006. Must run before any
+	// other statement in the transaction.
+	if _, err := tx.Exec(ctx, "SET TRANSACTION READ WRITE"); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx, "SET statement_timeout = '"+defaultStatementTimeout+"'"); err != nil {
 		return err
 	}
