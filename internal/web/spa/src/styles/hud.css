@@ -141,6 +141,11 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .alert.error { border-color: rgba(255,70,70,0.5); background: rgba(255,70,70,0.08); color: #ff9a9a; }
 .alert.warn { border-color: rgba(255,180,50,0.5); background: rgba(255,180,50,0.08); color: #ffcf7a; }
 
+/* Toasts: opaque so text stays legible over any content beneath. */
+.toast { box-shadow: 0 8px 24px rgba(0,0,0,0.55); }
+.toast.ok { border-color: rgba(var(--accent-rgb),0.5); background: var(--panel-raised); color: rgb(var(--accent-rgb)); }
+.toast.error { border-color: rgba(255,70,70,0.5); background: #1a0608; color: #ff9a9a; }
+
 /* Data grids dense, spreadsheet-like, ruled columns */
 .tablewrap { overflow: auto; max-height: 60vh; border: 1px solid rgba(var(--accent-rgb),0.15); border-radius: 2px; }
 table.data { width: 100%; border-collapse: collapse; font-size: .82rem; }

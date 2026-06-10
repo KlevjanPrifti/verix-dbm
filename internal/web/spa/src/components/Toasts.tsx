@@ -7,7 +7,7 @@ export default function Toasts({ notices }: { notices: Notice[] }) {
   return (
     <div style={{ position: 'fixed', right: '1rem', bottom: '1rem', display: 'flex', flexDirection: 'column', gap: '.5rem', zIndex: 1000 }}>
       {notices.map(n => (
-        <div key={n.id} className={`alert ${n.kind === 'error' ? 'error' : 'ok'}`} style={{ minWidth: '12rem' }}>
+        <div key={n.id} className={`alert toast ${n.kind === 'error' ? 'error' : 'ok'}`} style={{ minWidth: '12rem' }}>
           {n.msg}
         </div>
       ))}
