@@ -34,6 +34,12 @@ func (s *Server) mountAPI(r chi.Router) {
 	r.Put("/connections/{id}", s.apiUpdateConnection)
 	r.Delete("/connections/{id}", s.apiDeleteConnection)
 
+	// Per-connection access grants (admin only). Effective only when
+	// DBM_SCOPED_ACCESS is on; manageable regardless so access can be set up first.
+	r.Get("/connections/{id}/grants", s.apiListGrants)
+	r.Put("/connections/{id}/grants", s.apiSetGrant)
+	r.Delete("/connections/{id}/grants/{gid}", s.apiDeleteGrant)
+
 	r.Get("/c/{id}/explorer", s.apiExplorer)
 	r.Get("/c/{id}/pg/columns", s.apiColumns)
 	r.Get("/c/{id}/pg/indexes", s.apiIndexes)
@@ -163,14 +169,24 @@ func (s *Server) apiMe(w http.ResponseWriter, r *http.Request) {
 		"user": map[string]any{
 			"name": u.Name, "email": u.Email, "admin": u.Admin, "write": u.Write,
 		},
-		"csrf": u.CSRF,
+		"csrf":         u.CSRF,
+		"scopedAccess": s.cfg.ScopedAccess,
 	})
 }
 
 // Connections
 
 func (s *Server) apiListConnections(w http.ResponseWriter, r *http.Request) {
-	conns, err := s.st.ListConnections(r.Context())
+	u, _ := auth.FromContext(r.Context())
+	var conns []store.Connection
+	var err error
+	if s.cfg.ScopedAccess && !u.Admin {
+		// Scoped mode: a non-admin sees only connections granted to one of their
+		// groups/roles.
+		conns, err = s.st.ListConnectionsForSubjects(r.Context(), u.Subjects())
+	} else {
+		conns, err = s.st.ListConnections(r.Context())
+	}
 	if err != nil {
 		apiErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -284,6 +300,86 @@ func (s *Server) apiDeleteConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	s.reg.Forget(id)
 	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: id, Action: "delete_connection", Success: true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// Connection access grants
+
+type grantDTO struct {
+	ID      int64  `json:"id"`
+	Subject string `json:"subject"`
+	Level   string `json:"level"`
+}
+
+// apiListGrants returns the grants on a connection (admin only). Read-only, so
+// no CSRF gate; the admin capability is the control.
+func (s *Server) apiListGrants(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.FromContext(r.Context())
+	if !u.Admin {
+		apiErr(w, http.StatusForbidden, "admin required")
+		return
+	}
+	grants, err := s.st.ListGrants(r.Context(), idParam(r))
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := make([]grantDTO, 0, len(grants))
+	for _, g := range grants {
+		out = append(out, grantDTO{ID: g.ID, Subject: g.Subject, Level: g.Level})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"grants": out})
+}
+
+// apiSetGrant upserts one (subject, level) grant on a connection (admin only).
+func (s *Server) apiSetGrant(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.apiRequireAdmin(w, r)
+	if !ok {
+		return
+	}
+	connID := idParam(r)
+	if _, err := s.st.GetConnection(r.Context(), connID); err != nil {
+		apiErr(w, http.StatusNotFound, "connection not found")
+		return
+	}
+	var in struct {
+		Subject string `json:"subject"`
+		Level   string `json:"level"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		apiErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	in.Subject = strings.TrimSpace(in.Subject)
+	if in.Subject == "" {
+		apiErr(w, http.StatusBadRequest, "subject required")
+		return
+	}
+	if !store.ValidGrantLevel(in.Level) {
+		apiErr(w, http.StatusBadRequest, "level must be 'read' or 'write'")
+		return
+	}
+	if err := s.st.SetGrant(r.Context(), store.Grant{ConnID: connID, Subject: in.Subject, Level: in.Level, CreatedBy: u.Email}); err != nil {
+		apiErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: connID, Action: "grant_set", Detail: in.Subject + "=" + in.Level, Success: true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// apiDeleteGrant removes a grant by id, scoped to its connection (admin only).
+func (s *Server) apiDeleteGrant(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.apiRequireAdmin(w, r)
+	if !ok {
+		return
+	}
+	connID := idParam(r)
+	gid, _ := strconv.ParseInt(chi.URLParam(r, "gid"), 10, 64)
+	if err := s.st.DeleteGrant(r.Context(), connID, gid); err != nil {
+		apiErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: connID, Action: "grant_delete", Detail: strconv.FormatInt(gid, 10), Success: true})
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -406,7 +502,7 @@ func (s *Server) apiGrid(w http.ResponseWriter, r *http.Request) {
 	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "pg_browse", Detail: schema + "." + table, Success: err == nil})
 	resp := map[string]any{
 		"result":   toResultDTO(res),
-		"readOnly": c.ReadOnly || !u.Write,
+		"readOnly": c.ReadOnly || !s.access(r.Context(), u, c).Write,
 		"page":     page,
 	}
 	if err != nil {
@@ -437,7 +533,7 @@ func (s *Server) apiQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sql := strings.TrimSpace(in.SQL)
-	readOnly := c.ReadOnly || !u.Write
+	readOnly := c.ReadOnly || !s.access(r.Context(), u, c).Write
 	resp := map[string]any{"readOnly": readOnly}
 	if sql == "" {
 		resp["error"] = "empty statement"
@@ -601,13 +697,13 @@ func (s *Server) apiUsages(w http.ResponseWriter, r *http.Request) {
 // the Modify-column modal (other DDL forms need no server-side prefill).
 func (s *Server) apiDDLFormPrefill(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.FromContext(r.Context())
-	if !u.Write {
-		apiErr(w, http.StatusForbidden, "write access required")
-		return
-	}
 	c, err := s.connFor(r)
 	if err != nil {
 		apiErr(w, http.StatusNotFound, "connection not found")
+		return
+	}
+	if !s.access(r.Context(), u, c).Write {
+		apiErr(w, http.StatusForbidden, "write access required")
 		return
 	}
 	q := r.URL.Query()
@@ -983,7 +1079,7 @@ func (s *Server) apiRedisCmd(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"error": "empty command"})
 		return
 	}
-	readOnly := c.ReadOnly || !u.Write
+	readOnly := c.ReadOnly || !s.access(r.Context(), u, c).Write
 	cmd := strings.ToLower(args[0])
 	if readOnly && !redisReadAllow[cmd] {
 		writeJSON(w, http.StatusOK, map[string]any{"error": "read-only: command '" + cmd + "' is not permitted"})
@@ -1087,14 +1183,16 @@ func (s *Server) apiRequireWrite(w http.ResponseWriter, r *http.Request, admin b
 		apiErr(w, http.StatusForbidden, "admin required")
 		return u, store.Connection{}, nil, false
 	}
-	if !u.Write {
-		apiErr(w, http.StatusForbidden, "write access required")
-		return u, store.Connection{}, nil, false
-	}
+	// connFor enforces read access (and 404s an inaccessible connection); the
+	// per-connection write capability is checked on the resolved connection.
 	c, err := s.connFor(r)
 	if err != nil {
 		apiErr(w, http.StatusNotFound, "connection not found")
 		return u, store.Connection{}, nil, false
+	}
+	if !s.access(r.Context(), u, c).Write {
+		apiErr(w, http.StatusForbidden, "write access required")
+		return u, c, nil, false
 	}
 	if c.ReadOnly {
 		apiErr(w, http.StatusConflict, "connection is read-only")

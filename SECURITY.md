@@ -19,9 +19,18 @@ model, the controls in place, and the deployment choices that keep it safe.
   - Set `DBM_OPEN_READ=true` to restore the old "any authenticated realm user
     may read everything" behaviour. Only do this when the realm is dedicated to
     this app.
-- **No per-connection ACLs (yet).** Roles are global: a `read` user can read
-  **every** registered connection, a `write` user can write to all of them, etc.
-  Don't register a connection here that some authenticated users shouldn't reach.
+- **Per-connection access (optional).** By default roles are global: a `read`
+  user can read **every** registered connection, a `write` user can write to all
+  of them. Set `DBM_SCOPED_ACCESS=true` to switch non-admin users to
+  **per-connection grants**: an admin grants a Keycloak group path or realm-role
+  name `read` or `write` on a specific connection (in the connection's edit
+  dialog), and a non-admin user reaches a connection only through such a grant.
+  Grants scope **where** a user acts; they never raise **what** they may do above
+  their global capability (a `read`-role user with a `write` grant still only
+  reads). Global admins bypass scoping and see/manage everything. With scoping
+  off (the default), the original global-role behaviour is unchanged. When
+  scoping is off, don't register a connection some authenticated users shouldn't
+  reach.
 - **CSRF** protects every state-changing request (`X-CSRF-Token` header or a
   `csrf` form field), including logout. Session cookies are `HttpOnly`,
   `SameSite=Lax`, and `Secure` when `DBM_BASE_URL` is `https`.
@@ -89,7 +98,10 @@ network, and run the container with egress restricted to the databases it needs.
 - **Rate limiting** covers the auth endpoints (per-IP) and the authenticated
   surface (a generous per-user backstop). It is a floor, not a substitute for an
   edge WAF on a hostile-internet deployment.
-- **No per-connection ACLs**  see above.
+- **Per-connection grants are opt-in** (`DBM_SCOPED_ACCESS`, see above) and key
+  off Keycloak groups / realm roles. There is not yet a per-database or
+  per-schema scope below the connection level, nor a per-connection `admin` grant
+  (connection CRUD stays a global-admin power).
 
 ## Reporting
 

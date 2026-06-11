@@ -3,6 +3,7 @@ import { api, type ConnInput } from '../api'
 import { useApp } from '../appctx'
 import { X, Check } from '../icons'
 import { DB_KINDS, DEFAULT_KIND, defaultPort, dbKindByScheme } from '../dbkinds'
+import GrantsPanel from './GrantsPanel'
 
 type Form = ConnInput & { port: number }
 
@@ -133,6 +134,9 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
           <div className="mrow"><label className="hud-label">Options</label>
             <input className="hud-input" value={f.options} onChange={e => set('options', e.target.value)} placeholder="sslmode=verify-full (default: prefer)" /></div>
           <label className="check"><input type="checkbox" checked={f.readOnly} onChange={e => set('readOnly', e.target.checked)} /> <span className="hud-label">Read-only</span></label>
+          {mode === 'edit' && editId != null && app.caps.admin && app.caps.scopedAccess && (
+            <GrantsPanel connId={editId} />
+          )}
           <div className="modal-foot">
             <button type="button" className="hud-btn-accent" onClick={onTest}>Test Connection</button>
             <span className={`test-result ${test ? (test.ok ? 'ok' : 'bad') : ''} hud-label code`}>

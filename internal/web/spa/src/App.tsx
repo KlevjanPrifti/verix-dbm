@@ -94,7 +94,7 @@ export default function App() {
   const connById = useCallback((id: number) => conns.find(c => c.id === id), [conns])
 
   const actions = useMemo<AppActions>(() => ({
-    caps: { admin: me?.user.admin ?? false, write: me?.user.write ?? false, csrf: me?.csrf ?? '' },
+    caps: { admin: me?.user.admin ?? false, write: me?.user.write ?? false, csrf: me?.csrf ?? '', scopedAccess: me?.scopedAccess ?? false },
     conns,
     connById,
     openTab,

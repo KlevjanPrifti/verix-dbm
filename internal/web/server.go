@@ -2,6 +2,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -80,7 +81,25 @@ func idParam(r *http.Request) int64 {
 	return id
 }
 
-// connFor loads the connection referenced in the URL.
+// connFor loads the connection referenced in the URL and enforces that the
+// caller has at least read access to it. Because every per-connection handler
+// resolves its target here (directly, or via apiPGPool / apiRequireWrite), this
+// is the single read-access chokepoint. An inaccessible connection returns the
+// same error as a missing one, so scoped-access mode never leaks which
+// connections exist to a user who cannot see them.
 func (s *Server) connFor(r *http.Request) (store.Connection, error) {
-	return s.st.GetConnection(r.Context(), idParam(r))
+	c, err := s.st.GetConnection(r.Context(), idParam(r))
+	if err != nil {
+		return store.Connection{}, err
+	}
+	u, _ := auth.FromContext(r.Context())
+	if !s.access(r.Context(), u, c).Read {
+		return store.Connection{}, errNoAccess
+	}
+	return c, nil
 }
+
+// errNoAccess is returned by connFor when the caller may not read the
+// connection. Handlers map it (like a not-found) to a 404 so existence isn't
+// disclosed.
+var errNoAccess = errors.New("no access to connection")

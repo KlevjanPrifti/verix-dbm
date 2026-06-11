@@ -5,7 +5,7 @@
 import type {
   Me, Connection, ExplorerData, Column, Index, Key, GridResponse, QueryResponse,
   DocResponse, UsagesResponse, RedisKeysResponse, RedisValue, RedisCmdResponse,
-  AuditRow, DDLPrefill, Role,
+  AuditRow, DDLPrefill, Role, Grant, GrantLevel,
 } from './types'
 
 let csrf = ''
@@ -52,6 +52,13 @@ export const api = {
   updateConnection: (id: number, in_: ConnInput) => req<{ ok: boolean }>('PUT', `/api/connections/${id}`, in_),
   deleteConnection: (id: number) => req<{ ok: boolean }>('DELETE', `/api/connections/${id}`),
   testConnection: (in_: ConnInput) => req<{ ok: boolean; error?: string }>('POST', '/api/connections/test', in_),
+
+  // Per-connection access grants (admin only).
+  listGrants: (id: number) => get<{ grants: Grant[] }>(`/api/connections/${id}/grants`),
+  setGrant: (id: number, subject: string, level: GrantLevel) =>
+    req<{ ok: boolean }>('PUT', `/api/connections/${id}/grants`, { subject, level }),
+  deleteGrant: (id: number, gid: number) =>
+    req<{ ok: boolean }>('DELETE', `/api/connections/${id}/grants/${gid}`),
 
   explorer: (id: number) => get<ExplorerData>(`/api/c/${id}/explorer`),
   columns: (id: number, schema: string, table: string) =>

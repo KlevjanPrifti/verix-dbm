@@ -3,6 +3,15 @@
 export interface Me {
   user: { name: string; email: string; admin: boolean; write: boolean }
   csrf: string
+  scopedAccess: boolean
+}
+
+export type GrantLevel = 'read' | 'write'
+
+export interface Grant {
+  id: number
+  subject: string
+  level: GrantLevel
 }
 
 export interface Connection {

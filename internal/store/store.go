@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -27,6 +28,31 @@ type Connection struct {
 	ReadOnly    bool
 	CreatedBy   string
 	CreatedAt   time.Time
+}
+
+// Grant scopes a subject's access to a single connection. Subject is a Keycloak
+// group path or realm-role name; Level is "read" or "write". Grants only take
+// effect when DBM_SCOPED_ACCESS is on (otherwise global roles apply to every
+// connection, the default behaviour). A grant never raises a user above their
+// global capability: it scopes which connections they reach, not what they can
+// do. Connection management (create/update/delete) stays a global-admin power.
+type Grant struct {
+	ID        int64
+	ConnID    int64
+	Subject   string
+	Level     string // GrantRead | GrantWrite
+	CreatedBy string
+	CreatedAt time.Time
+}
+
+const (
+	GrantRead  = "read"
+	GrantWrite = "write"
+)
+
+// ValidGrantLevel reports whether level is a recognised grant level.
+func ValidGrantLevel(level string) bool {
+	return level == GrantRead || level == GrantWrite
 }
 
 type Audit struct {
@@ -80,6 +106,15 @@ CREATE TABLE IF NOT EXISTS audit (
   action    TEXT NOT NULL,
   detail    TEXT NOT NULL DEFAULT '',
   success   INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS connection_grants (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  conn_id    INTEGER NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+  subject    TEXT NOT NULL,
+  level      TEXT NOT NULL,
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(conn_id, subject)
 );`)
 	return err
 }
@@ -163,6 +198,122 @@ func (s *Store) ListAudit(ctx context.Context, limit int) ([]Audit, error) {
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// ListGrants returns every grant on a connection, newest first. Used by the
+// admin access panel.
+func (s *Store) ListGrants(ctx context.Context, connID int64) ([]Grant, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,conn_id,subject,level,created_by,created_at FROM connection_grants WHERE conn_id=? ORDER BY subject`, connID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Grant
+	for rows.Next() {
+		g, err := scanGrant(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+// SetGrant upserts a grant: one (conn_id, subject) row, its level replaced on
+// repeat. created_by/created_at reflect the most recent write.
+func (s *Store) SetGrant(ctx context.Context, g Grant) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO connection_grants (conn_id,subject,level,created_by,created_at)
+		 VALUES (?,?,?,?,?)
+		 ON CONFLICT(conn_id,subject) DO UPDATE SET level=excluded.level, created_by=excluded.created_by, created_at=excluded.created_at`,
+		g.ConnID, g.Subject, g.Level, g.CreatedBy, time.Now().UTC().Format(time.RFC3339))
+	return err
+}
+
+// DeleteGrant removes a grant by id, scoped to its connection so a mismatched
+// pair is a no-op rather than deleting another connection's grant.
+func (s *Store) DeleteGrant(ctx context.Context, connID, id int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM connection_grants WHERE id=? AND conn_id=?`, id, connID)
+	return err
+}
+
+// GrantForSubjects returns the highest-level grant on connID held by any of the
+// given subjects (write outranks read), or nil if none match. This is the
+// per-request access lookup on the read/write paths.
+func (s *Store) GrantForSubjects(ctx context.Context, connID int64, subjects []string) (*Grant, error) {
+	if len(subjects) == 0 {
+		return nil, nil
+	}
+	ph, args := placeholders(subjects, connID)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,conn_id,subject,level,created_by,created_at FROM connection_grants
+		 WHERE conn_id=? AND subject IN (`+ph+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var best *Grant
+	for rows.Next() {
+		g, err := scanGrant(rows)
+		if err != nil {
+			return nil, err
+		}
+		if best == nil || (g.Level == GrantWrite && best.Level != GrantWrite) {
+			gc := g
+			best = &gc
+		}
+	}
+	return best, rows.Err()
+}
+
+// ListConnectionsForSubjects returns the connections any of the given subjects
+// has a grant on (scoped-access mode). Distinct, ordered like ListConnections.
+func (s *Store) ListConnectionsForSubjects(ctx context.Context, subjects []string) ([]Connection, error) {
+	if len(subjects) == 0 {
+		return nil, nil
+	}
+	ph, args := placeholders(subjects)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT c.id,c.name,c.kind,c.host,c.port,c.dbname,c.username,c.password_enc,c.options,c.readonly,c.created_by,c.created_at
+		 FROM connections c JOIN connection_grants g ON g.conn_id=c.id
+		 WHERE g.subject IN (`+ph+`) ORDER BY c.kind,c.name`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Connection
+	for rows.Next() {
+		c, err := scanConn(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// placeholders builds an "?,?,?" list for subjects and the matching args slice,
+// with any leading args (e.g. a conn id) prepended in order.
+func placeholders(subjects []string, lead ...any) (string, []any) {
+	ph := make([]string, len(subjects))
+	args := make([]any, 0, len(lead)+len(subjects))
+	args = append(args, lead...)
+	for i, s := range subjects {
+		ph[i] = "?"
+		args = append(args, s)
+	}
+	return strings.Join(ph, ","), args
+}
+
+func scanGrant(r scanner) (Grant, error) {
+	var g Grant
+	var ts string
+	if err := r.Scan(&g.ID, &g.ConnID, &g.Subject, &g.Level, &g.CreatedBy, &ts); err != nil {
+		return g, err
+	}
+	g.CreatedAt, _ = time.Parse(time.RFC3339, ts)
+	return g, nil
 }
 
 type scanner interface {

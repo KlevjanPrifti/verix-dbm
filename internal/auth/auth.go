@@ -31,10 +31,18 @@ type User struct {
 	Name    string
 	Email   string
 	Roles   []string
-	Admin   bool // may do anything, incl. destructive ops & connection CRUD
-	Write   bool // may mutate data
-	Read    bool // may browse/query (deny-by-default; write/admin imply it)
+	Groups  []string // Keycloak group memberships (for per-connection grants)
+	Admin   bool     // may do anything, incl. destructive ops & connection CRUD
+	Write   bool     // may mutate data
+	Read    bool     // may browse/query (deny-by-default; write/admin imply it)
 	CSRF    string
+}
+
+// Subjects returns the identifiers a per-connection grant may be keyed on: the
+// user's realm roles and group memberships, unioned. Used by scoped-access mode
+// to decide which connections a non-admin user can reach.
+func (u User) Subjects() []string {
+	return mergeRoles(u.Roles, u.Groups)
 }
 
 type session struct {
@@ -202,9 +210,10 @@ func (a *Authenticator) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var claims struct {
-		Sub         string `json:"sub"`
-		Name        string `json:"name"`
-		Email       string `json:"email"`
+		Sub         string   `json:"sub"`
+		Name        string   `json:"name"`
+		Email       string   `json:"email"`
+		Groups      []string `json:"groups"`
 		RealmAccess struct {
 			Roles []string `json:"roles"`
 		} `json:"realm_access"`
@@ -219,17 +228,20 @@ func (a *Authenticator) Callback(w http.ResponseWriter, r *http.Request) {
 	// signature-verified (atVerifier) before we trust its roles; if it isn't a
 	// verifiable JWT we fall back to the ID token's roles only.
 	roles := claims.RealmAccess.Roles
+	groups := claims.Groups
 	if at, err := a.atVerifier.Verify(r.Context(), oauth2Token.AccessToken); err == nil {
 		var ac struct {
+			Groups      []string `json:"groups"`
 			RealmAccess struct {
 				Roles []string `json:"roles"`
 			} `json:"realm_access"`
 		}
 		if at.Claims(&ac) == nil {
 			roles = mergeRoles(roles, ac.RealmAccess.Roles)
+			groups = mergeRoles(groups, ac.Groups)
 		}
 	}
-	u := User{Subject: claims.Sub, Name: claims.Name, Email: claims.Email, Roles: roles}
+	u := User{Subject: claims.Sub, Name: claims.Name, Email: claims.Email, Roles: roles, Groups: groups}
 	a.applyCaps(&u)
 	a.audit(r.Context(), "auth_login", u.Email, true)
 	tok := a.put(u, rawID)

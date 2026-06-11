@@ -434,6 +434,18 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .mcol.port { max-width: 120px; }
 .modal-foot { display: flex; align-items: center; gap: .6rem; margin-top: .5rem; padding-top: .8rem; border-top: 1px solid rgba(var(--accent-rgb),0.15); }
 .test-result { font-size: .78rem; }
+
+/* Per-connection access grants (scoped-access mode, admin only). */
+.grants-panel { display: flex; flex-direction: column; gap: .4rem; margin-top: .5rem; padding-top: .8rem; border-top: 1px solid rgba(var(--accent-rgb),0.15); }
+.grant-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.grant-row { display: flex; align-items: center; gap: .6rem; }
+.grant-subject { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
+.grant-level { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; padding: .1rem .4rem; border-radius: 2px; border: 1px solid; }
+.grant-level.read { color: var(--hud); border-color: rgba(var(--accent-rgb),0.4); }
+.grant-level.write { color: var(--cta); border-color: var(--cta); }
+.grant-add { display: flex; gap: .5rem; }
+.grant-add .hud-input.code { flex: 1; }
+.grant-add select { max-width: 110px; }
 .value-viewer { margin: 0; max-height: 60vh; overflow: auto; white-space: pre-wrap; word-break: break-word; padding: .8rem; background: rgba(var(--accent-rgb),0.04); border: 1px solid rgba(var(--accent-rgb),0.15); border-radius: 2px; color: var(--hud); font-size: .82rem; }
 
 /* Disabled context-menu items (write-only actions in the read-only data grid) */

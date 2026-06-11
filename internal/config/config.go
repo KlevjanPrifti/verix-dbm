@@ -28,6 +28,13 @@ type Config struct {
 	// when the realm is dedicated to this app and every realm user should read.
 	OpenRead bool
 
+	// ScopedAccess switches RBAC from global roles to per-connection grants for
+	// non-admin users. Off by default (a user's role applies to every connection,
+	// the original behaviour). When on, a non-admin user reaches a connection only
+	// if one of their groups/roles has a grant on it, and a grant never exceeds
+	// their global capability. Global admins still see and manage everything.
+	ScopedAccess bool
+
 	// TrustProxy enables honoring X-Forwarded-For / X-Real-IP for the client IP.
 	// Only safe behind a reverse proxy that overwrites those headers; off by
 	// default so untrusted clients can't spoof their address.
@@ -56,6 +63,7 @@ func Load() (*Config, error) {
 		OIDCWriteRole:    env("OIDC_WRITE_ROLE", "dbm-write"),
 		OIDCReadRole:     env("OIDC_READ_ROLE", "dbm-read"),
 		OpenRead:         os.Getenv("DBM_OPEN_READ") == "true",
+		ScopedAccess:     os.Getenv("DBM_SCOPED_ACCESS") == "true",
 		TrustProxy:       os.Getenv("DBM_TRUST_PROXY") == "true",
 		DevMode:          os.Getenv("DBM_DEV_MODE") == "true",
 	}
@@ -75,6 +83,9 @@ func Load() (*Config, error) {
 	}
 	if c.OpenRead {
 		log.Println("config: DBM_OPEN_READ=true every authenticated realm user is granted READ access to all connections.")
+	}
+	if c.ScopedAccess {
+		log.Println("config: DBM_SCOPED_ACCESS=true non-admin users reach a connection only via a per-connection grant.")
 	}
 	return c, nil
 }

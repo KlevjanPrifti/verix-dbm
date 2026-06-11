@@ -52,7 +52,7 @@ export interface TableDesignerParams {
   table?: string
 }
 
-export interface Caps { admin: boolean; write: boolean; csrf: string }
+export interface Caps { admin: boolean; write: boolean; csrf: string; scopedAccess: boolean }
 
 // HUD-themed replacements for window.confirm / window.prompt. A button's `value`
 // is what the returned promise resolves to; dismissing (Esc, overlay, Cancel)
