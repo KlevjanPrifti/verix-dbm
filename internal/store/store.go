@@ -1,5 +1,9 @@
-// Package store persists connection profiles and an audit log in SQLite
-// (pure-Go driver, so the binary stays static and cgo-free).
+// Package store persists connection profiles and an audit log. The default
+// backend is SQLite (pure-Go driver, so the binary stays static and cgo-free);
+// a Postgres backend can be selected for shared/replicated metadata in an HA
+// deployment. Both speak the same SQL here: queries are written with "?"
+// placeholders and rebound to "$N" for Postgres, the few engine-specific bits
+// (id columns, the reserved word "user") are handled explicitly.
 package store
 
 import (
@@ -7,10 +11,12 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver "pgx"
+	_ "modernc.org/sqlite"             // database/sql driver "sqlite"
 )
 
 // Connection is a saved target (Postgres or Redis). Password is stored
@@ -66,27 +72,78 @@ type Audit struct {
 }
 
 type Store struct {
-	db *sql.DB
+	db     *sql.DB
+	driver string // "sqlite" | "postgres"
 	// sink, if set, is called after every successful audit insert so the caller
 	// can mirror the event elsewhere (structured logs / metrics / SIEM). Best
 	// effort and synchronous, so it must be cheap and non-blocking.
 	sink func(Audit)
 }
 
+// Open opens the SQLite metadata store at path (the default backend).
 func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)")
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1) // SQLite: serialize writes; plenty for metadata
-	s := &Store{db: db}
+	return finishOpen(&Store{db: db, driver: "sqlite"})
+}
+
+// OpenPostgres opens a Postgres metadata store (HA: shared, replicated). The dsn
+// is a libpq/pgx connection string. Unlike SQLite it allows concurrent writers,
+// so several app replicas can share one metadata database.
+func OpenPostgres(dsn string) (*Store, error) {
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(10)
+	return finishOpen(&Store{db: db, driver: "postgres"})
+}
+
+func finishOpen(s *Store) (*Store, error) {
 	if err := s.migrate(); err != nil {
+		s.db.Close()
 		return nil, err
 	}
 	return s, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// rebind converts "?" placeholders to Postgres "$N". SQLite keeps "?", so the
+// rest of the package can be written once with "?".
+func (s *Store) rebind(q string) string {
+	if s.driver != "postgres" {
+		return q
+	}
+	var b strings.Builder
+	b.Grow(len(q) + 8)
+	n := 0
+	for i := 0; i < len(q); i++ {
+		if q[i] == '?' {
+			n++
+			b.WriteByte('$')
+			b.WriteString(strconv.Itoa(n))
+		} else {
+			b.WriteByte(q[i])
+		}
+	}
+	return b.String()
+}
+
+func (s *Store) exec(ctx context.Context, q string, args ...any) (sql.Result, error) {
+	return s.db.ExecContext(ctx, s.rebind(q), args...)
+}
+
+func (s *Store) query(ctx context.Context, q string, args ...any) (*sql.Rows, error) {
+	return s.db.QueryContext(ctx, s.rebind(q), args...)
+}
+
+func (s *Store) queryRow(ctx context.Context, q string, args ...any) *sql.Row {
+	return s.db.QueryRowContext(ctx, s.rebind(q), args...)
+}
 
 // Ping verifies the metadata DB is reachable (backs the readiness probe).
 func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
@@ -97,9 +154,17 @@ func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
 func (s *Store) OnAudit(fn func(Audit)) { s.sink = fn }
 
 func (s *Store) migrate() error {
+	// id columns are the only real DDL difference; "user" is quoted (reserved in
+	// Postgres) and accepted as an identifier by SQLite too.
+	idCol := "INTEGER PRIMARY KEY AUTOINCREMENT"
+	connRef := "INTEGER"
+	if s.driver == "postgres" {
+		idCol = "BIGSERIAL PRIMARY KEY"
+		connRef = "BIGINT"
+	}
 	_, err := s.db.Exec(`
 CREATE TABLE IF NOT EXISTS connections (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  id           ` + idCol + `,
   name         TEXT NOT NULL,
   kind         TEXT NOT NULL,
   host         TEXT NOT NULL,
@@ -113,17 +178,17 @@ CREATE TABLE IF NOT EXISTS connections (
   created_at   TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS audit (
-  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  id        ` + idCol + `,
   ts        TEXT NOT NULL,
-  user      TEXT NOT NULL DEFAULT '',
-  conn_id   INTEGER NOT NULL DEFAULT 0,
+  "user"    TEXT NOT NULL DEFAULT '',
+  conn_id   ` + connRef + ` NOT NULL DEFAULT 0,
   action    TEXT NOT NULL,
   detail    TEXT NOT NULL DEFAULT '',
   success   INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS connection_grants (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  conn_id    INTEGER NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+  id         ` + idCol + `,
+  conn_id    ` + connRef + ` NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
   subject    TEXT NOT NULL,
   level      TEXT NOT NULL,
   created_by TEXT NOT NULL DEFAULT '',
@@ -134,7 +199,7 @@ CREATE TABLE IF NOT EXISTS connection_grants (
 }
 
 func (s *Store) ListConnections(ctx context.Context) ([]Connection, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,name,kind,host,port,dbname,username,password_enc,options,readonly,created_by,created_at FROM connections ORDER BY kind,name`)
+	rows, err := s.query(ctx, `SELECT id,name,kind,host,port,dbname,username,password_enc,options,readonly,created_by,created_at FROM connections ORDER BY kind,name`)
 	if err != nil {
 		return nil, err
 	}
@@ -151,31 +216,31 @@ func (s *Store) ListConnections(ctx context.Context) ([]Connection, error) {
 }
 
 func (s *Store) GetConnection(ctx context.Context, id int64) (Connection, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id,name,kind,host,port,dbname,username,password_enc,options,readonly,created_by,created_at FROM connections WHERE id=?`, id)
+	row := s.queryRow(ctx, `SELECT id,name,kind,host,port,dbname,username,password_enc,options,readonly,created_by,created_at FROM connections WHERE id=?`, id)
 	return scanConn(row)
 }
 
 func (s *Store) CreateConnection(ctx context.Context, c Connection) (int64, error) {
-	res, err := s.db.ExecContext(ctx,
+	// RETURNING id works on both SQLite (>= 3.35) and Postgres, avoiding the
+	// LastInsertId divergence between drivers.
+	var id int64
+	err := s.queryRow(ctx,
 		`INSERT INTO connections (name,kind,host,port,dbname,username,password_enc,options,readonly,created_by,created_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		c.Name, c.Kind, c.Host, c.Port, c.DBName, c.Username, c.PasswordEnc, c.Options, boolToInt(c.ReadOnly), c.CreatedBy, time.Now().UTC().Format(time.RFC3339))
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
+		c.Name, c.Kind, c.Host, c.Port, c.DBName, c.Username, c.PasswordEnc, c.Options, boolToInt(c.ReadOnly), c.CreatedBy, time.Now().UTC().Format(time.RFC3339)).Scan(&id)
+	return id, err
 }
 
 // UpdateConnection saves edits to an existing connection. The password is only
 // rewritten when updatePw is true (an empty field in the edit form means "keep").
 func (s *Store) UpdateConnection(ctx context.Context, c Connection, updatePw bool) error {
 	if updatePw {
-		_, err := s.db.ExecContext(ctx,
+		_, err := s.exec(ctx,
 			`UPDATE connections SET name=?,kind=?,host=?,port=?,dbname=?,username=?,password_enc=?,options=?,readonly=? WHERE id=?`,
 			c.Name, c.Kind, c.Host, c.Port, c.DBName, c.Username, c.PasswordEnc, c.Options, boolToInt(c.ReadOnly), c.ID)
 		return err
 	}
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.exec(ctx,
 		`UPDATE connections SET name=?,kind=?,host=?,port=?,dbname=?,username=?,options=?,readonly=? WHERE id=?`,
 		c.Name, c.Kind, c.Host, c.Port, c.DBName, c.Username, c.Options, boolToInt(c.ReadOnly), c.ID)
 	return err
@@ -184,20 +249,20 @@ func (s *Store) UpdateConnection(ctx context.Context, c Connection, updatePw boo
 // UpdatePasswordEnc rewrites only the stored ciphertext for a connection. Used
 // by key rotation re-encryption, which must not touch any other field.
 func (s *Store) UpdatePasswordEnc(ctx context.Context, id int64, enc string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE connections SET password_enc=? WHERE id=?`, enc, id)
+	_, err := s.exec(ctx, `UPDATE connections SET password_enc=? WHERE id=?`, enc, id)
 	return err
 }
 
 func (s *Store) DeleteConnection(ctx context.Context, id int64) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM connections WHERE id=?`, id)
+	_, err := s.exec(ctx, `DELETE FROM connections WHERE id=?`, id)
 	return err
 }
 
 func (s *Store) AddAudit(ctx context.Context, a Audit) {
 	// Best-effort; never block a request on audit failure.
 	a.TS = time.Now().UTC()
-	_, _ = s.db.ExecContext(ctx,
-		`INSERT INTO audit (ts,user,conn_id,action,detail,success) VALUES (?,?,?,?,?,?)`,
+	_, _ = s.exec(ctx,
+		`INSERT INTO audit (ts,"user",conn_id,action,detail,success) VALUES (?,?,?,?,?,?)`,
 		a.TS.Format(time.RFC3339), a.User, a.ConnID, a.Action, a.Detail, boolToInt(a.Success))
 	if s.sink != nil {
 		s.sink(a)
@@ -208,7 +273,7 @@ func (s *Store) AddAudit(ctx context.Context, a Audit) {
 // the number removed. ts is stored as RFC3339 UTC, so a lexical comparison is a
 // correct chronological one.
 func (s *Store) PurgeAuditOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM audit WHERE ts < ?`, cutoff.UTC().Format(time.RFC3339))
+	res, err := s.exec(ctx, `DELETE FROM audit WHERE ts < ?`, cutoff.UTC().Format(time.RFC3339))
 	if err != nil {
 		return 0, err
 	}
@@ -218,7 +283,7 @@ func (s *Store) PurgeAuditOlderThan(ctx context.Context, cutoff time.Time) (int6
 // IterAudit streams every audit row, oldest first, to fn. Used by the export
 // endpoint so the full log can be dumped without buffering it all in memory.
 func (s *Store) IterAudit(ctx context.Context, fn func(Audit) error) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,ts,user,conn_id,action,detail,success FROM audit ORDER BY id`)
+	rows, err := s.query(ctx, `SELECT id,ts,"user",conn_id,action,detail,success FROM audit ORDER BY id`)
 	if err != nil {
 		return err
 	}
@@ -240,7 +305,7 @@ func (s *Store) IterAudit(ctx context.Context, fn func(Audit) error) error {
 }
 
 func (s *Store) ListAudit(ctx context.Context, limit int) ([]Audit, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,ts,user,conn_id,action,detail,success FROM audit ORDER BY id DESC LIMIT ?`, limit)
+	rows, err := s.query(ctx, `SELECT id,ts,"user",conn_id,action,detail,success FROM audit ORDER BY id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +328,7 @@ func (s *Store) ListAudit(ctx context.Context, limit int) ([]Audit, error) {
 // ListGrants returns every grant on a connection, newest first. Used by the
 // admin access panel.
 func (s *Store) ListGrants(ctx context.Context, connID int64) ([]Grant, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.query(ctx,
 		`SELECT id,conn_id,subject,level,created_by,created_at FROM connection_grants WHERE conn_id=? ORDER BY subject`, connID)
 	if err != nil {
 		return nil, err
@@ -283,7 +348,7 @@ func (s *Store) ListGrants(ctx context.Context, connID int64) ([]Grant, error) {
 // SetGrant upserts a grant: one (conn_id, subject) row, its level replaced on
 // repeat. created_by/created_at reflect the most recent write.
 func (s *Store) SetGrant(ctx context.Context, g Grant) error {
-	_, err := s.db.ExecContext(ctx,
+	_, err := s.exec(ctx,
 		`INSERT INTO connection_grants (conn_id,subject,level,created_by,created_at)
 		 VALUES (?,?,?,?,?)
 		 ON CONFLICT(conn_id,subject) DO UPDATE SET level=excluded.level, created_by=excluded.created_by, created_at=excluded.created_at`,
@@ -294,7 +359,7 @@ func (s *Store) SetGrant(ctx context.Context, g Grant) error {
 // DeleteGrant removes a grant by id, scoped to its connection so a mismatched
 // pair is a no-op rather than deleting another connection's grant.
 func (s *Store) DeleteGrant(ctx context.Context, connID, id int64) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM connection_grants WHERE id=? AND conn_id=?`, id, connID)
+	_, err := s.exec(ctx, `DELETE FROM connection_grants WHERE id=? AND conn_id=?`, id, connID)
 	return err
 }
 
@@ -306,7 +371,7 @@ func (s *Store) GrantForSubjects(ctx context.Context, connID int64, subjects []s
 		return nil, nil
 	}
 	ph, args := placeholders(subjects, connID)
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.query(ctx,
 		`SELECT id,conn_id,subject,level,created_by,created_at FROM connection_grants
 		 WHERE conn_id=? AND subject IN (`+ph+`)`, args...)
 	if err != nil {
@@ -334,7 +399,7 @@ func (s *Store) ListConnectionsForSubjects(ctx context.Context, subjects []strin
 		return nil, nil
 	}
 	ph, args := placeholders(subjects)
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.query(ctx,
 		`SELECT DISTINCT c.id,c.name,c.kind,c.host,c.port,c.dbname,c.username,c.password_enc,c.options,c.readonly,c.created_by,c.created_at
 		 FROM connections c JOIN connection_grants g ON g.conn_id=c.id
 		 WHERE g.subject IN (`+ph+`) ORDER BY c.kind,c.name`, args...)

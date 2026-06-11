@@ -45,6 +45,20 @@ type Config struct {
 	// default so untrusted clients can't spoof their address.
 	TrustProxy bool
 
+	// High availability.
+	// SessionBackend selects where sessions live: "memory" (default, single-node)
+	// or "redis" (shared, so multiple replicas can serve any session).
+	SessionBackend  string
+	SessionRedisURL string // redis://[:pass@]host:port/db when SessionBackend=redis
+	// StoreDriver selects the metadata backend: "sqlite" (default, zero-dependency)
+	// or "postgres" (shared/replicated metadata for HA). StoreDSN is the Postgres
+	// connection string when StoreDriver=postgres.
+	StoreDriver string
+	StoreDSN    string
+	// PGPoolMaxConns caps the pooled connections opened to each registered
+	// Postgres target (default 4). Raise it for busier deployments.
+	PGPoolMaxConns int
+
 	// Observability.
 	LogLevel  string // debug | info | warn | error (default info)
 	LogFormat string // json | text (default json; text is friendlier in dev)
@@ -86,6 +100,11 @@ func Load() (*Config, error) {
 		LogFormat:          env("DBM_LOG_FORMAT", "json"),
 		MetricsToken:       os.Getenv("DBM_METRICS_TOKEN"),
 		AuditRetentionDays: intEnv("DBM_AUDIT_RETENTION_DAYS", 0),
+		SessionBackend:     env("DBM_SESSION_BACKEND", "memory"),
+		SessionRedisURL:    os.Getenv("DBM_SESSION_REDIS_URL"),
+		StoreDriver:        env("DBM_STORE_DRIVER", "sqlite"),
+		StoreDSN:           os.Getenv("DBM_STORE_DSN"),
+		PGPoolMaxConns:     intEnv("DBM_PG_POOL_MAX_CONNS", 4),
 	}
 	if c.OIDCRedirectURL == "" {
 		c.OIDCRedirectURL = c.BaseURL + "/auth/callback"

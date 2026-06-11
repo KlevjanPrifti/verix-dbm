@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -59,8 +58,7 @@ type session struct {
 
 type Authenticator struct {
 	cfg      *config.Config
-	mu       sync.Mutex
-	sessions map[string]*session
+	sessions sessionStore
 
 	provider   *oidc.Provider
 	verifier   *oidc.IDTokenVerifier
@@ -85,7 +83,11 @@ func (a *Authenticator) audit(ctx context.Context, action, detail string, succes
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
-	a := &Authenticator{cfg: cfg, sessions: map[string]*session{}}
+	sessions, err := newSessionStore(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	a := &Authenticator{cfg: cfg, sessions: sessions}
 	if !cfg.DevMode {
 		p, err := oidc.NewProvider(ctx, cfg.OIDCIssuer)
 		if err != nil {
@@ -112,23 +114,7 @@ func New(ctx context.Context, cfg *config.Config) (*Authenticator, error) {
 			Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
 		}
 	}
-	go a.reap()
 	return a, nil
-}
-
-func (a *Authenticator) reap() {
-	t := time.NewTicker(time.Hour)
-	defer t.Stop()
-	for range t.C {
-		a.mu.Lock()
-		now := time.Now()
-		for k, s := range a.sessions {
-			if now.After(s.expires) {
-				delete(a.sessions, k)
-			}
-		}
-		a.mu.Unlock()
-	}
 }
 
 // Middleware requires an authenticated session with at least read access,
@@ -176,9 +162,7 @@ func (a *Authenticator) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	state := token()
 	// Stash the expected state in a short-lived cookie-less session entry.
-	a.mu.Lock()
-	a.sessions["state:"+state] = &session{expires: time.Now().Add(10 * time.Minute), oauthState: state}
-	a.mu.Unlock()
+	a.sessions.Put("state:"+state, &session{expires: time.Now().Add(10 * time.Minute), oauthState: state}, 10*time.Minute)
 	http.SetCookie(w, &http.Cookie{Name: "dbm_state", Value: state, Path: "/", HttpOnly: true, Secure: secure(a.cfg), SameSite: http.SameSiteLaxMode, MaxAge: 600})
 	http.Redirect(w, r, a.oauth.AuthCodeURL(state), http.StatusFound)
 }
@@ -260,12 +244,10 @@ func (a *Authenticator) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 	var idHint string
 	if c, err := r.Cookie(cookieName); err == nil {
-		a.mu.Lock()
-		if s, ok := a.sessions[c.Value]; ok {
+		if s, ok := a.sessions.Get(c.Value); ok {
 			idHint = s.idToken
 		}
-		delete(a.sessions, c.Value)
-		a.mu.Unlock()
+		a.sessions.Delete(c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", MaxAge: -1})
 
@@ -323,10 +305,8 @@ func (a *Authenticator) current(r *http.Request) (User, bool) {
 	if err != nil {
 		return User{}, false
 	}
-	a.mu.Lock()
-	s, ok := a.sessions[c.Value]
-	a.mu.Unlock()
-	if !ok || time.Now().After(s.expires) {
+	s, ok := a.sessions.Get(c.Value)
+	if !ok {
 		return User{}, false
 	}
 	u := s.user
@@ -336,17 +316,13 @@ func (a *Authenticator) current(r *http.Request) (User, bool) {
 
 func (a *Authenticator) put(u User, idToken string) string {
 	tok := token()
-	a.mu.Lock()
-	a.sessions[tok] = &session{user: u, idToken: idToken, csrf: token(), expires: time.Now().Add(sessionTTL)}
-	a.mu.Unlock()
+	a.sessions.Put(tok, &session{user: u, idToken: idToken, csrf: token(), expires: time.Now().Add(sessionTTL)}, sessionTTL)
 	return tok
 }
 
 // csrfFor returns the session's independent CSRF token (empty if no session).
 func (a *Authenticator) csrfFor(sessionKey string) string {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if s, ok := a.sessions[sessionKey]; ok {
+	if s, ok := a.sessions.Get(sessionKey); ok {
 		return s.csrf
 	}
 	return ""

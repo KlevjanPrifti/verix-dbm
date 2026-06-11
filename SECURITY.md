@@ -112,9 +112,10 @@ network, and run the container with egress restricted to the databases it needs.
 
 ## Known limitations / roadmap
 
-- **Sessions are in-memory:** they're lost on restart and don't shard across
-  replicas. Run a single instance, or move sessions to the shared Valkey (on the
-  roadmap) before scaling out.
+- **Sessions default to in-memory** (lost on restart, single-node). To run
+  multiple replicas behind a load balancer, set `DBM_SESSION_BACKEND=redis` (and
+  optionally `DBM_STORE_DRIVER=postgres` for shared metadata). See
+  [docs/phases/phase-4-per-customer-ha.md](docs/phases/phase-4-per-customer-ha.md).
 - **Rate limiting** covers the auth endpoints (per-IP) and the authenticated
   surface (a generous per-user backstop). It is a floor, not a substitute for an
   edge WAF on a hostile-internet deployment.

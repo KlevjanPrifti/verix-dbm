@@ -29,18 +29,24 @@ type redisEntry struct {
 }
 
 type Registry struct {
-	box   *crypto.Box
-	mu    sync.Mutex
-	pg    map[int64]*pgEntry
-	redis map[int64]*redisEntry
+	box        *crypto.Box
+	pgMaxConns int32
+	mu         sync.Mutex
+	pg         map[int64]*pgEntry
+	redis      map[int64]*redisEntry
 	// onCred, if set, is called whenever a stored credential is decrypted to open
 	// a pool (i.e. the secret is actually used). Lets the app audit credential
 	// access without coupling this package to the store.
 	onCred func(c store.Connection)
 }
 
-func NewRegistry(box *crypto.Box) *Registry {
-	r := &Registry{box: box, pg: map[int64]*pgEntry{}, redis: map[int64]*redisEntry{}}
+// NewRegistry builds the pool registry. pgMaxConns caps the pooled connections
+// opened to each Postgres target (<= 0 falls back to 4).
+func NewRegistry(box *crypto.Box, pgMaxConns int) *Registry {
+	if pgMaxConns <= 0 {
+		pgMaxConns = 4
+	}
+	r := &Registry{box: box, pgMaxConns: int32(pgMaxConns), pg: map[int64]*pgEntry{}, redis: map[int64]*redisEntry{}}
 	go r.janitor()
 	return r
 }
@@ -89,7 +95,7 @@ func (r *Registry) PG(ctx context.Context, c store.Connection) (*pgxpool.Pool, e
 	if err != nil {
 		return nil, err
 	}
-	cfg.MaxConns = 4
+	cfg.MaxConns = r.pgMaxConns
 	cfg.MaxConnIdleTime = idleTTL
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {

@@ -31,9 +31,11 @@ func main() {
 	logger := newLogger(cfg)
 	slog.SetDefault(logger)
 
-	if dir := filepath.Dir(cfg.SQLitePath); dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			fatal(logger, "mkdir data dir", err)
+	if cfg.StoreDriver != "postgres" {
+		if dir := filepath.Dir(cfg.SQLitePath); dir != "" {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				fatal(logger, "mkdir data dir", err)
+			}
 		}
 	}
 
@@ -42,13 +44,13 @@ func main() {
 		fatal(logger, "crypto", err)
 	}
 
-	st, err := store.Open(cfg.SQLitePath)
+	st, err := openStore(cfg)
 	if err != nil {
 		fatal(logger, "store", err)
 	}
 	defer st.Close()
 
-	reg := conn.NewRegistry(box)
+	reg := conn.NewRegistry(box, cfg.PGPoolMaxConns)
 
 	ctx := context.Background()
 	a, err := auth.New(ctx, cfg)
@@ -142,6 +144,15 @@ func retainAudit(st *store.Store, logger *slog.Logger, retentionDays int) {
 	for range t.C {
 		purge()
 	}
+}
+
+// openStore opens the configured metadata backend: SQLite by default, or
+// Postgres (shared/replicated, for HA) when DBM_STORE_DRIVER=postgres.
+func openStore(cfg *config.Config) (*store.Store, error) {
+	if cfg.StoreDriver == "postgres" {
+		return store.OpenPostgres(cfg.StoreDSN)
+	}
+	return store.Open(cfg.SQLitePath)
 }
 
 func fatal(logger *slog.Logger, msg string, err error) {
