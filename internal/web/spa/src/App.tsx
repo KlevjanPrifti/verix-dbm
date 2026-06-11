@@ -129,6 +129,15 @@ export default function App() {
         <nav className="topnav hud-label">
           <a className="on" href="/app">Connections</a>
           {me.user.admin && <a href="#" onClick={e => { e.preventDefault(); setAuditOpen(true) }}>Audit</a>}
+          {me.user.admin && <a href="#" onClick={async e => {
+            e.preventDefault()
+            const ok = await confirm({ title: 'Re-encrypt credentials', body: 'Re-encrypt every saved password under the current primary key. Safe to run anytime; run after rotating DBM_ENC_KEYS.', buttons: [{ label: 'Re-encrypt', value: 'go', variant: 'cta' }] })
+            if (ok !== 'go') return
+            try {
+              const r = await api.reencrypt()
+              notify(`Re-encrypt (key ${r.primaryKey}): ${r.rewritten} rewritten, ${r.checked} checked` + (r.failed ? `, ${r.failed} failed` : ''), r.failed ? 'error' : 'ok')
+            } catch (x: any) { notify(String(x.message || x), 'error') }
+          }}>Re-encrypt</a>}
         </nav>
         <div className="userbox hud-label">
           <span className="who">{me.user.name}{me.user.admin ? ' · ADMIN' : me.user.write ? ' · WRITE' : ' · READ'}</span>

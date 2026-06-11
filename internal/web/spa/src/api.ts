@@ -53,6 +53,10 @@ export const api = {
   deleteConnection: (id: number) => req<{ ok: boolean }>('DELETE', `/api/connections/${id}`),
   testConnection: (in_: ConnInput) => req<{ ok: boolean; error?: string }>('POST', '/api/connections/test', in_),
 
+  // Re-encrypt every stored credential under the current primary key (admin;
+  // the second half of a key rotation).
+  reencrypt: () => req<{ primaryKey: string; checked: number; rewritten: number; failed: number }>('POST', '/api/admin/reencrypt'),
+
   // Per-connection access grants (admin only).
   listGrants: (id: number) => get<{ grants: Grant[] }>(`/api/connections/${id}/grants`),
   setGrant: (id: number, subject: string, level: GrantLevel) =>

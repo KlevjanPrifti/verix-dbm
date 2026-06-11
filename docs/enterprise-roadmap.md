@@ -14,7 +14,7 @@ Each completed phase has a detailed design + usage doc under [docs/phases/](phas
 | --- | --- | --- | --- |
 | 1 | Per-connection RBAC | Complete | [phase-1-per-connection-rbac.md](phases/phase-1-per-connection-rbac.md) |
 | 2 | Operability (logs, metrics, readiness, audit export) | Complete | [phase-2-operability.md](phases/phase-2-operability.md) |
-| 3 | Secrets & key management (rotation, KMS/Vault) | Not started | - |
+| 3 | Secrets & key management (rotation, KMS/Vault) | Complete | [phase-3-secrets-key-management.md](phases/phase-3-secrets-key-management.md) |
 | 4 | Per-customer HA (sessions, optional Postgres metadata) | Not started | - |
 | 5 | Packaging, deployment & supply chain | Not started | - |
 | 6 | Compliance hardening & test depth | Not started | - |

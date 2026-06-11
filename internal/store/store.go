@@ -181,6 +181,13 @@ func (s *Store) UpdateConnection(ctx context.Context, c Connection, updatePw boo
 	return err
 }
 
+// UpdatePasswordEnc rewrites only the stored ciphertext for a connection. Used
+// by key rotation re-encryption, which must not touch any other field.
+func (s *Store) UpdatePasswordEnc(ctx context.Context, id int64, enc string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE connections SET password_enc=? WHERE id=?`, enc, id)
+	return err
+}
+
 func (s *Store) DeleteConnection(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM connections WHERE id=?`, id)
 	return err

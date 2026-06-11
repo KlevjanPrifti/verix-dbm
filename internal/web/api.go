@@ -70,6 +70,10 @@ func (s *Server) mountAPI(r chi.Router) {
 
 	r.Get("/audit", s.apiAudit)
 	r.Get("/audit/export", s.apiAuditExport)
+
+	// Key rotation: re-encrypt every stored credential under the current primary
+	// key (admin only).
+	r.Post("/admin/reencrypt", s.apiReencrypt)
 }
 
 // JSON plumbing
@@ -1183,6 +1187,50 @@ func (s *Server) apiAuditExport(w http.ResponseWriter, r *http.Request) {
 	default:
 		apiErr(w, http.StatusBadRequest, "format must be 'jsonl' or 'csv'")
 	}
+}
+
+// apiReencrypt re-encrypts every stored credential under the current primary
+// key, the second half of a non-destructive key rotation (admin only). It is
+// safe to run repeatedly: connections already on the primary key are skipped.
+func (s *Server) apiReencrypt(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.apiRequireAdmin(w, r)
+	if !ok {
+		return
+	}
+	conns, err := s.st.ListConnections(r.Context())
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	var checked, rewritten, failed int
+	for _, c := range conns {
+		if c.PasswordEnc == "" {
+			continue
+		}
+		checked++
+		enc, changed, err := s.box.Reencrypt(c.PasswordEnc)
+		if err != nil {
+			failed++
+			continue
+		}
+		if !changed {
+			continue
+		}
+		if err := s.st.UpdatePasswordEnc(r.Context(), c.ID, enc); err != nil {
+			failed++
+			continue
+		}
+		s.reg.Forget(c.ID) // drop any cached pool so it re-decrypts next use
+		rewritten++
+	}
+	s.st.AddAudit(r.Context(), store.Audit{
+		User: u.Email, Action: "reencrypt",
+		Detail:  "key=" + s.box.PrimaryID() + " checked=" + strconv.Itoa(checked) + " rewritten=" + strconv.Itoa(rewritten) + " failed=" + strconv.Itoa(failed),
+		Success: failed == 0,
+	})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"primaryKey": s.box.PrimaryID(), "checked": checked, "rewritten": rewritten, "failed": failed,
+	})
 }
 
 // shared gates

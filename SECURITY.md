@@ -65,6 +65,14 @@ As defense in depth, verix-dbm additionally:
   "Save as copy" duplicates it server-side. Set a stable `DBM_ENC_KEY` in
   production  without it an ephemeral key is used and saved passwords become
   unreadable after a restart.
+- **Keys are versioned and rotatable without downtime.** `DBM_ENC_KEYS`
+  (`id:key,id:key,...`, first = primary) lets a new key coexist with the old one;
+  an admin then runs **Re-encrypt** (`POST /api/admin/reencrypt`) to roll stored
+  credentials onto the new key, after which the old key can be dropped. The
+  keyring also exposes a `Provider` seam so an external KMS / Vault can supply key
+  material. Every decryption of a stored credential for use is audited
+  (`cred_access`). See
+  [docs/phases/phase-3-secrets-key-management.md](docs/phases/phase-3-secrets-key-management.md).
 - The **audit log redacts** `PASSWORD '…'` / `IDENTIFIED BY '…'` (SQL) and
   Redis `AUTH` / `CONFIG SET requirepass` values before persisting, so role
   passwords you set through the UI don't land in SQLite in cleartext. The same

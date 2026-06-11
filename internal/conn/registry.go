@@ -33,6 +33,10 @@ type Registry struct {
 	mu    sync.Mutex
 	pg    map[int64]*pgEntry
 	redis map[int64]*redisEntry
+	// onCred, if set, is called whenever a stored credential is decrypted to open
+	// a pool (i.e. the secret is actually used). Lets the app audit credential
+	// access without coupling this package to the store.
+	onCred func(c store.Connection)
 }
 
 func NewRegistry(box *crypto.Box) *Registry {
@@ -40,6 +44,10 @@ func NewRegistry(box *crypto.Box) *Registry {
 	go r.janitor()
 	return r
 }
+
+// OnCredentialAccess registers a callback invoked each time a saved password is
+// decrypted to open a connection.
+func (r *Registry) OnCredentialAccess(fn func(c store.Connection)) { r.onCred = fn }
 
 func (r *Registry) janitor() {
 	t := time.NewTicker(time.Minute)
@@ -157,5 +165,9 @@ func (r *Registry) password(c store.Connection) (string, error) {
 	if c.PasswordEnc == "" {
 		return "", nil
 	}
-	return r.box.Decrypt(c.PasswordEnc)
+	pw, err := r.box.Decrypt(c.PasswordEnc)
+	if err == nil && r.onCred != nil {
+		r.onCred(c)
+	}
+	return pw, err
 }

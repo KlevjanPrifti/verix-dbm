@@ -12,7 +12,11 @@ type Config struct {
 	Addr       string // HTTP bind address, e.g. ":8080"
 	SQLitePath string // path to the metadata DB file
 	EncKey     string // hex/base64 32-byte key for credential encryption ("" => ephemeral)
-	BaseURL    string // public base URL (for OIDC redirect default)
+	// EncKeys is the multi-key form for rotation: "id:key,id:key,..." with the
+	// first entry the primary (new writes) and the rest retained for decryption.
+	// When set it supersedes EncKey. See DBM_ENC_KEYS.
+	EncKeys string
+	BaseURL string // public base URL (for OIDC redirect default)
 
 	// OIDC / Keycloak realm roles → capabilities.
 	OIDCIssuer       string
@@ -65,6 +69,7 @@ func Load() (*Config, error) {
 		Addr:               env("DBM_ADDR", ":8080"),
 		SQLitePath:         env("DBM_SQLITE_PATH", "./data/verix-dbm.db"),
 		EncKey:             os.Getenv("DBM_ENC_KEY"),
+		EncKeys:            os.Getenv("DBM_ENC_KEYS"),
 		BaseURL:            env("DBM_BASE_URL", "http://localhost:8080"),
 		OIDCIssuer:         os.Getenv("OIDC_ISSUER"),
 		OIDCClientID:       os.Getenv("OIDC_CLIENT_ID"),

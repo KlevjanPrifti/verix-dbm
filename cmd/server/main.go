@@ -37,7 +37,7 @@ func main() {
 		}
 	}
 
-	box, err := crypto.New(cfg.EncKey)
+	box, err := crypto.ParseKeyring(cfg.EncKey, cfg.EncKeys)
 	if err != nil {
 		fatal(logger, "crypto", err)
 	}
@@ -64,6 +64,10 @@ func main() {
 	// Mirror every audit event to the structured log (for SIEM forwarding) and
 	// feed the auth-outcome metric.
 	st.OnAudit(srv.ObserveAudit)
+	// Audit every use of a stored credential (decrypt-to-open-a-pool).
+	reg.OnCredentialAccess(func(c store.Connection) {
+		st.AddAudit(context.Background(), store.Audit{ConnID: c.ID, Action: "cred_access", Detail: c.Name, Success: true})
+	})
 
 	// Background audit retention: purge rows older than the configured window.
 	if cfg.AuditRetentionDays > 0 {

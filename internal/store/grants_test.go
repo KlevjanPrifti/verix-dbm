@@ -25,6 +25,28 @@ func mkConn(t *testing.T, s *Store, name string) int64 {
 	return id
 }
 
+func TestUpdatePasswordEnc(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	id, err := s.CreateConnection(ctx, Connection{Name: "c", Kind: "postgres", Host: "h", Port: 5432, PasswordEnc: "1$old"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdatePasswordEnc(ctx, id, "v2$new"); err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.GetConnection(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.PasswordEnc != "v2$new" {
+		t.Errorf("password_enc = %q, want v2$new", c.PasswordEnc)
+	}
+	if c.Name != "c" || c.Host != "h" {
+		t.Errorf("UpdatePasswordEnc must not touch other fields: %+v", c)
+	}
+}
+
 func TestGrantSetUpsertAndList(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)
