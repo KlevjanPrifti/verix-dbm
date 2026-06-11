@@ -70,7 +70,7 @@ export default function RedisTab({ connId }: { connId: number }) {
       <div className="redis-main">
         <div className="hud-panel p-4 panel-grow">
           <h3 className="hud-heading">Value</h3>
-          <div>
+          <div className="grow-body">
             {valueErr && <div className="alert error code">{valueErr}</div>}
             {!value && !valueErr && <p className="dim">Select a key from the keyspace to inspect it.</p>}
             {value && <RedisValueView v={value} />}

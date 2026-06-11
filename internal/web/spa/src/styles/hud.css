@@ -168,7 +168,8 @@ table.data tbody tr:hover td { color: var(--hud); }
 .panel-grow { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .panel-grow > #qresult,
 .panel-grow > #rvalue,
-.panel-grow > #cmdresult { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.panel-grow > #cmdresult,
+.panel-grow > .grow-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .panel-grow .tablewrap { flex: 1; min-height: 0; max-height: none; }
 .panel-grow .val, .panel-grow .vlist { flex: 1; min-height: 0; max-height: none; }
 .tree details { margin: .25rem 0; }
@@ -390,7 +391,7 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .editable-cell { cursor: text; }
 .draft-ph { font-style: italic; opacity: .55; }
 /* Tx chip: clickable mode toggle; amber while in manual (uncommitted) mode. */
-.tx-chip { background: none; cursor: pointer; font: inherit; color: rgba(var(--accent-rgb),0.85); }
+.tx-chip { background: none; cursor: pointer; color: rgba(var(--accent-rgb),0.85); }
 .tx-chip:hover:not(:disabled) { background: rgba(var(--accent-rgb),0.12); }
 .tx-chip:disabled { opacity: .4; cursor: not-allowed; }
 .tx-chip.manual { color: #e6c07b; border-color: rgba(230,192,123,0.6); }
