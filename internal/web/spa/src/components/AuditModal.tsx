@@ -19,7 +19,10 @@ export default function AuditModal({ onClose }: { onClose: () => void }) {
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal hud-panel hud-panel-glow" style={{ maxWidth: '60rem', width: '90vw' }}>
         <div className="modal-head">
-          <span className="hud-heading">Audit log</span>
+          <span className="hud-heading">Audit log <span className="dim">· last 200</span></span>
+          <span className="tb-grow" />
+          <button type="button" className="hud-btn-accent" onClick={() => api.auditExport('jsonl').catch(e => setErr(String(e.message || e)))}>Export JSONL</button>
+          <button type="button" className="hud-btn-accent" onClick={() => api.auditExport('csv').catch(e => setErr(String(e.message || e)))}>Export CSV</button>
           <button type="button" className="ico-btn" onClick={onClose}><X size={16} /></button>
         </div>
         <div className="modal-body">

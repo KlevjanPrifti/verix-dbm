@@ -6,6 +6,7 @@ package web
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -68,6 +69,7 @@ func (s *Server) mountAPI(r chi.Router) {
 	r.Post("/c/{id}/redis/cmd", s.apiRedisCmd)
 
 	r.Get("/audit", s.apiAudit)
+	r.Get("/audit/export", s.apiAuditExport)
 }
 
 // JSON plumbing
@@ -1139,6 +1141,48 @@ func (s *Server) apiAudit(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rows": out})
+}
+
+// apiAuditExport streams the FULL audit log as a download for SIEM ingestion or
+// forensics (admin only). format=jsonl (default) emits one JSON object per line;
+// format=csv emits a header plus rows. It streams via IterAudit so a large log
+// isn't buffered in memory.
+func (s *Server) apiAuditExport(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.FromContext(r.Context())
+	if !u.Admin {
+		apiErr(w, http.StatusForbidden, "admin required")
+		return
+	}
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "jsonl"
+	}
+	switch format {
+	case "jsonl":
+		w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="audit.jsonl"`)
+		enc := json.NewEncoder(w)
+		_ = s.st.IterAudit(r.Context(), func(a store.Audit) error {
+			return enc.Encode(auditDTO{
+				TS: a.TS.Format(time.RFC3339), User: a.User, ConnID: a.ConnID,
+				Action: a.Action, Detail: a.Detail, Success: a.Success,
+			})
+		})
+	case "csv":
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="audit.csv"`)
+		cw := csv.NewWriter(w)
+		_ = cw.Write([]string{"ts", "user", "conn_id", "action", "detail", "success"})
+		_ = s.st.IterAudit(r.Context(), func(a store.Audit) error {
+			return cw.Write([]string{
+				a.TS.Format(time.RFC3339), a.User, strconv.FormatInt(a.ConnID, 10),
+				a.Action, a.Detail, strconv.FormatBool(a.Success),
+			})
+		})
+		cw.Flush()
+	default:
+		apiErr(w, http.StatusBadRequest, "format must be 'jsonl' or 'csv'")
+	}
 }
 
 // shared gates

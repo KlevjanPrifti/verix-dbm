@@ -65,7 +65,13 @@ type Audit struct {
 	Success bool
 }
 
-type Store struct{ db *sql.DB }
+type Store struct {
+	db *sql.DB
+	// sink, if set, is called after every successful audit insert so the caller
+	// can mirror the event elsewhere (structured logs / metrics / SIEM). Best
+	// effort and synchronous, so it must be cheap and non-blocking.
+	sink func(Audit)
+}
 
 func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)")
@@ -81,6 +87,14 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// Ping verifies the metadata DB is reachable (backs the readiness probe).
+func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
+
+// OnAudit registers a sink invoked after each audit row is written. Used to
+// mirror audit events to structured logs / metrics without coupling the store to
+// either.
+func (s *Store) OnAudit(fn func(Audit)) { s.sink = fn }
 
 func (s *Store) migrate() error {
 	_, err := s.db.Exec(`
@@ -174,9 +188,48 @@ func (s *Store) DeleteConnection(ctx context.Context, id int64) error {
 
 func (s *Store) AddAudit(ctx context.Context, a Audit) {
 	// Best-effort; never block a request on audit failure.
+	a.TS = time.Now().UTC()
 	_, _ = s.db.ExecContext(ctx,
 		`INSERT INTO audit (ts,user,conn_id,action,detail,success) VALUES (?,?,?,?,?,?)`,
-		time.Now().UTC().Format(time.RFC3339), a.User, a.ConnID, a.Action, a.Detail, boolToInt(a.Success))
+		a.TS.Format(time.RFC3339), a.User, a.ConnID, a.Action, a.Detail, boolToInt(a.Success))
+	if s.sink != nil {
+		s.sink(a)
+	}
+}
+
+// PurgeAuditOlderThan deletes audit rows timestamped before cutoff and returns
+// the number removed. ts is stored as RFC3339 UTC, so a lexical comparison is a
+// correct chronological one.
+func (s *Store) PurgeAuditOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM audit WHERE ts < ?`, cutoff.UTC().Format(time.RFC3339))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// IterAudit streams every audit row, oldest first, to fn. Used by the export
+// endpoint so the full log can be dumped without buffering it all in memory.
+func (s *Store) IterAudit(ctx context.Context, fn func(Audit) error) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,ts,user,conn_id,action,detail,success FROM audit ORDER BY id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var a Audit
+		var ts string
+		var succ int
+		if err := rows.Scan(&a.ID, &ts, &a.User, &a.ConnID, &a.Action, &a.Detail, &succ); err != nil {
+			return err
+		}
+		a.TS, _ = time.Parse(time.RFC3339, ts)
+		a.Success = succ != 0
+		if err := fn(a); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
 }
 
 func (s *Store) ListAudit(ctx context.Context, limit int) ([]Audit, error) {

@@ -67,7 +67,14 @@ As defense in depth, verix-dbm additionally:
   unreadable after a restart.
 - The **audit log redacts** `PASSWORD '…'` / `IDENTIFIED BY '…'` (SQL) and
   Redis `AUTH` / `CONFIG SET requirepass` values before persisting, so role
-  passwords you set through the UI don't land in SQLite in cleartext.
+  passwords you set through the UI don't land in SQLite in cleartext. The same
+  redaction applies to events mirrored to the structured log and to exports.
+- **Audit forwarding, export, and retention.** Every audit event is mirrored to
+  the structured (JSON) log, so a log shipper forwards it to your SIEM with no
+  extra integration. Admins can pull the full log via
+  `GET /api/audit/export?format=jsonl|csv`. `DBM_AUDIT_RETENTION_DAYS` purges rows
+  older than the window (0 = keep forever). See
+  [docs/phases/phase-2-operability.md](docs/phases/phase-2-operability.md).
 
 ## Transport & browser hardening
 
@@ -81,6 +88,11 @@ As defense in depth, verix-dbm additionally:
   The CSP still allows `script-src 'unsafe-eval'` (the legacy Alpine.js workbench
   needs it) and inline styles; tightening it further is tracked alongside
   self-hosting fonts and retiring the legacy pages.
+- **Operational endpoints are unauthenticated by design:** `/healthz` and
+  `/readyz` (liveness/readiness) expose no sensitive data, and `/metrics` exposes
+  only aggregate counters with bounded-cardinality labels (no SQL, no
+  credentials). Set `DBM_METRICS_TOKEN` to require a Bearer token on `/metrics`,
+  or restrict these paths at your ingress, when the port is internet-reachable.
 
 ## Network exposure (SSRF)  admins are trusted
 

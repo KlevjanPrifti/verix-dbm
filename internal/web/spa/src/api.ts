@@ -115,6 +115,17 @@ export const api = {
     req<RedisCmdResponse>('POST', `/api/c/${id}/redis/cmd`, { cmd, confirm }),
 
   audit: () => get<{ rows: AuditRow[] }>('/api/audit'),
+  // Full audit log download (admin) for SIEM/forensics. jsonl or csv.
+  auditExport: async (format: 'jsonl' | 'csv') => {
+    const res = await fetch(`/api/audit/export?format=${format}`, { credentials: 'same-origin' })
+    if (!res.ok) throw new ApiError(await res.text())
+    const blob = await res.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `audit.${format}`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  },
 
   // CSV/JSON export is a file download: post the CSRF header, then save the blob.
   exportTable: async (id: number, schema: string, table: string, where: string, order: string, format: string) => {

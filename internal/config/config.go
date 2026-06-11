@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 )
 
 type Config struct {
@@ -40,6 +41,16 @@ type Config struct {
 	// default so untrusted clients can't spoof their address.
 	TrustProxy bool
 
+	// Observability.
+	LogLevel  string // debug | info | warn | error (default info)
+	LogFormat string // json | text (default json; text is friendlier in dev)
+	// MetricsToken, when set, requires scrapers of /metrics to send it as a
+	// Bearer token. Empty leaves /metrics open (typical behind a private network).
+	MetricsToken string
+	// AuditRetentionDays purges audit rows older than this many days. 0 keeps
+	// them forever (the default).
+	AuditRetentionDays int
+
 	// DevMode auto-logs every request in as a local admin (no Keycloak). It must
 	// be requested explicitly via DBM_DEV_MODE=true a missing OIDC config no
 	// longer silently disables auth (that would fail open in production).
@@ -51,21 +62,25 @@ type Config struct {
 // process fails closed instead of booting wide open on a misconfiguration.
 func Load() (*Config, error) {
 	c := &Config{
-		Addr:             env("DBM_ADDR", ":8080"),
-		SQLitePath:       env("DBM_SQLITE_PATH", "./data/verix-dbm.db"),
-		EncKey:           os.Getenv("DBM_ENC_KEY"),
-		BaseURL:          env("DBM_BASE_URL", "http://localhost:8080"),
-		OIDCIssuer:       os.Getenv("OIDC_ISSUER"),
-		OIDCClientID:     os.Getenv("OIDC_CLIENT_ID"),
-		OIDCClientSecret: os.Getenv("OIDC_CLIENT_SECRET"),
-		OIDCRedirectURL:  os.Getenv("OIDC_REDIRECT_URL"),
-		OIDCAdminRole:    env("OIDC_ADMIN_ROLE", "dbm-admin"),
-		OIDCWriteRole:    env("OIDC_WRITE_ROLE", "dbm-write"),
-		OIDCReadRole:     env("OIDC_READ_ROLE", "dbm-read"),
-		OpenRead:         os.Getenv("DBM_OPEN_READ") == "true",
-		ScopedAccess:     os.Getenv("DBM_SCOPED_ACCESS") == "true",
-		TrustProxy:       os.Getenv("DBM_TRUST_PROXY") == "true",
-		DevMode:          os.Getenv("DBM_DEV_MODE") == "true",
+		Addr:               env("DBM_ADDR", ":8080"),
+		SQLitePath:         env("DBM_SQLITE_PATH", "./data/verix-dbm.db"),
+		EncKey:             os.Getenv("DBM_ENC_KEY"),
+		BaseURL:            env("DBM_BASE_URL", "http://localhost:8080"),
+		OIDCIssuer:         os.Getenv("OIDC_ISSUER"),
+		OIDCClientID:       os.Getenv("OIDC_CLIENT_ID"),
+		OIDCClientSecret:   os.Getenv("OIDC_CLIENT_SECRET"),
+		OIDCRedirectURL:    os.Getenv("OIDC_REDIRECT_URL"),
+		OIDCAdminRole:      env("OIDC_ADMIN_ROLE", "dbm-admin"),
+		OIDCWriteRole:      env("OIDC_WRITE_ROLE", "dbm-write"),
+		OIDCReadRole:       env("OIDC_READ_ROLE", "dbm-read"),
+		OpenRead:           os.Getenv("DBM_OPEN_READ") == "true",
+		ScopedAccess:       os.Getenv("DBM_SCOPED_ACCESS") == "true",
+		TrustProxy:         os.Getenv("DBM_TRUST_PROXY") == "true",
+		DevMode:            os.Getenv("DBM_DEV_MODE") == "true",
+		LogLevel:           env("DBM_LOG_LEVEL", "info"),
+		LogFormat:          env("DBM_LOG_FORMAT", "json"),
+		MetricsToken:       os.Getenv("DBM_METRICS_TOKEN"),
+		AuditRetentionDays: intEnv("DBM_AUDIT_RETENTION_DAYS", 0),
 	}
 	if c.OIDCRedirectURL == "" {
 		c.OIDCRedirectURL = c.BaseURL + "/auth/callback"
@@ -95,4 +110,18 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// intEnv reads a non-negative integer env var, falling back to def when unset or
+// unparseable.
+func intEnv(key string, def int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return def
+	}
+	return n
 }

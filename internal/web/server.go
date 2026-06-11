@@ -3,6 +3,7 @@ package web
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -18,15 +19,20 @@ import (
 )
 
 type Server struct {
-	cfg  *config.Config
-	st   *store.Store
-	reg  *conn.Registry
-	auth *auth.Authenticator
-	box  *crypto.Box
+	cfg     *config.Config
+	st      *store.Store
+	reg     *conn.Registry
+	auth    *auth.Authenticator
+	box     *crypto.Box
+	log     *slog.Logger
+	metrics *metrics
 }
 
-func NewServer(cfg *config.Config, st *store.Store, reg *conn.Registry, a *auth.Authenticator, box *crypto.Box) *Server {
-	return &Server{cfg: cfg, st: st, reg: reg, auth: a, box: box}
+func NewServer(cfg *config.Config, st *store.Store, reg *conn.Registry, a *auth.Authenticator, box *crypto.Box, logger *slog.Logger) *Server {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Server{cfg: cfg, st: st, reg: reg, auth: a, box: box, log: logger, metrics: newMetrics()}
 }
 
 func (s *Server) Router() http.Handler {
@@ -36,10 +42,16 @@ func (s *Server) Router() http.Handler {
 	if s.cfg.TrustProxy {
 		r.Use(middleware.RealIP)
 	}
+	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
+	r.Use(s.observe) // structured request log + Prometheus metrics (skips infra paths)
 	r.Use(securityHeaders(s.cfg))
 
+	// Operational endpoints, unauthenticated by design: liveness, readiness, and
+	// the Prometheus scrape (the latter optionally gated by DBM_METRICS_TOKEN).
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
+	r.Get("/readyz", s.readyz)
+	r.Get("/metrics", s.metricsHandler)
 
 	// Throttle auth endpoints against brute-force / redirect spam, per client IP.
 	authLimit := newRateLimiter(20, time.Minute)
