@@ -137,11 +137,13 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
           {mode === 'edit' && editId != null && app.caps.admin && app.caps.scopedAccess && (
             <GrantsPanel connId={editId} />
           )}
+          {test && (
+            <div className={`test-result ${test.ok ? 'ok' : 'bad'} hud-label code`}>
+              {test.ok ? <Check size={13} /> : <X size={13} />}<span>{test.msg}</span>
+            </div>
+          )}
           <div className="modal-foot">
             <button type="button" className="hud-btn-accent" onClick={onTest}>Test Connection</button>
-            <span className={`test-result ${test ? (test.ok ? 'ok' : 'bad') : ''} hud-label code`}>
-              {test && (test.ok ? <Check size={13} /> : <X size={13} />)}{test ? ' ' + test.msg : ''}
-            </span>
             <span className="tb-grow" />
             {mode === 'edit' && (
               <button type="button" className="hud-btn-accent" onClick={e => save(true)(e)}
