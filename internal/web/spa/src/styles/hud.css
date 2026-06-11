@@ -614,8 +614,17 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
   .fb-input { min-width: 0; width: 100%; }
   table.data td { max-width: 78vw; }
 
-  /* Redis pane: cap the key list so the value area stays reachable */
-  .redis-keys { max-height: 38vh; }
+  /* Redis pane: stack into one scrolling column instead of inheriting the
+     desktop two-pane height:100% layout (which leaves the value/console area
+     unreachable below a full-height key list on a phone). The pane owns the
+     scroll; the keyspace keeps its own capped scroll so the value + console
+     always flow into view below it. */
+  .redis-pane { display: flex; flex-direction: column; gap: .8rem; padding: .5rem; overflow: auto; -webkit-overflow-scrolling: touch; }
+  .redis-keys { height: auto; max-height: 42vh; flex-shrink: 0; }
+  .redis-main { height: auto; }
+  /* Roomier tap targets: desktop key rows are ~24px tall, below the touch min */
+  .keylist li { padding: .55rem .1rem; font-size: .9rem; gap: .55rem; }
+  .hud-btn-cta.sm { padding: .5rem .9rem; }
 
   /* Modal: stack paired rows, let the footer buttons wrap */
   .mrow2 { flex-direction: column; gap: .7rem; }
