@@ -537,9 +537,12 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
   .drawer-backdrop { display: block; position: fixed; inset: 0; z-index: 44; background: rgba(0,5,12,0.55); backdrop-filter: blur(1px); }
   .drawer-toggle {
     display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-    width: 2.6rem; min-height: 2.4rem; background: none; border: none;
+    width: 2.6rem; min-height: 2.4rem; border: none;
     border-right: 1px solid rgba(var(--accent-rgb),0.2);
     color: rgb(var(--accent-rgb)); font-size: 1.25rem; cursor: pointer;
+    /* Pin to the left edge so it never scrolls out of reach when the tab bar
+       overflows with many open tabs; tabs scroll horizontally underneath it. */
+    position: sticky; left: 0; z-index: 1; background: var(--panel);
   }
 
   /* Reveal touch affordances that desktop only shows on hover */
