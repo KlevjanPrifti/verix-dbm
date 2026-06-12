@@ -574,8 +574,11 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
     box-shadow: none; border: none; border-left: 1px solid rgba(var(--accent-rgb),0.2);
     border-radius: 0; max-height: none; overflow: visible; padding: .1rem 0; min-width: 0; }
 
-  /* Tabs: snap the active one into view as the bar overflows */
-  .tabbar { scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+  /* Tabs: snap the active one into view as the bar overflows, and pin the bar to
+     the top so the drawer toggle + tabs stay reachable if the workbench ever
+     falls back to scrolling the whole .container (e.g. no :has() support below). */
+  .tabbar { scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
+    position: sticky; top: 0; z-index: 30; background: var(--panel); }
   .tab { scroll-snap-align: start; }
 
   /* Keep the workbench a bounded flex column on phones too (line 206 turns it
