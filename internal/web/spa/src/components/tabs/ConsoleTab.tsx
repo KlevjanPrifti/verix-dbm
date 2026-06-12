@@ -1,12 +1,36 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api'
 import { useApp } from '../../appctx'
-import type { QueryResponse } from '../../types'
+import type { Column, QueryResponse, Schema } from '../../types'
+import CodeField, { qIdent, type Suggestion } from '../Autocomplete'
 import ResultTable from '../ResultTable'
 import { Play } from '../../icons'
 
-// Postgres query console: run SQL, with a confirmation gate for destructive
-// statements (mirrors the "consolePG" + "queryResult" partials).
+// SQL keywords offered everywhere in the console. Multi-word entries insert as a
+// unit so e.g. "del" -> "DELETE FROM".
+const SQL_KEYWORDS = [
+  'SELECT', 'FROM', 'WHERE', 'INSERT INTO', 'UPDATE', 'DELETE FROM', 'SET', 'VALUES',
+  'JOIN', 'LEFT JOIN', 'INNER JOIN', 'ON', 'GROUP BY', 'ORDER BY', 'HAVING', 'LIMIT',
+  'OFFSET', 'DISTINCT', 'AS', 'AND', 'OR', 'NOT', 'NULL', 'IS NULL', 'IS NOT NULL',
+  'LIKE', 'ILIKE', 'IN', 'BETWEEN', 'ASC', 'DESC', 'RETURNING', 'COUNT(*)',
+]
+
+// Tables referenced after FROM / JOIN / UPDATE / INTO, so the console can fetch
+// just those tables' columns for column suggestions.
+const TABLE_REF_RE = /\b(?:from|join|update|into)\s+("?[\w.]+"?)/gi
+
+function resolveRef(ref: string, schemas: Schema[]): { schema: string; table: string; key: string } | null {
+  const parts = ref.replace(/"/g, '').split('.')
+  if (parts.length === 2) return { schema: parts[0], table: parts[1], key: `${parts[0]}.${parts[1]}` }
+  const table = parts[0]
+  // Bare name: find its schema in the explorer tree (default to public).
+  for (const s of schemas) for (const t of s.Tables || []) if (t.Name === table) return { schema: s.Name, table, key: `${s.Name}.${table}` }
+  return { schema: 'public', table, key: `public.${table}` }
+}
+
+// Postgres query console: run SQL with a confirmation gate for destructive
+// statements, plus identifier autocomplete (keywords, tables, and columns of
+// referenced tables).
 export default function ConsoleTab({ connId, initialSql }: { connId: number; initialSql?: string }) {
   const app = useApp()
   const conn = app.connById(connId)
@@ -14,6 +38,43 @@ export default function ConsoleTab({ connId, initialSql }: { connId: number; ini
   const [resp, setResp] = useState<QueryResponse | null>(null)
   const [running, setRunning] = useState(false)
   const readOnly = conn ? conn.readOnly || !app.caps.write : false
+
+  // Schema tree (table names) and a lazily-filled cache of columns keyed by
+  // schema.table. colVer bumps to refresh suggestions when the cache grows.
+  const [schemas, setSchemas] = useState<Schema[]>([])
+  const colCache = useRef<Record<string, Column[]>>({})
+  const [colVer, setColVer] = useState(0)
+
+  useEffect(() => { api.explorer(connId).then(d => setSchemas(d.schemas || [])).catch(() => {}) }, [connId])
+
+  // Fetch columns for any newly-referenced table (once per table).
+  useEffect(() => {
+    for (const m of sql.matchAll(TABLE_REF_RE)) {
+      const r = resolveRef(m[1], schemas)
+      if (!r || r.key in colCache.current) continue
+      colCache.current[r.key] = [] // reserve to avoid refetch while in flight
+      api.columns(connId, r.schema, r.table)
+        .then(res => { colCache.current[r.key] = res.columns || []; setColVer(v => v + 1) })
+        .catch(() => {})
+    }
+  }, [sql, schemas, connId])
+
+  const candidates = useMemo<Suggestion[]>(() => {
+    const out: Suggestion[] = []
+    for (const s of schemas) for (const t of s.Tables || []) {
+      out.push({ label: t.Name, insert: qIdent(t.Name), kind: 'table', detail: s.Name })
+      if (s.Name !== 'public') out.push({ label: `${s.Name}.${t.Name}`, insert: `${qIdent(s.Name)}.${qIdent(t.Name)}`, kind: 'table' })
+    }
+    const seen = new Set<string>()
+    for (const [key, cols] of Object.entries(colCache.current)) for (const c of cols) {
+      if (seen.has(c.name)) continue
+      seen.add(c.name)
+      out.push({ label: c.name, insert: qIdent(c.name), kind: 'col', detail: c.type || key.split('.').pop() })
+    }
+    for (const k of SQL_KEYWORDS) out.push({ label: k, kind: 'kw' })
+    return out
+    // colVer participates so suggestions refresh as column fetches resolve.
+  }, [schemas, colVer]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = (confirm = false) => {
     setRunning(true)
@@ -34,8 +95,8 @@ export default function ConsoleTab({ connId, initialSql }: { connId: number; ini
           {conn && <span className="tb-chip conn-chip hud-label" title={`${conn.kind}@${conn.host}`}>{conn.kind}@{conn.host}</span>}
           {running && <span className="hud-label">running…</span>}
         </div>
-        <textarea className="hud-input code console-editor" value={sql} onChange={e => setSql(e.target.value)}
-          onKeyDown={onKey} placeholder="select * from … limit 100;" />
+        <CodeField as="textarea" className="hud-input code console-editor" value={sql} onChange={setSql}
+          candidates={candidates} onKeyDown={onKey} placeholder="select * from … limit 100;" />
       </form>
       {resp && (
         <div className="console-result">

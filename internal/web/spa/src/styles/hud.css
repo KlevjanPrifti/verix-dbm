@@ -363,6 +363,22 @@ button.logout-link:hover { text-decoration: underline; }
 .fb-key { white-space: nowrap; color: rgba(var(--accent-rgb),0.7); }
 .fb-input { flex: 1; min-width: 60px; background: rgba(var(--accent-rgb),0.05); border: 1px solid rgba(var(--accent-rgb),0.2); border-radius: 2px; color: var(--hud); padding: .3rem .5rem; font-size: .8rem; }
 .fb-input:focus { outline: none; border-color: rgba(var(--accent-rgb),0.6); }
+
+/* Autocomplete (Autocomplete.tsx): a positioned wrapper around the field plus a
+   caret-anchored suggestion popup. .fill stretches in the flex filter bar; .area
+   stretches to fill the console form's flex column. */
+.ac-wrap { position: relative; display: inline-flex; }
+.ac-wrap.fill { flex: 1; min-width: 60px; }
+.ac-wrap.fill > input { width: 100%; flex: 1; min-width: 0; }
+.ac-wrap.area { flex: 1; min-height: 6rem; display: flex; }
+.ac-wrap.area > textarea { flex: 1; width: 100%; }
+.ac-pop { position: absolute; z-index: 70; margin: 0; list-style: none; min-width: 180px; max-width: 340px; max-height: 240px; overflow-y: auto; background: var(--panel-raised); border: 1px solid rgba(var(--accent-rgb),0.35); border-radius: 2px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: .2rem; }
+.ac-item { display: flex; align-items: baseline; gap: .5rem; padding: .3rem .5rem; font-size: .8rem; cursor: pointer; border-radius: 2px; color: var(--hud-dim); font-family: var(--mono); }
+.ac-item.active, .ac-item:hover { background: rgba(var(--accent-rgb),0.16); color: var(--hud); }
+.ac-label { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-kind { flex: none; font-size: .6rem; letter-spacing: .04em; text-transform: uppercase; color: rgba(var(--accent-rgb),0.7); font-family: var(--sans); }
+.ac-detail { flex: 1; min-width: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .55; font-size: .72rem; font-family: var(--sans); }
+
 .grid-body { flex: 1; min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
 /* The table scrolls in both axes inside here; min-width:0 up the chain (above)
    lets a table wider than the pane scroll instead of stretching the layout. */

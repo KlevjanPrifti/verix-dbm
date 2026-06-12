@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api'
 import { useApp } from '../../appctx'
 import type { Column, GridResponse, QueryResponse } from '../../types'
+import CodeField, { qIdent, type Suggestion } from '../Autocomplete'
 import {
   type LucideIcon, Ico, RotateCw, Plus, Minus, ChevronUp, ChevronDown,
   ChevronLeft, ChevronRight, Copy, Maximize2, Filter, FilterX, Info, X,
@@ -83,6 +84,23 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const cols = result?.columns || []
   const rows = result?.rows || []
   const readOnly = data?.readOnly ?? (conn ? conn.readOnly || !app.caps.write : true)
+
+  // Autocomplete pools for the WHERE / ORDER BY filters. Columns come from the
+  // table's metadata (fetched once, available before any rows load); falling back
+  // to the result columns. Each pool appends the SQL keywords useful in that slot.
+  const colSuggest: Suggestion[] = useMemo(() => {
+    const names = colMeta ? Object.values(colMeta) : cols.map(name => ({ name, type: '' } as Column))
+    return names.map(c => ({ label: c.name, insert: qIdent(c.name), kind: 'col', detail: c.type || undefined }))
+  }, [colMeta, cols])
+  const whereCandidates = useMemo<Suggestion[]>(() => [
+    ...colSuggest,
+    ...['AND', 'OR', 'NOT', 'IS NULL', 'IS NOT NULL', 'LIKE', 'ILIKE', 'IN', 'BETWEEN', 'true', 'false', 'null']
+      .map(k => ({ label: k, kind: 'kw' })),
+  ], [colSuggest])
+  const orderCandidates = useMemo<Suggestion[]>(() => [
+    ...colSuggest,
+    ...['ASC', 'DESC', 'NULLS FIRST', 'NULLS LAST'].map(k => ({ label: k, kind: 'kw' })),
+  ], [colSuggest])
 
   // helpers shared by the menus
   const qq = (s: string) => '"' + s.replace(/"/g, '""') + '"'
@@ -388,9 +406,11 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
 
       <form className="filter-bar" onSubmit={apply}>
         <span className="fb-key hud-label">WHERE</span>
-        <input className="fb-input code" value={where} onChange={e => setWhere(e.target.value)} placeholder="user_id = 4 and group_code = 0" />
+        <CodeField as="input" className="fb-input code" value={where} onChange={setWhere}
+          candidates={whereCandidates} placeholder="user_id = 4 and group_code = 0" />
         <span className="fb-key hud-label">ORDER BY</span>
-        <input className="fb-input code" value={order} onChange={e => setOrder(e.target.value)} placeholder="event_time desc" />
+        <CodeField as="input" className="fb-input code" value={order} onChange={setOrder}
+          candidates={orderCandidates} placeholder="event_time desc" />
         <button className="hud-btn-accent sm" type="submit">apply</button>
       </form>
 
