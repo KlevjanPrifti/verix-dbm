@@ -377,14 +377,22 @@ button.logout-link:hover { text-decoration: underline; }
    a transparent textarea, so coloured tokens show through while editing. */
 .ac-wrap.area.hl { position: relative; }
 .ac-wrap.area.hl > .ac-highlight {
-  position: absolute; inset: 0; margin: 0; z-index: 0; overflow: auto;
+  position: absolute; inset: 0; margin: 0; z-index: 0; overflow: hidden;
   pointer-events: none; white-space: pre-wrap; overflow-wrap: break-word;
   color: var(--hud);
 }
 .ac-wrap.area.hl > textarea {
   position: relative; z-index: 1; background: transparent;
   color: transparent; caret-color: var(--hud);
+  white-space: pre-wrap; overflow-wrap: break-word;
+  /* Hide the scrollbar so the textarea text uses the full width and wraps at the
+     same points as the overlay (a reserved gutter would shift the two apart). */
+  scrollbar-width: none;
 }
+.ac-wrap.area.hl > textarea::-webkit-scrollbar { display: none; }
+/* Keep selected text transparent so only the overlay paints glyphs; the tint
+   shows the selection over the coloured tokens behind it. */
+.ac-wrap.area.hl > textarea::selection { background: rgba(var(--accent-rgb),0.28); color: transparent; }
 .ac-highlight .tk-kw { color: rgb(var(--accent-rgb)); }
 .ac-highlight .tk-str { color: #e6b450; }
 .ac-highlight .tk-num { color: #7fd1e0; }
