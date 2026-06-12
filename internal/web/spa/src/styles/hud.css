@@ -381,11 +381,12 @@ button.logout-link:hover { text-decoration: underline; }
    The textarea scrolls; its scroll is mirrored onto the overlay in JS. */
 .ac-wrap.area.hl > .ac-highlight {
   position: absolute; inset: 0; margin: 0; z-index: 0; overflow: hidden;
-  pointer-events: none; white-space: pre; color: var(--hud);
+  pointer-events: none; white-space: pre; color: var(--hud); line-height: 1.5;
 }
 .ac-wrap.area.hl > textarea {
   position: relative; z-index: 1; background: transparent;
   color: transparent; caret-color: var(--hud); white-space: pre; overflow: auto;
+  line-height: 1.5;
 }
 /* Keep selected text transparent so only the overlay paints glyphs; the tint
    shows the selection over the coloured tokens behind it. */
