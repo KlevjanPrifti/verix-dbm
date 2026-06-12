@@ -53,11 +53,15 @@ export default function ContextMenu({ x, y, payload, onClose }: {
   const close = onClose
   const qq = (s: string) => '"' + s.replace(/"/g, '""') + '"'
   const tab = {
-    console: () => app.openTab({ key: `console:${id}`, title: `console [${payload.name}]`, icon: 'console', view: { type: 'console', connId: id } }),
+    console: () => app.openTab({
+      key: payload.schema ? `console:${id}:${payload.schema}` : `console:${id}`,
+      title: `console [${payload.name}]`, icon: 'console',
+      view: { type: 'console', connId: id, schema: payload.schema },
+    }),
     // Open a query console seeded with a runnable SELECT for this table.
     tableQuery: () => app.openTab({
       key: `query:${id}:${payload.schema}.${payload.table}`, title: `query · ${payload.table}`, icon: 'console',
-      view: { type: 'console', connId: id, sql: `SELECT *\nFROM ${qq(payload.schema!)}.${qq(payload.table!)}\nLIMIT 100;` },
+      view: { type: 'console', connId: id, schema: payload.schema, sql: `SELECT *\nFROM ${qq(payload.schema!)}.${qq(payload.table!)}\nLIMIT 100;` },
     }),
     grid: () => app.openTab({ key: `grid:${id}:${payload.schema}.${payload.table}`, title: `${payload.schema}.${payload.table}`, icon: 'grid', view: { type: 'grid', connId: id, schema: payload.schema!, table: payload.table! } }),
     doc: () => app.openTab({ key: `doc:${id}:${payload.schema}.${payload.table}`, title: `doc [${payload.table}]`, icon: 'grid', view: { type: 'doc', connId: id, schema: payload.schema!, table: payload.table! } }),

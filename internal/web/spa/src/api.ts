@@ -74,8 +74,8 @@ export const api = {
 
   grid: (id: number, p: { schema: string; table: string; where?: string; order?: string; page?: number }) =>
     get<GridResponse>(`/api/c/${id}/grid${qs(p)}`),
-  query: (id: number, sql: string, confirm = false) =>
-    req<QueryResponse>('POST', `/api/c/${id}/pg/query`, { sql, confirm }),
+  query: (id: number, sql: string, confirm = false, schema?: string) =>
+    req<QueryResponse>('POST', `/api/c/${id}/pg/query`, { sql, confirm, schema }),
   // Commit a batch of write statements as one atomic transaction (grid Tx: Manual).
   execTx: (id: number, statements: string[], confirm = false) =>
     req<{ ok?: boolean; count?: number; needConfirm?: boolean }>('POST', `/api/c/${id}/pg/tx`, { statements, confirm }),

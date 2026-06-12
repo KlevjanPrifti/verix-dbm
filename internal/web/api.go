@@ -533,6 +533,7 @@ func (s *Server) apiQuery(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		SQL     string `json:"sql"`
 		Confirm bool   `json:"confirm"`
+		Schema  string `json:"schema"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		apiErr(w, http.StatusBadRequest, "bad json")
@@ -563,7 +564,7 @@ func (s *Server) apiQuery(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
-	res, err := postgres.Query(r.Context(), pool, sql, readOnly)
+	res, err := postgres.Query(r.Context(), pool, sql, readOnly, in.Schema)
 	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "pg_query", Detail: auditDetail(sql), Success: err == nil})
 	resp["result"] = toResultDTO(res)
 	if err != nil {

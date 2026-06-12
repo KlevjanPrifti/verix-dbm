@@ -32,6 +32,9 @@ interface Props {
   // Forwarded to the field for keys the popup doesn't consume (form submit,
   // Ctrl+Enter to run, …). Not called while the popup handles the key.
   onKeyDown?: (e: React.KeyboardEvent) => void
+  // Optional syntax highlighter (textarea only): renders coloured tokens in an
+  // overlay behind a transparent textarea. Receives the current text.
+  highlight?: (v: string) => React.ReactNode
 }
 
 const TOKEN_RE = /[A-Za-z_][A-Za-z0-9_]*$/
@@ -50,8 +53,10 @@ function filterPool(pool: Suggestion[], token: string): Suggestion[] {
   return scored.slice(0, 50).map(x => x.s)
 }
 
-export default function CodeField({ as, value, onChange, candidates, className, placeholder, onKeyDown }: Props) {
+export default function CodeField({ as, value, onChange, candidates, className, placeholder, onKeyDown, highlight }: Props) {
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null)
+  const hlRef = useRef<HTMLPreElement>(null)
+  const hl = as === 'textarea' && !!highlight
   const [caret, setCaret] = useState(0)
   const [forced, setForced] = useState(false) // Ctrl+Space opened the popup on an empty token
   const [items, setItems] = useState<Suggestion[]>([])
@@ -87,6 +92,13 @@ export default function CodeField({ as, value, onChange, candidates, className, 
   })
 
   const sync = () => { const el = ref.current; if (el) setCaret(el.selectionStart ?? 0) }
+
+  // Keep the highlight overlay aligned with the textarea's scroll position.
+  const syncScroll = () => {
+    const el = ref.current, pre = hlRef.current
+    if (el && pre) { pre.scrollTop = el.scrollTop; pre.scrollLeft = el.scrollLeft }
+  }
+  useLayoutEffect(syncScroll)
 
   const accept = (s: Suggestion) => {
     const ins = s.insert ?? s.label
@@ -124,6 +136,7 @@ export default function CodeField({ as, value, onChange, candidates, className, 
     onKeyUp: sync,
     onClick: sync,
     onSelect: sync,
+    onScroll: syncScroll,
     // Let an item's onMouseDown (which preventDefaults) run before we close.
     onBlur: () => { setForced(false); setPos(null) },
     spellCheck: false,
@@ -131,7 +144,12 @@ export default function CodeField({ as, value, onChange, candidates, className, 
   }
 
   return (
-    <span className={`ac-wrap ${as === 'textarea' ? 'area' : 'fill'}`}>
+    <span className={`ac-wrap ${as === 'textarea' ? 'area' : 'fill'}${hl ? ' hl' : ''}`}>
+      {hl && (
+        // Trailing newline so the overlay keeps a blank last line in step with
+        // the textarea (which always reserves one).
+        <pre ref={hlRef} className={`${className ?? ''} ac-highlight`} aria-hidden="true">{highlight!(value)}{'\n'}</pre>
+      )}
       {as === 'textarea' ? <textarea {...fieldProps} /> : <input {...fieldProps} />}
       {open && pos && (
         <ul className="ac-pop" style={{ top: pos.top, left: pos.left }}>

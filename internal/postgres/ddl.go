@@ -26,7 +26,7 @@ func Qualified(schema, table string) string {
 // Exec runs a single mutating statement (DDL/DML) outside a read-only
 // transaction. It is the write counterpart of Query(..., readOnly=true).
 func Exec(ctx context.Context, pool *pgxpool.Pool, sql string) (*Result, error) {
-	return Query(ctx, pool, sql, false)
+	return Query(ctx, pool, sql, false, "")
 }
 
 // DropSchemaSQL builds DROP SCHEMA, optionally CASCADE (drops contained objects

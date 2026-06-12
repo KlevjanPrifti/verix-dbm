@@ -372,6 +372,26 @@ button.logout-link:hover { text-decoration: underline; }
 .ac-wrap.fill > input { width: 100%; flex: 1; min-width: 0; }
 .ac-wrap.area { flex: 1; min-height: 6rem; display: flex; }
 .ac-wrap.area > textarea { flex: 1; width: 100%; }
+
+/* Syntax-highlight overlay: a <pre> sharing the textarea's box/font sits behind
+   a transparent textarea, so coloured tokens show through while editing. */
+.ac-wrap.area.hl { position: relative; }
+.ac-wrap.area.hl > .ac-highlight {
+  position: absolute; inset: 0; margin: 0; z-index: 0; overflow: auto;
+  pointer-events: none; white-space: pre-wrap; overflow-wrap: break-word;
+  color: var(--hud);
+}
+.ac-wrap.area.hl > textarea {
+  position: relative; z-index: 1; background: transparent;
+  color: transparent; caret-color: var(--hud);
+}
+.ac-highlight .tk-kw { color: rgb(var(--accent-rgb)); }
+.ac-highlight .tk-str { color: #e6b450; }
+.ac-highlight .tk-num { color: #7fd1e0; }
+.ac-highlight .tk-com { color: var(--hud-dim); font-style: italic; }
+.ac-highlight .tk-punct { color: rgba(var(--accent-rgb),0.6); }
+.ac-highlight .tk-id { color: #d7c4ff; }
+.ac-highlight .tk-word { color: var(--hud); }
 .ac-pop { position: absolute; z-index: 70; margin: 0; list-style: none; min-width: 180px; max-width: 340px; max-height: 240px; overflow-y: auto; background: var(--panel-raised); border: 1px solid rgba(var(--accent-rgb),0.35); border-radius: 2px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); padding: .2rem; }
 .ac-item { display: flex; align-items: baseline; gap: .5rem; padding: .3rem .5rem; font-size: .8rem; cursor: pointer; border-radius: 2px; color: var(--hud-dim); font-family: var(--mono); }
 .ac-item.active, .ac-item:hover { background: rgba(var(--accent-rgb),0.16); color: var(--hud); }

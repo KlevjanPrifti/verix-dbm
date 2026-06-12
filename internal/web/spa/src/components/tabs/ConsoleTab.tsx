@@ -19,6 +19,46 @@ const SQL_KEYWORDS = [
 // just those tables' columns for column suggestions.
 const TABLE_REF_RE = /\b(?:from|join|update|into)\s+("?[\w.]+"?)/gi
 
+// Reserved words coloured as keywords by the highlighter. Kept broad so common
+// SQL reads well without trying to be an exhaustive Postgres grammar.
+const KW = new Set([
+  'select', 'from', 'where', 'insert', 'into', 'update', 'delete', 'set', 'values',
+  'join', 'left', 'right', 'inner', 'outer', 'full', 'cross', 'on', 'using', 'natural',
+  'group', 'by', 'order', 'having', 'limit', 'offset', 'distinct', 'as', 'and', 'or',
+  'not', 'null', 'is', 'like', 'ilike', 'in', 'between', 'asc', 'desc', 'returning',
+  'union', 'all', 'intersect', 'except', 'case', 'when', 'then', 'else', 'end', 'exists',
+  'create', 'table', 'view', 'index', 'drop', 'alter', 'add', 'column', 'constraint',
+  'primary', 'foreign', 'key', 'references', 'unique', 'default', 'check', 'cascade',
+  'truncate', 'with', 'recursive', 'begin', 'commit', 'rollback', 'grant', 'revoke',
+  'true', 'false', 'over', 'partition', 'window', 'filter', 'cast', 'array', 'any',
+])
+
+// Token regex (ordered): comments, strings, quoted idents, numbers, words, punctuation.
+const TOK_RE = /(--[^\n]*|\/\*[\s\S]*?\*\/)|('(?:[^']|'')*'?)|("(?:[^"]|"")*"?)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)|([(),.;*=<>!+\-/%|]+)/g
+
+// Tokenise SQL into coloured spans for the console overlay. Returns a flat list
+// of strings (uncoloured whitespace/other) and <span> nodes.
+function highlightSQL(sql: string) {
+  const out: React.ReactNode[] = []
+  let last = 0, key = 0
+  for (const m of sql.matchAll(TOK_RE)) {
+    const i = m.index!
+    if (i > last) out.push(sql.slice(last, i))
+    const [tok, comment, str, ident, num, word, punct] = m
+    let cls = ''
+    if (comment) cls = 'tk-com'
+    else if (str) cls = 'tk-str'
+    else if (ident) cls = 'tk-id'
+    else if (num) cls = 'tk-num'
+    else if (word) cls = KW.has(word.toLowerCase()) ? 'tk-kw' : 'tk-word'
+    else if (punct) cls = 'tk-punct'
+    out.push(<span key={key++} className={cls}>{tok}</span>)
+    last = i + tok.length
+  }
+  if (last < sql.length) out.push(sql.slice(last))
+  return out
+}
+
 function resolveRef(ref: string, schemas: Schema[]): { schema: string; table: string; key: string } | null {
   const parts = ref.replace(/"/g, '').split('.')
   if (parts.length === 2) return { schema: parts[0], table: parts[1], key: `${parts[0]}.${parts[1]}` }
@@ -31,7 +71,7 @@ function resolveRef(ref: string, schemas: Schema[]): { schema: string; table: st
 // Postgres query console: run SQL with a confirmation gate for destructive
 // statements, plus identifier autocomplete (keywords, tables, and columns of
 // referenced tables).
-export default function ConsoleTab({ connId, initialSql }: { connId: number; initialSql?: string }) {
+export default function ConsoleTab({ connId, initialSql, schema }: { connId: number; initialSql?: string; schema?: string }) {
   const app = useApp()
   const conn = app.connById(connId)
   const [sql, setSql] = useState(initialSql ?? '')
@@ -78,7 +118,7 @@ export default function ConsoleTab({ connId, initialSql }: { connId: number; ini
 
   const run = (confirm = false) => {
     setRunning(true)
-    api.query(connId, sql, confirm).then(setResp)
+    api.query(connId, sql, confirm, schema).then(setResp)
       .catch(e => setResp({ readOnly, error: String(e.message || e) }))
       .finally(() => setRunning(false))
   }
@@ -96,7 +136,7 @@ export default function ConsoleTab({ connId, initialSql }: { connId: number; ini
           {running && <span className="hud-label">running…</span>}
         </div>
         <CodeField as="textarea" className="hud-input code console-editor" value={sql} onChange={setSql}
-          candidates={candidates} onKeyDown={onKey} placeholder="select * from … limit 100;" />
+          candidates={candidates} onKeyDown={onKey} highlight={highlightSQL} placeholder="select * from … limit 100;" />
       </form>
       {resp && (
         <div className="console-result">

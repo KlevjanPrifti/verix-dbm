@@ -169,7 +169,7 @@ func BrowseWhere(ctx context.Context, pool *pgxpool.Pool, schema, table, where, 
 		q += " ORDER BY " + o
 	}
 	q += fmt.Sprintf(" LIMIT %d OFFSET %d", limit, offset)
-	return Query(ctx, pool, q, readOnly)
+	return Query(ctx, pool, q, readOnly, "")
 }
 
 // Column describes one column of a relation (for the Explorer "columns" node).
@@ -374,8 +374,10 @@ func NeedsConfirm(sql string) bool {
 	return false
 }
 
-// Query runs arbitrary SQL. readOnly wraps it in a read-only transaction.
-func Query(ctx context.Context, pool *pgxpool.Pool, sql string, readOnly bool) (*Result, error) {
+// Query runs arbitrary SQL. readOnly wraps it in a read-only transaction. When
+// schema is non-empty the search_path is scoped to it (plus public) so a console
+// opened on a schema resolves unqualified names against that schema.
+func Query(ctx context.Context, pool *pgxpool.Pool, sql string, readOnly bool, schema string) (*Result, error) {
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return nil, err
@@ -383,6 +385,15 @@ func Query(ctx context.Context, pool *pgxpool.Pool, sql string, readOnly bool) (
 	defer conn.Release()
 
 	if _, err := conn.Exec(ctx, "SET statement_timeout = '"+defaultStatementTimeout+"'"); err != nil {
+		return nil, err
+	}
+	// Pooled connections are reused, so reset search_path every call: scope it to
+	// the requested schema, otherwise restore the role/connection default.
+	if schema != "" {
+		if _, err := conn.Exec(ctx, "SET search_path TO "+quoteIdent(schema)+", public"); err != nil {
+			return nil, err
+		}
+	} else if _, err := conn.Exec(ctx, "SET search_path TO DEFAULT"); err != nil {
 		return nil, err
 	}
 	// This is a session-level setting on a pooled connection, so it must be set
