@@ -12,6 +12,7 @@ export interface Suggestion {
   insert?: string      // text inserted on accept (defaults to label)
   detail?: string      // dim right-aligned hint (e.g. a column's type)
   kind?: string        // small uppercase tag (column / table / keyword / …)
+  caret?: number       // caret offset within `insert` (e.g. between quotes); default = end
 }
 
 // Quote an identifier only when it isn't a plain lowercase snake_case name, so
@@ -90,7 +91,7 @@ export default function CodeField({ as, value, onChange, candidates, className, 
   const accept = (s: Suggestion) => {
     const ins = s.insert ?? s.label
     const next = value.slice(0, tokenStart.current) + ins + value.slice(caret)
-    const pos = tokenStart.current + ins.length
+    const pos = tokenStart.current + (s.caret ?? ins.length)
     pendingCaret.current = pos
     justAccepted.current = true
     setForced(false)
@@ -188,7 +189,7 @@ function caretXY(el: HTMLInputElement | HTMLTextAreaElement, position: number, i
   span.textContent = el.value.slice(position) || '.'
   div.appendChild(span)
   const lineHeight = parseInt(computed.lineHeight) || parseInt(computed.fontSize) || 16
-  const top = span.offsetTop - el.scrollTop + lineHeight
+  const top = span.offsetTop - el.scrollTop + lineHeight + 6 // small gap below the caret line
   const left = span.offsetLeft - el.scrollLeft
   document.body.removeChild(div)
   // Keep the popup inside the field horizontally.

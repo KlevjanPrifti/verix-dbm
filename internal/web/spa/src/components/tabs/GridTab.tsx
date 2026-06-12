@@ -88,19 +88,32 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   // Autocomplete pools for the WHERE / ORDER BY filters. Columns come from the
   // table's metadata (fetched once, available before any rows load); falling back
   // to the result columns. Each pool appends the SQL keywords useful in that slot.
-  const colSuggest: Suggestion[] = useMemo(() => {
-    const names = colMeta ? Object.values(colMeta) : cols.map(name => ({ name, type: '' } as Column))
-    return names.map(c => ({ label: c.name, insert: qIdent(c.name), kind: 'col', detail: c.type || undefined }))
-  }, [colMeta, cols])
+  const colList: Column[] = useMemo(
+    () => colMeta ? Object.values(colMeta) : cols.map(name => ({ name, type: '' } as Column)),
+    [colMeta, cols])
+  // ORDER BY just needs the bare column name.
+  const orderColSuggest = useMemo<Suggestion[]>(
+    () => colList.map(c => ({ label: c.name, insert: qIdent(c.name), kind: 'col', detail: c.type || undefined })),
+    [colList])
+  // WHERE scaffolds the comparison from the column type: numeric/bool get
+  // `col = ` (caret at the end); text/date/uuid/json get `col = ''` with the
+  // caret parked between the quotes, ready for the value.
+  const whereColSuggest = useMemo<Suggestion[]>(() => colList.map(c => {
+    const name = qIdent(c.name)
+    const t = (c.type || '').toLowerCase()
+    const numeric = /int|numeric|decimal|real|double|money|serial|float|bool|bit/.test(t)
+    const insert = numeric ? `${name} = ` : `${name} = ''`
+    return { label: c.name, insert, kind: 'col', detail: c.type || undefined, caret: numeric ? undefined : insert.length - 1 }
+  }), [colList])
   const whereCandidates = useMemo<Suggestion[]>(() => [
-    ...colSuggest,
+    ...whereColSuggest,
     ...['AND', 'OR', 'NOT', 'IS NULL', 'IS NOT NULL', 'LIKE', 'ILIKE', 'IN', 'BETWEEN', 'true', 'false', 'null']
       .map(k => ({ label: k, kind: 'kw' })),
-  ], [colSuggest])
+  ], [whereColSuggest])
   const orderCandidates = useMemo<Suggestion[]>(() => [
-    ...colSuggest,
+    ...orderColSuggest,
     ...['ASC', 'DESC', 'NULLS FIRST', 'NULLS LAST'].map(k => ({ label: k, kind: 'kw' })),
-  ], [colSuggest])
+  ], [orderColSuggest])
 
   // helpers shared by the menus
   const qq = (s: string) => '"' + s.replace(/"/g, '""') + '"'
