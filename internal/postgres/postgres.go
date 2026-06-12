@@ -384,7 +384,7 @@ func Query(ctx context.Context, pool *pgxpool.Pool, sql string, readOnly bool) (
 		return nil, err
 	}
 	// This is a session-level setting on a pooled connection, so it must be set
-	// explicitly every time — otherwise a connection left in read-only mode by a
+	// explicitly every time, otherwise a connection left in read-only mode by a
 	// prior query gets reused for a write and fails with SQLSTATE 25006.
 	if readOnly {
 		if _, err := conn.Exec(ctx, "SET default_transaction_read_only = on"); err != nil {
