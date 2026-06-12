@@ -28,6 +28,8 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const [where, setWhere] = useState('')
   const [order, setOrder] = useState('')
   const [page, setPage] = useState(0)
+  // Client-selectable page size (DataGrip-style), persisted as the default.
+  const [size, setSize] = useState(loadPageSize)
   const [data, setData] = useState<GridResponse | null>(null)
   const [loading, setLoading] = useState(false)
   // Right-click menu (cell or table-level) and the modals it can open.
@@ -61,11 +63,13 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
 
   const load = useCallback((p: number, w: string, o: string) => {
     setLoading(true)
-    api.grid(connId, { schema, table, where: w, order: o, page: p })
+    api.grid(connId, { schema, table, where: w, order: o, page: p, size })
       .then(setData).catch(e => setData({ result: null, readOnly: true, page: p, error: String(e.message || e) }))
       .finally(() => setLoading(false))
-  }, [connId, schema, table])
+  }, [connId, schema, table, size])
 
+  // Reloads on page or size change (changing size resets to page 0 below, so the
+  // offset never lands past the end). `load` is in deps so a size change reruns.
   useEffect(() => { load(page, where, order) }, [load, page]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Column metadata for the inline editor's placeholders fetched once per table.
@@ -79,11 +83,23 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
 
   const apply = (e: React.FormEvent) => { e.preventDefault(); setPage(0); load(0, where, order) }
   const sort = (col: string, dir: 'asc' | 'desc') => { const o = `"${col}" ${dir}`; setOrder(o); setPage(0); load(0, where, o) }
+  // Switching page size resets to the first page (the load effect reruns because
+  // `size` is a `load` dependency) and remembers the choice as the new default.
+  const changeSize = (n: number) => { savePageSize(n); setPage(0); setSize(n) }
 
   const result = data?.result
   const cols = result?.columns || []
   const rows = result?.rows || []
   const readOnly = data?.readOnly ?? (conn ? conn.readOnly || !app.caps.write : true)
+
+  // Pagination math. We don't run a COUNT(*), so the total is only known once a
+  // page comes back short: a full page (rows === size) means more rows may exist,
+  // so we show "of N+" and allow Next; a short page is the exact end, so Next is
+  // hidden and the total is exact.
+  const hasNext = rows.length === size
+  const first = rows.length ? page * size + 1 : 0
+  const last = page * size + rows.length
+  const totalLabel = hasNext ? `${last}+` : `${last}`
 
   // Autocomplete pools for the WHERE / ORDER BY filters. Columns come from the
   // table's metadata (fetched once, available before any rows load); falling back
@@ -369,7 +385,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       { label: 'Go to', Icon: ArrowRight, children: [
         { label: 'First page', disabled: page === 0, run: () => setPage(0) },
         { label: 'Previous page', disabled: page === 0, run: () => setPage(p => Math.max(0, p - 1)) },
-        { label: 'Next page', disabled: rows.length === 0, run: () => setPage(p => p + 1) },
+        { label: 'Next page', disabled: !hasNext, run: () => setPage(p => p + 1) },
         { label: 'Refresh', run: () => load(page, where, order) },
       ] },
       { sep: true },
@@ -509,9 +525,13 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         {conn && <Ico name={conn.kind} />}
         <span>{schema}.{table}</span>
         <span className="tb-grow" />
+        <PageSizeMenu size={size} onPick={changeSize} />
+        <span className="pg-range" title="rows on this page (total unknown until the last page)">
+          {first === last ? `${last}` : `${first}-${last}`} of {totalLabel}
+        </span>
         {page > 0 && <a className="pg-btn" onClick={() => setPage(p => p - 1)}><ChevronLeft size={14} /> prev</a>}
         <span>page {page + 1}</span>
-        {rows.length > 0 && <a className="pg-btn" onClick={() => setPage(p => p + 1)}>next <ChevronRight size={14} /></a>}
+        {hasNext && <a className="pg-btn" onClick={() => setPage(p => p + 1)}>next <ChevronRight size={14} /></a>}
       </div>
 
       {menu && <CellMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
@@ -523,6 +543,47 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
 }
 
 const MW = 260, MH = 380
+
+// Selectable grid page sizes. The server caps any page at 1000 rows (Query's
+// row cap), so 1000 is the largest honest option, there is no unbounded "All".
+const PAGE_SIZES = [10, 100, 250, 500, 1000]
+const PAGE_SIZE_KEY = 'verix.grid.pageSize'
+const loadPageSize = (): number => {
+  const n = Number(localStorage.getItem(PAGE_SIZE_KEY))
+  return PAGE_SIZES.includes(n) ? n : 100
+}
+const savePageSize = (n: number) => { try { localStorage.setItem(PAGE_SIZE_KEY, String(n)) } catch { /* ignore */ } }
+
+// Footer page-size dropdown (opens upward). Picking a size reloads from page 1
+// and persists the choice as the default for future grids.
+function PageSizeMenu({ size, onPick }: { size: number; onPick: (n: number) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: Event) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    window.addEventListener('mousedown', onDown, true)
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('mousedown', onDown, true); window.removeEventListener('keydown', onKey) }
+  }, [open])
+  return (
+    <div className="pg-size" ref={ref}>
+      <a className="pg-btn" title="rows per page" onClick={() => setOpen(o => !o)}>{size} / page <ChevronDown size={13} /></a>
+      {open && (
+        <div className="pg-size-menu">
+          <div className="ctx-head">Page Size</div>
+          {PAGE_SIZES.map(n => (
+            <button key={n} type="button" className="menu-item" onClick={() => { onPick(n); setOpen(false) }}>
+              <span className="mi-ico">{n === size ? <Check size={14} /> : null}</span>
+              <span className="mi-label">{n}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // Right-click menu for grid cells / table area reuses the tree menu's styling
 // and supports one level of fly-out submenus, keyboard-shortcut hints and

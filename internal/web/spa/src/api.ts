@@ -72,7 +72,7 @@ export const api = {
   keys: (id: number, schema: string, table: string) =>
     get<{ keys: Key[] | null }>(`/api/c/${id}/pg/keys${qs({ schema, table })}`),
 
-  grid: (id: number, p: { schema: string; table: string; where?: string; order?: string; page?: number }) =>
+  grid: (id: number, p: { schema: string; table: string; where?: string; order?: string; page?: number; size?: number }) =>
     get<GridResponse>(`/api/c/${id}/grid${qs(p)}`),
   query: (id: number, sql: string, confirm = false, schema?: string) =>
     req<QueryResponse>('POST', `/api/c/${id}/pg/query`, { sql, confirm, schema }),

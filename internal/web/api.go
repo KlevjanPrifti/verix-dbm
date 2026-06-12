@@ -504,7 +504,13 @@ func (s *Server) apiGrid(w http.ResponseWriter, r *http.Request) {
 	if page < 0 {
 		page = 0
 	}
-	res, err := postgres.BrowseWhere(r.Context(), pool, schema, table, where, order, browseLimit, page*browseLimit, true)
+	// Page size is client-selectable (DataGrip-style); fall back to the default
+	// and clamp to the 1000-row result cap BrowseWhere/Query enforce.
+	size, _ := strconv.Atoi(q.Get("size"))
+	if size <= 0 || size > 1000 {
+		size = browseLimit
+	}
+	res, err := postgres.BrowseWhere(r.Context(), pool, schema, table, where, order, size, page*size, true)
 	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "pg_browse", Detail: schema + "." + table, Success: err == nil})
 	resp := map[string]any{
 		"result":   toResultDTO(res),

@@ -413,6 +413,15 @@ button.logout-link:hover { text-decoration: underline; }
 .grid-meta { padding: .25rem .6rem; margin: 0; flex-shrink: 0; }
 .pg-btn { cursor: pointer; border: 1px solid rgba(var(--accent-rgb),0.3); border-radius: 2px; padding: .05rem .4rem; color: rgb(var(--accent-rgb)); }
 .pg-btn:hover { background: rgba(var(--accent-rgb),0.12); text-decoration: none; }
+.pg-range { color: var(--muted); }
+/* page-size dropdown: trigger anchors an upward-opening menu in the footer */
+.pg-size { position: relative; display: inline-flex; }
+.pg-size .pg-btn { gap: .2rem; }
+.pg-size-menu { position: absolute; right: 0; bottom: calc(100% + 4px); min-width: 9rem; z-index: 40;
+  background: var(--panel); border: 1px solid rgba(var(--accent-rgb),0.3); border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5); padding: .25rem; }
+.pg-size-menu .ctx-head { padding: .25rem .5rem; }
+.pg-size-menu .menu-item { width: 100%; }
 
 /* grid column header tools + row numbers */
 .grid-table th { position: relative; }
