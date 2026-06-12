@@ -5,11 +5,13 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -399,6 +401,14 @@ func Query(ctx context.Context, pool *pgxpool.Pool, sql string, readOnly bool) (
 	start := time.Now()
 	rows, err := conn.Query(ctx, sql)
 	if err != nil {
+		// The extended (prepared) protocol pgx uses by default rejects a string
+		// holding several ;-separated commands with 42601 ("cannot insert multiple
+		// commands into a prepared statement"). That error is raised at parse time,
+		// before anything runs, so it is safe to re-run the whole script through the
+		// simple query protocol, which PostgreSQL does allow to be multi-statement.
+		if isMultiCommand(err) {
+			return querySimple(ctx, conn.Conn().PgConn(), sql, start)
+		}
 		return nil, err
 	}
 	defer rows.Close()
@@ -441,6 +451,68 @@ func Query(ctx context.Context, pool *pgxpool.Pool, sql string, readOnly bool) (
 		return res, err
 	}
 	return res, nil
+}
+
+// isMultiCommand reports whether err is the specific 42601 PostgreSQL raises when
+// a multi-statement string is sent over the extended/prepared protocol. Generic
+// syntax errors also use 42601, so the message is checked too to avoid treating
+// an ordinary syntax error as a multi-statement script.
+func isMultiCommand(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "42601" && strings.Contains(pgErr.Message, "multiple commands")
+}
+
+// querySimple runs sql via the simple query protocol (which allows several
+// ;-separated commands) and returns the last result it produces: the last
+// statement that returned rows, or otherwise the last command tag. Every
+// statement still executes on the server; only the final result is surfaced,
+// matching how most SQL consoles present a multi-statement run. Values come back
+// in text format, so they are passed through as-is (NULL rendered like format()).
+func querySimple(ctx context.Context, pgConn *pgconn.PgConn, sql string, start time.Time) (*Result, error) {
+	const maxRows = 1000
+	mrr := pgConn.Exec(ctx, sql)
+	var last *Result
+	for mrr.NextResult() {
+		rr := mrr.ResultReader()
+		cur := &Result{}
+		fds := rr.FieldDescriptions()
+		if len(fds) > 0 {
+			cur.IsSelect = true
+			for _, fd := range fds {
+				cur.Columns = append(cur.Columns, string(fd.Name))
+			}
+			for rr.NextRow() {
+				if len(cur.Rows) >= maxRows {
+					cur.Truncated = true
+					break
+				}
+				vals := rr.Values()
+				row := make([]string, len(vals))
+				for i, v := range vals {
+					if v == nil {
+						row[i] = "∅" // NULL, matching format()
+					} else {
+						row[i] = string(v)
+					}
+				}
+				cur.Rows = append(cur.Rows, row)
+			}
+		}
+		tag, _ := rr.Close() // drains any rows left after a truncation break
+		if !cur.IsSelect {
+			cur.Command = tag.String()
+			cur.RowsAffected = tag.RowsAffected()
+		}
+		last = cur
+	}
+	if err := mrr.Close(); err != nil {
+		return nil, err
+	}
+	if last == nil {
+		last = &Result{}
+	}
+	last.Duration = time.Since(start)
+	return last, nil
 }
 
 func format(v any) string {
