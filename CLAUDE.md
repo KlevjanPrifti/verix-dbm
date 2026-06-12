@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Conventions
 
-- Do not use "— " (em dash followed by a space) in code, comments, docs, or commit messages. Prefer a regular hyphen, colon, or a reworded sentence.
+- Never use an em dash (the long dash character, U+2014) anywhere: code, comments, docs, commit messages, or chat replies. Use a regular hyphen, a colon, or reword the sentence instead.
 - After every change, end the reply with a short, copy-ready commit message the user can paste. Write it like a human would: one concise line (roughly 50 chars, imperative mood, e.g. "fix sticky tab bar on mobile"), lowercase, no trailing period, no Claude/co-author attribution. Put it in its own fenced code block so it is easy to copy. Add a short body only if the change really needs explaining. This is just text for the user to copy; do not actually run `git commit` unless asked.
 
 ## Commands

@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react'
 import type { Connection, Role } from './types'
 
-// Tree node identity, sourced from the explorer and fed into the context menu —
+// Tree node identity, sourced from the explorer and fed into the context menu:
 // the React equivalent of the data-* attributes the old Alpine menu read.
 export interface NodePayload {
   type: 'conn' | 'schema' | 'table' | 'col' | 'key' | 'index' | 'roles' | 'role'

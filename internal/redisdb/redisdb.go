@@ -165,7 +165,7 @@ func ttlString(d time.Duration) string {
 	case d == -1:
 		return "no expiry"
 	case d == -2:
-		return "—"
+		return "-"
 	default:
 		return d.Truncate(time.Second).String()
 	}

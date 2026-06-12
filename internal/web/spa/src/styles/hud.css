@@ -619,7 +619,7 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
   .connbar { flex-wrap: wrap; padding: .45rem .9rem; }
   .container { padding: .5rem; }
 
-  /* Grid toolbar: the long connection chip belongs in the footer on phones —
+  /* Grid toolbar: the long connection chip belongs in the footer on phones, so
      drop it here so the action buttons + status keep one tidy row. */
   .grid-toolbar { padding: .35rem .5rem; }
   .grid-toolbar .conn-chip, .console-toolbar .conn-chip { display: none; }
