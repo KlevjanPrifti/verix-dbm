@@ -376,20 +376,17 @@ button.logout-link:hover { text-decoration: underline; }
 /* Syntax-highlight overlay: a <pre> sharing the textarea's box/font sits behind
    a transparent textarea, so coloured tokens show through while editing. */
 .ac-wrap.area.hl { position: relative; }
+/* No soft-wrap on either layer: every logical line is one visual line in both,
+   so the overlay and textarea stay aligned (wrapping would drift them apart).
+   The textarea scrolls; its scroll is mirrored onto the overlay in JS. */
 .ac-wrap.area.hl > .ac-highlight {
   position: absolute; inset: 0; margin: 0; z-index: 0; overflow: hidden;
-  pointer-events: none; white-space: pre-wrap; overflow-wrap: break-word;
-  color: var(--hud);
+  pointer-events: none; white-space: pre; color: var(--hud);
 }
 .ac-wrap.area.hl > textarea {
   position: relative; z-index: 1; background: transparent;
-  color: transparent; caret-color: var(--hud);
-  white-space: pre-wrap; overflow-wrap: break-word;
-  /* Hide the scrollbar so the textarea text uses the full width and wraps at the
-     same points as the overlay (a reserved gutter would shift the two apart). */
-  scrollbar-width: none;
+  color: transparent; caret-color: var(--hud); white-space: pre; overflow: auto;
 }
-.ac-wrap.area.hl > textarea::-webkit-scrollbar { display: none; }
 /* Keep selected text transparent so only the overlay paints glyphs; the tint
    shows the selection over the coloured tokens behind it. */
 .ac-wrap.area.hl > textarea::selection { background: rgba(var(--accent-rgb),0.28); color: transparent; }

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 // Lightweight, dependency-free autocomplete for the SQL surfaces (grid WHERE /
 // ORDER BY inputs and the query console textarea). The owner supplies a pool of
@@ -32,9 +32,10 @@ interface Props {
   // Forwarded to the field for keys the popup doesn't consume (form submit,
   // Ctrl+Enter to run, …). Not called while the popup handles the key.
   onKeyDown?: (e: React.KeyboardEvent) => void
-  // Optional syntax highlighter (textarea only): renders coloured tokens in an
-  // overlay behind a transparent textarea. Receives the current text.
-  highlight?: (v: string) => React.ReactNode
+  // Optional syntax highlighter (textarea only): given the current text, returns
+  // an HTML string of coloured <span>s painted in an overlay behind a transparent
+  // textarea. A string (not nodes) keeps each keystroke to one innerHTML write.
+  highlight?: (v: string) => string
 }
 
 const TOKEN_RE = /[A-Za-z_][A-Za-z0-9_]*$/
@@ -57,6 +58,9 @@ export default function CodeField({ as, value, onChange, candidates, className, 
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null)
   const hlRef = useRef<HTMLPreElement>(null)
   const hl = as === 'textarea' && !!highlight
+  // Trailing newline keeps a blank last line in step with the textarea (which
+  // always reserves one). Memoised so we only re-tokenise when the text changes.
+  const hlHtml = useMemo(() => (hl ? highlight!(value) + '\n' : ''), [hl, highlight, value])
   const [caret, setCaret] = useState(0)
   const [forced, setForced] = useState(false) // Ctrl+Space opened the popup on an empty token
   const [items, setItems] = useState<Suggestion[]>([])
@@ -146,9 +150,8 @@ export default function CodeField({ as, value, onChange, candidates, className, 
   return (
     <span className={`ac-wrap ${as === 'textarea' ? 'area' : 'fill'}${hl ? ' hl' : ''}`}>
       {hl && (
-        // Trailing newline so the overlay keeps a blank last line in step with
-        // the textarea (which always reserves one).
-        <pre ref={hlRef} className={`${className ?? ''} ac-highlight`} aria-hidden="true">{highlight!(value)}{'\n'}</pre>
+        <pre ref={hlRef} className={`${className ?? ''} ac-highlight`} aria-hidden="true"
+          dangerouslySetInnerHTML={{ __html: hlHtml }} />
       )}
       {as === 'textarea' ? <textarea {...fieldProps} /> : <input {...fieldProps} />}
       {open && pos && (

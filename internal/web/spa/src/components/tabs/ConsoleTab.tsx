@@ -36,26 +36,27 @@ const KW = new Set([
 // Token regex (ordered): comments, strings, quoted idents, numbers, words, punctuation.
 const TOK_RE = /(--[^\n]*|\/\*[\s\S]*?\*\/)|('(?:[^']|'')*'?)|("(?:[^"]|"")*"?)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)|([(),.;*=<>!+\-/%|]+)/g
 
-// Tokenise SQL into coloured spans for the console overlay. Returns a flat list
-// of strings (uncoloured whitespace/other) and <span> nodes.
-function highlightSQL(sql: string) {
-  const out: React.ReactNode[] = []
-  let last = 0, key = 0
+const escHtml = (s: string) => s.replace(/[&<>]/g, c => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'))
+
+// Tokenise SQL into an HTML string of coloured <span>s for the console overlay.
+// Returning a string (vs React nodes) keeps each keystroke to one innerHTML write
+// instead of reconciling hundreds of elements.
+function highlightSQL(sql: string): string {
+  let out = '', last = 0
   for (const m of sql.matchAll(TOK_RE)) {
     const i = m.index!
-    if (i > last) out.push(sql.slice(last, i))
-    const [tok, comment, str, ident, num, word, punct] = m
-    let cls = ''
+    if (i > last) out += escHtml(sql.slice(last, i))
+    const [tok, comment, str, ident, num, word] = m
+    let cls = 'tk-punct'
     if (comment) cls = 'tk-com'
     else if (str) cls = 'tk-str'
     else if (ident) cls = 'tk-id'
     else if (num) cls = 'tk-num'
     else if (word) cls = KW.has(word.toLowerCase()) ? 'tk-kw' : 'tk-word'
-    else if (punct) cls = 'tk-punct'
-    out.push(<span key={key++} className={cls}>{tok}</span>)
+    out += `<span class="${cls}">${escHtml(tok)}</span>`
     last = i + tok.length
   }
-  if (last < sql.length) out.push(sql.slice(last))
+  if (last < sql.length) out += escHtml(sql.slice(last))
   return out
 }
 
