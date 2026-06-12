@@ -108,15 +108,15 @@ function ConnNode({ conn }: { conn: Connection }) {
 
 function SchemaList({ connId, schemas }: { connId: number; schemas?: Schema[] | null }) {
   if (!schemas || schemas.length === 0) return <div className="tree-empty dim">no user schemas</div>
-  return <>{schemas.map(s => <SchemaNode key={s.Name} connId={connId} schema={s} />)}</>
+  return <>{schemas.map(s => <SchemaNode key={s.Name} connId={connId} schema={s} defaultOpen={schemas.length === 1} />)}</>
 }
 
-function SchemaNode({ connId, schema }: { connId: number; schema: Schema }) {
+function SchemaNode({ connId, schema, defaultOpen }: { connId: number; schema: Schema; defaultOpen: boolean }) {
   const app = useApp()
   const payload: NodePayload = { type: 'schema', connId, schema: schema.Name, name: schema.Name }
   const tables = schema.Tables || []
   return (
-    <details className="tree-node" open>
+    <details className="tree-node" open={defaultOpen}>
       <summary className="tree-row schema-row"
         onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
         <Ico name="schema" /><span className="tree-name">{schema.Name}</span>
