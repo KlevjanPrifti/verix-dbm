@@ -124,13 +124,13 @@ function SchemaNode({ connId, schema, defaultOpen }: { connId: number; schema: S
         <Kebab payload={payload} />
       </summary>
       <div className="node-children">
-        {tables.map(t => <TableNode key={t.Name} connId={connId} schema={schema.Name} table={t.Name} kind={t.Kind} est={t.EstRows} />)}
+        {tables.map(t => <TableNode key={t.Name} connId={connId} schema={schema.Name} table={t.Name} kind={t.Kind} />)}
       </div>
     </details>
   )
 }
 
-function TableNode({ connId, schema, table, kind, est }: { connId: number; schema: string; table: string; kind: string; est: number }) {
+function TableNode({ connId, schema, table, kind }: { connId: number; schema: string; table: string; kind: string }) {
   const app = useApp()
   const payload: NodePayload = { type: 'table', connId, schema, table, name: table }
   const openGrid = () => app.openTab({
@@ -144,7 +144,6 @@ function TableNode({ connId, schema, table, kind, est }: { connId: number; schem
         <Ico name={kind} />
         <span className="tree-name table-name" title="click name to open"
           onClick={e => { e.preventDefault(); openGrid() }}>{table}</span>
-        <span className="est dim">{est}</span>
         <Kebab payload={payload} />
       </summary>
       <div className="node-children">
