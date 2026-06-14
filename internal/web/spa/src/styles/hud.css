@@ -272,6 +272,9 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 .ico-mariadb   { color: #c98a5e; }
 .ico-redis     { color: #ff5a4d; }
 .ico-keyspace  { color: #45e0a5; }
+/* Database brand logos read better a little larger than the tree's type glyphs. */
+.menu-wrap .menu-item .ico { width: 1.45em; height: 1.45em; }
+.conn-row > .ico { width: 1.3em; height: 1.3em; }
 .ico-schema { color: rgb(var(--accent-rgb)); }
 .ico-table { color: rgba(var(--accent-rgb),0.85); }
 .ico-view, .ico-matview { color: #b48cff; }

@@ -17,6 +17,7 @@ import {
 import {
   SiPostgresql, SiCockroachlabs, SiMysql, SiMariadb, SiRedis, SiTimescale,
 } from 'react-icons/si'
+import { FaAws } from 'react-icons/fa'
 import { DB_KINDS } from './dbkinds'
 
 // Any icon component here needs only className/style; both Lucide glyphs and
@@ -24,9 +25,10 @@ import { DB_KINDS } from './dbkinds'
 // up colour from currentColor, so a single accent tints the whole silhouette).
 type IconCmp = React.ComponentType<{ className?: string; style?: React.CSSProperties }>
 
-// Real brand logos for the database kinds that have one. The remaining
-// PostgreSQL-wire kinds (greenplum/redshift/yugabyte/aurora) have no published
-// mark, so they fall back to the generic Database cylinder below.
+// Real brand logos for the database kinds that have one. Redshift and Aurora
+// have no product mark in the icon set, so they borrow the AWS logo (both are
+// AWS services). Greenplum and Yugabyte have no published mark anywhere and fall
+// back to the generic Database cylinder below.
 const BRAND: Record<string, IconCmp> = {
   postgres: SiPostgresql,
   cockroach: SiCockroachlabs,
@@ -34,6 +36,8 @@ const BRAND: Record<string, IconCmp> = {
   mysql: SiMysql,
   mariadb: SiMariadb,
   redis: SiRedis,
+  redshift: FaAws,
+  aurorapg: FaAws,
 }
 
 // Database-object types → icon. Keys match Explorer's dynamic names: connection
