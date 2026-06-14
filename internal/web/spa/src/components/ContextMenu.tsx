@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { useApp, type DDLKind, type NodePayload } from '../appctx'
+import { kindEngine } from '../dbkinds'
 import {
   type LucideIcon, Terminal, Plus, Box, RotateCw, Copy, Settings, Trash2, Table2,
   Code, Download, FileCode, Info, Search, Pencil, ListTree, Eraser, ChevronRight,
@@ -30,6 +31,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
   const app = useApp()
   const [openSub, setOpenSub] = useState<number | null>(null)
   const id = payload.connId
+  const engine = kindEngine(app.connById(id)?.kind || 'postgres')
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -113,7 +115,8 @@ export default function ContextMenu({ x, y, payload, onClose }: {
         { label: 'Table…', Icon: Table2, run: () => app.openTableDesigner({ connId: id, schema: c.schema!, mode: 'create' }) },
         { label: 'Table (raw SQL)…', Icon: Code, run: () => form('new-table') },
       ] })
-      if (w) m.push({ label: 'Rename / owner…', Icon: Pencil, run: () => form('alter-schema') })
+      // MySQL can't rename a database or set an owner, so the edit is hidden there.
+      if (w && engine !== 'mysql') m.push({ label: 'Rename / owner…', Icon: Pencil, run: () => form('alter-schema') })
       m.push({ label: 'Refresh', Icon: RotateCw, key: 'Ctrl+F5', run: () => { close(); app.refreshConn(id) } })
       m.push(SEP)
       m.push({ label: 'Copy name', Icon: Copy, run: () => app.copy(c.schema!) })
@@ -131,7 +134,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
       if (a) {
         m.push(SEP)
         m.push({ label: 'Edit role…', Icon: Pencil, run: () => form('alter-user') })
-        m.push({ label: 'Drop role…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop role “${c.name}”? This cannot be undone.`, () => api.dropRole(id, c.name), true) })
+        m.push({ label: 'Drop role…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop role “${c.name}”? This cannot be undone.`, () => api.dropRole(id, c.role?.Name || c.name, c.role?.Host || ''), true) })
       }
     } else if (c.type === 'table') {
       m.push({ head: `${c.schema}.${c.table}` })
@@ -182,7 +185,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
       if (c.def) m.push({ label: 'Copy definition', Icon: Copy, run: () => app.copy(c.def!) })
       if (c.type === 'index' && a) {
         m.push(SEP)
-        m.push({ label: 'Drop index…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop index ${c.name}?`, () => api.dropIndex(id, c.schema!, c.name), true) })
+        m.push({ label: 'Drop index…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop index ${c.name}?`, () => api.dropIndex(id, c.schema!, c.table!, c.name), true) })
       }
     }
     return m

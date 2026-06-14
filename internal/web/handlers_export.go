@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"verix-dbm/internal/auth"
-	"verix-dbm/internal/postgres"
 	"verix-dbm/internal/store"
 )
 
@@ -20,7 +19,7 @@ func (s *Server) exportTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, _ := auth.FromContext(r.Context())
-	c, pool, ok := s.pgPoolFor(w, r)
+	c, eng, ok := s.sqlEngineFor(w, r)
 	if !ok {
 		return
 	}
@@ -30,12 +29,12 @@ func (s *Server) exportTable(w http.ResponseWriter, r *http.Request) {
 	if format != "json" {
 		format = "csv"
 	}
-	if serverSideBlocked(u, q.Get("where"), q.Get("order")) {
+	if serverSideBlocked(u, c.Kind, q.Get("where"), q.Get("order")) {
 		http.Error(w, serverSideBlockedMsg, http.StatusForbidden)
 		return
 	}
 
-	res, err := postgres.BrowseWhere(r.Context(), pool, schema, table, q.Get("where"), q.Get("order"), 1000, 0, true)
+	res, err := eng.BrowseWhere(r.Context(), schema, table, q.Get("where"), q.Get("order"), 1000, 0, true)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

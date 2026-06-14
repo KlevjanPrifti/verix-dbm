@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, setCSRF } from './api'
+import { kindEngine } from './dbkinds'
 import type { Connection, Me } from './types'
 import {
   AppContext, type AppActions, type ConfirmSpec, type DDLParams, type DialogRequest,
@@ -113,11 +114,13 @@ export default function App() {
     reloadConns,
   }), [me, conns, connById, openTab, closeTab, copy, notify, confirm, prompt, refreshConn, refreshTokens, reloadConns])
 
-  // Tint the HUD to match the active tab's connection (cyan pg / emerald redis).
+  // Tint the HUD to match the active tab's connection engine
+  // (cyan pg / amber mysql / emerald redis).
   useEffect(() => {
     const t = tabs.find(x => x.key === active)
     const c = t ? conns.find(x => x.id === ('connId' in t.view ? t.view.connId : -1)) : undefined
-    document.documentElement.dataset.accent = c?.kind === 'redis' ? 'emerald' : 'cyan'
+    const engine = c ? kindEngine(c.kind) : 'postgres'
+    document.documentElement.dataset.accent = engine === 'redis' ? 'emerald' : engine === 'mysql' ? 'amber' : 'cyan'
   }, [active, tabs, conns])
 
   if (!me) return <div className="boot dim" style={{ padding: '2rem' }}>loading…</div>

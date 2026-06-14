@@ -15,16 +15,19 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver "pgx"
-	_ "modernc.org/sqlite"             // database/sql driver "sqlite"
+	gomysql "github.com/go-sql-driver/mysql" // target DSN builder for MySQL/MariaDB
+	_ "github.com/jackc/pgx/v5/stdlib"       // database/sql driver "pgx"
+	_ "modernc.org/sqlite"                   // database/sql driver "sqlite"
+
+	"verix-dbm/internal/dbsql"
 )
 
-// Connection is a saved target (Postgres or Redis). Password is stored
-// encrypted (see internal/crypto); the plaintext never touches SQLite.
+// Connection is a saved target (Postgres, MySQL/MariaDB, or Redis). Password is
+// stored encrypted (see internal/crypto); the plaintext never touches SQLite.
 type Connection struct {
 	ID          int64
 	Name        string
-	Kind        string // "postgres" | "redis"
+	Kind        string // a dbkinds id: "postgres" | "mysql" | "mariadb" | "redis" | ...
 	Host        string
 	Port        int
 	DBName      string // pg database, or redis logical db number as string
@@ -486,4 +489,36 @@ func (c Connection) DSN(password string) string {
 		RawQuery: opts,
 	}
 	return u.String()
+}
+
+// Engine returns the connection's engine family ("postgres" | "mysql" | "redis").
+// Mirrors the frontend dbkinds.ts mapping so both agree on which path serves a kind.
+func (c Connection) Engine() string { return dbsql.Family(c.Kind) }
+
+// DSNMySQL builds a go-sql-driver DSN for a MySQL/MariaDB target. Session safety
+// settings (sql_mode, time_zone, charset) are pinned here so every freshly opened
+// pooled connection re-applies them at handshake (never via per-query SET SESSION).
+// Extra connection params can be supplied verbatim in Options ("k=v&k2=v2").
+func (c Connection) DSNMySQL(password string) string {
+	cfg := gomysql.NewConfig()
+	cfg.User = c.Username
+	cfg.Passwd = password
+	cfg.Net = "tcp"
+	cfg.Addr = fmt.Sprintf("%s:%d", c.Host, c.Port)
+	cfg.DBName = c.DBName
+	cfg.ParseTime = true
+	cfg.Loc = time.UTC
+	cfg.InterpolateParams = false
+	cfg.Params = map[string]string{
+		"charset":   "utf8mb4",
+		"sql_mode":  "'STRICT_ALL_TABLES,NO_ENGINE_SUBSTITUTION'",
+		"time_zone": "'+00:00'",
+	}
+	// Merge any admin-supplied params (e.g. "tls=skip-verify"); these win.
+	for _, kv := range strings.Split(c.Options, "&") {
+		if k, v, ok := strings.Cut(strings.TrimSpace(kv), "="); ok && k != "" {
+			cfg.Params[k] = v
+		}
+	}
+	return cfg.FormatDSN()
 }

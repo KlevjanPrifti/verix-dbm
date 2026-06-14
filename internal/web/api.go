@@ -14,11 +14,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"verix-dbm/internal/auth"
-	"verix-dbm/internal/postgres"
+	"verix-dbm/internal/dbsql"
 	"verix-dbm/internal/redisdb"
 	"verix-dbm/internal/store"
 )
@@ -138,7 +137,7 @@ type resultDTO struct {
 	Truncated    bool       `json:"truncated"`
 }
 
-func toResultDTO(r *postgres.Result) *resultDTO {
+func toResultDTO(r *dbsql.Result) *resultDTO {
 	if r == nil {
 		return nil
 	}
@@ -160,7 +159,7 @@ type columnDTO struct {
 	AutoInc  bool   `json:"autoInc"`
 }
 
-func toColumnDTO(c postgres.Column) columnDTO {
+func toColumnDTO(c dbsql.Column) columnDTO {
 	return columnDTO{
 		Name: c.Name, Type: c.Type, TypeText: c.TypeText(), Cat: c.Cat(),
 		NotNull: c.NotNull, Default: c.Default, PK: c.PK, AutoInc: c.AutoInc,
@@ -402,9 +401,12 @@ func (s *Server) apiTestConnection(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
 	defer cancel()
 	var err error
-	if c.Kind == "redis" {
+	switch c.Engine() {
+	case dbsql.FamilyRedis:
 		err = pingRedis(ctx, c, in.Password)
-	} else {
+	case dbsql.FamilyMySQL:
+		err = pingMySQL(ctx, c, in.Password)
+	default:
 		err = pingPG(ctx, c, in.Password)
 	}
 	if err != nil {
@@ -422,17 +424,18 @@ func (s *Server) apiExplorer(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusNotFound, "connection not found")
 		return
 	}
-	if c.Kind == "redis" {
+	engine := c.Engine()
+	if engine == dbsql.FamilyRedis {
 		writeJSON(w, http.StatusOK, map[string]any{"kind": "redis"})
 		return
 	}
-	pool, err := s.reg.PG(r.Context(), c)
+	eng, err := s.reg.Engine(r.Context(), c)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"kind": "postgres", "error": "connect: " + err.Error()})
+		writeJSON(w, http.StatusOK, map[string]any{"kind": engine, "error": "connect: " + err.Error()})
 		return
 	}
-	schemas, err := postgres.Schemas(r.Context(), pool)
-	resp := map[string]any{"kind": "postgres", "schemas": schemas}
+	schemas, err := eng.Schemas(r.Context())
+	resp := map[string]any{"kind": engine, "schemas": schemas}
 	if err != nil {
 		resp["error"] = err.Error()
 	}
@@ -440,12 +443,12 @@ func (s *Server) apiExplorer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiColumns(w http.ResponseWriter, r *http.Request) {
-	_, pool, ok := s.apiPGPool(w, r)
+	_, eng, ok := s.apiSQL(w, r)
 	if !ok {
 		return
 	}
 	q := r.URL.Query()
-	cols, err := postgres.Columns(r.Context(), pool, q.Get("schema"), q.Get("table"))
+	cols, err := eng.Columns(r.Context(), q.Get("schema"), q.Get("table"))
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -458,12 +461,12 @@ func (s *Server) apiColumns(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiIndexes(w http.ResponseWriter, r *http.Request) {
-	_, pool, ok := s.apiPGPool(w, r)
+	_, eng, ok := s.apiSQL(w, r)
 	if !ok {
 		return
 	}
 	q := r.URL.Query()
-	ix, err := postgres.Indexes(r.Context(), pool, q.Get("schema"), q.Get("table"))
+	ix, err := eng.Indexes(r.Context(), q.Get("schema"), q.Get("table"))
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -472,12 +475,12 @@ func (s *Server) apiIndexes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiKeys(w http.ResponseWriter, r *http.Request) {
-	_, pool, ok := s.apiPGPool(w, r)
+	_, eng, ok := s.apiSQL(w, r)
 	if !ok {
 		return
 	}
 	q := r.URL.Query()
-	keys, err := postgres.Keys(r.Context(), pool, q.Get("schema"), q.Get("table"))
+	keys, err := eng.Keys(r.Context(), q.Get("schema"), q.Get("table"))
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -489,14 +492,14 @@ func (s *Server) apiKeys(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiGrid(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.FromContext(r.Context())
-	c, pool, ok := s.apiPGPool(w, r)
+	c, eng, ok := s.apiSQL(w, r)
 	if !ok {
 		return
 	}
 	q := r.URL.Query()
 	schema, table := q.Get("schema"), q.Get("table")
 	where, order := q.Get("where"), q.Get("order")
-	if serverSideBlocked(u, where, order) {
+	if serverSideBlocked(u, c.Kind, where, order) {
 		apiErr(w, http.StatusForbidden, serverSideBlockedMsg)
 		return
 	}
@@ -510,8 +513,8 @@ func (s *Server) apiGrid(w http.ResponseWriter, r *http.Request) {
 	if size <= 0 || size > 1000 {
 		size = browseLimit
 	}
-	res, err := postgres.BrowseWhere(r.Context(), pool, schema, table, where, order, size, page*size, true)
-	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "pg_browse", Detail: schema + "." + table, Success: err == nil})
+	res, err := eng.BrowseWhere(r.Context(), schema, table, where, order, size, page*size, true)
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "sql_browse", Detail: schema + "." + table, Success: err == nil})
 	resp := map[string]any{
 		"result":   toResultDTO(res),
 		"readOnly": c.ReadOnly || !s.access(r.Context(), u, c).Write,
@@ -553,25 +556,25 @@ func (s *Server) apiQuery(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
-	if serverSideBlocked(u, sql) {
+	if serverSideBlocked(u, c.Kind, sql) {
 		resp["error"] = serverSideBlockedMsg
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
-	if !readOnly && postgres.NeedsConfirm(sql) && !in.Confirm {
+	if !readOnly && dbsql.NeedsConfirm(sql) && !in.Confirm {
 		resp["needConfirm"] = true
 		resp["sql"] = sql
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
-	pool, err := s.reg.PG(r.Context(), c)
+	eng, err := s.reg.Engine(r.Context(), c)
 	if err != nil {
 		resp["error"] = "connect: " + err.Error()
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
-	res, err := postgres.Query(r.Context(), pool, sql, readOnly, in.Schema)
-	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "pg_query", Detail: auditDetail(sql), Success: err == nil})
+	res, err := eng.Query(r.Context(), sql, readOnly, in.Schema)
+	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: "sql_query", Detail: auditDetail(sql), Success: err == nil})
 	resp["result"] = toResultDTO(res)
 	if err != nil {
 		resp["error"] = err.Error()
@@ -585,7 +588,7 @@ func (s *Server) apiQuery(w http.ResponseWriter, r *http.Request) {
 // as apiQuery: CSRF, write + read-only gating, the server-side program/file
 // block, and a destructive-statement confirm gate applied across the whole batch.
 func (s *Server) apiExecTx(w http.ResponseWriter, r *http.Request) {
-	u, c, pool, ok := s.apiRequireWrite(w, r, false)
+	u, c, eng, ok := s.apiRequireWrite(w, r, false)
 	if !ok {
 		return
 	}
@@ -607,21 +610,21 @@ func (s *Server) apiExecTx(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusBadRequest, "no statements to commit")
 		return
 	}
-	if serverSideBlocked(u, stmts...) {
+	if serverSideBlocked(u, c.Kind, stmts...) {
 		apiErr(w, http.StatusForbidden, serverSideBlockedMsg)
 		return
 	}
 	if !in.Confirm {
 		for _, st := range stmts {
-			if postgres.NeedsConfirm(st) {
+			if dbsql.NeedsConfirm(st) {
 				writeJSON(w, http.StatusOK, map[string]any{"needConfirm": true})
 				return
 			}
 		}
 	}
-	err := postgres.ExecScript(r.Context(), pool, stmts)
+	err := eng.ExecScript(r.Context(), stmts)
 	s.st.AddAudit(r.Context(), store.Audit{
-		User: u.Email, ConnID: c.ID, Action: "pg_tx",
+		User: u.Email, ConnID: c.ID, Action: "sql_tx",
 		Detail: auditDetail(strings.Join(stmts, "; ")), Success: err == nil,
 	})
 	if err != nil {
@@ -634,7 +637,7 @@ func (s *Server) apiExecTx(w http.ResponseWriter, r *http.Request) {
 // Generators / introspection
 
 func (s *Server) apiGenerate(w http.ResponseWriter, r *http.Request) {
-	_, pool, ok := s.apiPGPool(w, r)
+	_, eng, ok := s.apiSQL(w, r)
 	if !ok {
 		return
 	}
@@ -646,13 +649,13 @@ func (s *Server) apiGenerate(w http.ResponseWriter, r *http.Request) {
 	)
 	switch q.Get("kind") {
 	case "select":
-		sql, err = postgres.GenSelect(r.Context(), pool, schema, table)
+		sql, err = eng.GenSelect(r.Context(), schema, table)
 	case "insert":
-		sql, err = postgres.GenInsert(r.Context(), pool, schema, table)
+		sql, err = eng.GenInsert(r.Context(), schema, table)
 	case "update":
-		sql, err = postgres.GenUpdate(r.Context(), pool, schema, table)
+		sql, err = eng.GenUpdate(r.Context(), schema, table)
 	case "create":
-		sql, err = postgres.CreateTableDDL(r.Context(), pool, schema, table)
+		sql, err = eng.CreateTableDDL(r.Context(), schema, table)
 	default:
 		apiErr(w, http.StatusBadRequest, "unknown kind")
 		return
@@ -665,20 +668,20 @@ func (s *Server) apiGenerate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiDoc(w http.ResponseWriter, r *http.Request) {
-	_, pool, ok := s.apiPGPool(w, r)
+	_, eng, ok := s.apiSQL(w, r)
 	if !ok {
 		return
 	}
 	q := r.URL.Query()
 	schema, table := q.Get("schema"), q.Get("table")
-	cols, err := postgres.Columns(r.Context(), pool, schema, table)
+	cols, err := eng.Columns(r.Context(), schema, table)
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	keys, _ := postgres.Keys(r.Context(), pool, schema, table)
-	indexes, _ := postgres.Indexes(r.Context(), pool, schema, table)
-	comment, _ := postgres.TableComment(r.Context(), pool, schema, table)
+	keys, _ := eng.Keys(r.Context(), schema, table)
+	indexes, _ := eng.Indexes(r.Context(), schema, table)
+	comment, _ := eng.TableComment(r.Context(), schema, table)
 	out := make([]columnDTO, 0, len(cols))
 	for _, c := range cols {
 		out = append(out, toColumnDTO(c))
@@ -690,13 +693,13 @@ func (s *Server) apiDoc(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiUsages(w http.ResponseWriter, r *http.Request) {
-	_, pool, ok := s.apiPGPool(w, r)
+	_, eng, ok := s.apiSQL(w, r)
 	if !ok {
 		return
 	}
 	q := r.URL.Query()
 	schema, table := q.Get("schema"), q.Get("table")
-	usages, err := postgres.FindUsages(r.Context(), pool, schema, table)
+	usages, err := eng.FindUsages(r.Context(), schema, table)
 	resp := map[string]any{"schema": schema, "table": table, "usages": usages}
 	if err != nil {
 		resp["error"] = err.Error()
@@ -722,8 +725,8 @@ func (s *Server) apiDDLFormPrefill(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	resp := map[string]any{"nullable": true}
 	if q.Get("kind") == "modify-column" {
-		if pool, e := s.reg.PG(r.Context(), c); e == nil {
-			if cols, e2 := postgres.Columns(r.Context(), pool, q.Get("schema"), q.Get("table")); e2 == nil {
+		if eng, e := s.reg.Engine(r.Context(), c); e == nil {
+			if cols, e2 := eng.Columns(r.Context(), q.Get("schema"), q.Get("table")); e2 == nil {
 				for _, col := range cols {
 					if col.Name == q.Get("column") {
 						resp["name"] = col.Name
@@ -739,7 +742,7 @@ func (s *Server) apiDDLFormPrefill(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiRunForm(w http.ResponseWriter, r *http.Request) {
-	u, c, pool, ok := s.apiRequireWrite(w, r, false)
+	u, c, eng, ok := s.apiRequireWrite(w, r, false)
 	if !ok {
 		return
 	}
@@ -760,6 +763,7 @@ func (s *Server) apiRunForm(w http.ResponseWriter, r *http.Request) {
 		CreateDB   bool   `json:"createdb"`
 		CreateRole bool   `json:"createrole"`
 		Superuser  bool   `json:"superuser"`
+		Host       string `json:"host"` // mysql user host part (default %)
 	}
 	if err := readJSON(r, &in); err != nil {
 		apiErr(w, http.StatusBadRequest, "bad json")
@@ -770,17 +774,25 @@ func (s *Server) apiRunForm(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusForbidden, "admin required")
 		return
 	}
-	f := ddlForm{
-		Conn: c, Kind: in.Kind, Schema: in.Schema, Table: in.Table, Column: in.Column,
+	spec := dbsql.FormSpec{
+		Kind: in.Kind, Schema: in.Schema, Table: in.Table, Column: in.Column,
 		Name: strings.TrimSpace(in.Name), Type: strings.TrimSpace(in.Type),
 		Default: strings.TrimSpace(in.Default), Columns: strings.TrimSpace(in.Columns),
-		Nullable: in.Nullable, Unique: in.Unique,
-		Owner:    strings.TrimSpace(in.Owner),
-		Password: in.Password, Login: in.Login, CreateDB: in.CreateDB, CreateRole: in.CreateRole, Superuser: in.Superuser,
+		Nullable: in.Nullable, Unique: in.Unique, Owner: strings.TrimSpace(in.Owner),
+		Role: dbsql.RoleAttrs{
+			Login: in.Login, Super: in.Superuser, CreateDB: in.CreateDB, CreateRole: in.CreateRole,
+			Password: in.Password, Host: strings.TrimSpace(in.Host),
+		},
 	}
-	sql, action, err := buildFormSQL(f)
+	stmts, action, err := eng.FormSQL(spec)
 	if err == nil {
-		err = s.execDDLAudit(r, u, c, pool, action, sql)
+		// A single-statement form runs as one audited Exec; multi-statement forms
+		// (e.g. MySQL CREATE USER + GRANT) run as one audited statement list.
+		if len(stmts) == 1 {
+			err = s.execDDLAudit(r, u, c, eng, action, stmts[0])
+		} else {
+			err = s.execScriptAudit(r, u, c, eng, action, stmts)
+		}
 	}
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
@@ -795,7 +807,7 @@ func (s *Server) apiRunForm(w http.ResponseWriter, r *http.Request) {
 // can already run arbitrary DDL there while adding transactional safety and a
 // single audit entry for the whole edit.
 func (s *Server) apiApplyTable(w http.ResponseWriter, r *http.Request) {
-	u, c, pool, ok := s.apiRequireWrite(w, r, false)
+	u, c, eng, ok := s.apiRequireWrite(w, r, false)
 	if !ok {
 		return
 	}
@@ -813,9 +825,9 @@ func (s *Server) apiApplyTable(w http.ResponseWriter, r *http.Request) {
 	}
 	action := in.Action
 	if action == "" {
-		action = "pg_ddl_table"
+		action = "sql_ddl_table"
 	}
-	err := postgres.ExecScript(r.Context(), pool, in.Statements)
+	err := eng.ExecScript(r.Context(), in.Statements)
 	s.st.AddAudit(r.Context(), store.Audit{
 		User: u.Email, ConnID: c.ID, Action: action,
 		Detail: auditDetail(strings.Join(in.Statements, "; ")), Success: err == nil,
@@ -828,26 +840,26 @@ func (s *Server) apiApplyTable(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiDropTable(w http.ResponseWriter, r *http.Request) {
-	s.apiDDLMutate(w, r, true, "pg_ddl_drop_table", func(in ddlBody) string {
-		return "DROP TABLE " + postgres.Qualified(in.Schema, in.Table)
+	s.apiDDLMutate(w, r, true, "sql_ddl_drop_table", func(d dbsql.Dialect, in ddlBody) string {
+		return d.DropTableSQL(in.Schema, in.Table)
 	})
 }
 
 func (s *Server) apiTruncate(w http.ResponseWriter, r *http.Request) {
-	s.apiDDLMutate(w, r, true, "pg_ddl_truncate", func(in ddlBody) string {
-		return "TRUNCATE TABLE " + postgres.Qualified(in.Schema, in.Table)
+	s.apiDDLMutate(w, r, true, "sql_ddl_truncate", func(d dbsql.Dialect, in ddlBody) string {
+		return d.TruncateSQL(in.Schema, in.Table)
 	})
 }
 
 func (s *Server) apiDropColumn(w http.ResponseWriter, r *http.Request) {
-	s.apiDDLMutate(w, r, true, "pg_ddl_drop_column", func(in ddlBody) string {
-		return "ALTER TABLE " + postgres.Qualified(in.Schema, in.Table) + " DROP COLUMN " + postgres.QuoteIdent(in.Column)
+	s.apiDDLMutate(w, r, true, "sql_ddl_drop_column", func(d dbsql.Dialect, in ddlBody) string {
+		return d.DropColumnSQL(in.Schema, in.Table, in.Column)
 	})
 }
 
 func (s *Server) apiDropIndex(w http.ResponseWriter, r *http.Request) {
-	s.apiDDLMutate(w, r, true, "pg_ddl_drop_index", func(in ddlBody) string {
-		return "DROP INDEX " + postgres.Qualified(in.Schema, in.Name)
+	s.apiDDLMutate(w, r, true, "sql_ddl_drop_index", func(d dbsql.Dialect, in ddlBody) string {
+		return d.DropIndexSQL(in.Schema, in.Table, in.Name)
 	})
 }
 
@@ -860,8 +872,8 @@ type ddlBody struct {
 
 // apiDDLMutate is the JSON twin of the fetch-based confirm endpoints: gate on
 // CSRF + write/admin + read-only, build the statement, exec, audit.
-func (s *Server) apiDDLMutate(w http.ResponseWriter, r *http.Request, admin bool, action string, build func(ddlBody) string) {
-	u, c, pool, ok := s.apiRequireWrite(w, r, admin)
+func (s *Server) apiDDLMutate(w http.ResponseWriter, r *http.Request, admin bool, action string, build func(dbsql.Dialect, ddlBody) string) {
+	u, c, eng, ok := s.apiRequireWrite(w, r, admin)
 	if !ok {
 		return
 	}
@@ -870,7 +882,7 @@ func (s *Server) apiDDLMutate(w http.ResponseWriter, r *http.Request, admin bool
 		apiErr(w, http.StatusBadRequest, "bad json")
 		return
 	}
-	if err := s.execDDLAudit(r, u, c, pool, action, build(in)); err != nil {
+	if err := s.execDDLAudit(r, u, c, eng, action, build(eng, in)); err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -879,17 +891,19 @@ func (s *Server) apiDDLMutate(w http.ResponseWriter, r *http.Request, admin bool
 
 // execDDLAudit runs a generated statement and records it (no HX-Trigger header:
 // the SPA refreshes its own tree on success).
-func (s *Server) execDDLAudit(r *http.Request, u auth.User, c store.Connection, pool *pgxpool.Pool, action, sql string) error {
-	_, err := postgres.Exec(r.Context(), pool, sql)
+func (s *Server) execDDLAudit(r *http.Request, u auth.User, c store.Connection, eng dbsql.Engine, action, sql string) error {
+	_, err := eng.Exec(r.Context(), sql)
 	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: action, Detail: auditDetail(sql), Success: err == nil})
 	return err
 }
 
-// execScriptAudit runs a statement list atomically (postgres.ExecScript) and
-// records the whole list as one audit entry the twin of execDDLAudit for the
-// rename/owner/privilege edits that compile to more than one statement.
-func (s *Server) execScriptAudit(r *http.Request, u auth.User, c store.Connection, pool *pgxpool.Pool, action string, stmts []string) error {
-	err := postgres.ExecScript(r.Context(), pool, stmts)
+// execScriptAudit runs a statement list as one transaction (Engine.ExecScript)
+// and records the whole list as one audit entry the twin of execDDLAudit for the
+// rename/owner/privilege edits that compile to more than one statement. NOTE: on
+// MySQL/MariaDB a mid-batch DDL failure is not rolled back (Engine.AtomicDDL is
+// false there); the returned error names the statement that failed.
+func (s *Server) execScriptAudit(r *http.Request, u auth.User, c store.Connection, eng dbsql.Engine, action string, stmts []string) error {
+	err := eng.ExecScript(r.Context(), stmts)
 	s.st.AddAudit(r.Context(), store.Audit{User: u.Email, ConnID: c.ID, Action: action, Detail: auditDetail(strings.Join(stmts, "; ")), Success: err == nil})
 	return err
 }
@@ -898,7 +912,7 @@ func (s *Server) execScriptAudit(r *http.Request, u auth.User, c store.Connectio
 // admin-gated like drop-table; renaming/reassigning owner is a write op.
 
 func (s *Server) apiDropSchema(w http.ResponseWriter, r *http.Request) {
-	u, c, pool, ok := s.apiRequireWrite(w, r, true)
+	u, c, eng, ok := s.apiRequireWrite(w, r, true)
 	if !ok {
 		return
 	}
@@ -914,7 +928,7 @@ func (s *Server) apiDropSchema(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusBadRequest, "schema is required")
 		return
 	}
-	if err := s.execDDLAudit(r, u, c, pool, "pg_ddl_drop_schema", postgres.DropSchemaSQL(in.Schema, in.Cascade)); err != nil {
+	if err := s.execScriptAudit(r, u, c, eng, "sql_ddl_drop_schema", eng.DropSchemaSQL(in.Schema, in.Cascade)); err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -922,7 +936,7 @@ func (s *Server) apiDropSchema(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiAlterSchema(w http.ResponseWriter, r *http.Request) {
-	u, c, pool, ok := s.apiRequireWrite(w, r, false)
+	u, c, eng, ok := s.apiRequireWrite(w, r, false)
 	if !ok {
 		return
 	}
@@ -935,12 +949,12 @@ func (s *Server) apiAlterSchema(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusBadRequest, "bad json")
 		return
 	}
-	stmts := postgres.AlterSchemaSQL(strings.TrimSpace(in.Schema), strings.TrimSpace(in.NewName), strings.TrimSpace(in.Owner))
+	stmts := eng.AlterSchemaSQL(strings.TrimSpace(in.Schema), strings.TrimSpace(in.NewName), strings.TrimSpace(in.Owner))
 	if len(stmts) == 0 {
 		apiErr(w, http.StatusBadRequest, "nothing to change")
 		return
 	}
-	if err := s.execScriptAudit(r, u, c, pool, "pg_ddl_alter_schema", stmts); err != nil {
+	if err := s.execScriptAudit(r, u, c, eng, "sql_ddl_alter_schema", stmts); err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -956,11 +970,11 @@ func (s *Server) apiRoles(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusForbidden, "admin required")
 		return
 	}
-	_, pool, ok := s.apiPGPool(w, r)
+	_, eng, ok := s.apiSQL(w, r)
 	if !ok {
 		return
 	}
-	roles, err := postgres.Roles(r.Context(), pool)
+	roles, err := eng.Roles(r.Context())
 	if err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -969,12 +983,13 @@ func (s *Server) apiRoles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiDropRole(w http.ResponseWriter, r *http.Request) {
-	u, c, pool, ok := s.apiRequireWrite(w, r, true)
+	u, c, eng, ok := s.apiRequireWrite(w, r, true)
 	if !ok {
 		return
 	}
 	var in struct {
 		Name string `json:"name"`
+		Host string `json:"host"` // mysql user host part (ignored by Postgres)
 	}
 	if err := readJSON(r, &in); err != nil {
 		apiErr(w, http.StatusBadRequest, "bad json")
@@ -984,7 +999,7 @@ func (s *Server) apiDropRole(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusBadRequest, "role name is required")
 		return
 	}
-	if err := s.execDDLAudit(r, u, c, pool, "pg_ddl_drop_role", postgres.DropRoleSQL(in.Name)); err != nil {
+	if err := s.execScriptAudit(r, u, c, eng, "sql_ddl_drop_role", eng.DropUserSQL(strings.TrimSpace(in.Name), strings.TrimSpace(in.Host))); err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -992,7 +1007,7 @@ func (s *Server) apiDropRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiAlterRole(w http.ResponseWriter, r *http.Request) {
-	u, c, pool, ok := s.apiRequireWrite(w, r, true)
+	u, c, eng, ok := s.apiRequireWrite(w, r, true)
 	if !ok {
 		return
 	}
@@ -1004,6 +1019,7 @@ func (s *Server) apiAlterRole(w http.ResponseWriter, r *http.Request) {
 		CreateDB   bool   `json:"createdb"`
 		CreateRole bool   `json:"createrole"`
 		Superuser  bool   `json:"superuser"`
+		Host       string `json:"host"` // mysql user host part (ignored by Postgres)
 	}
 	if err := readJSON(r, &in); err != nil {
 		apiErr(w, http.StatusBadRequest, "bad json")
@@ -1013,14 +1029,15 @@ func (s *Server) apiAlterRole(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusBadRequest, "role name is required")
 		return
 	}
-	stmts := postgres.AlterRoleSQL(strings.TrimSpace(in.Name), strings.TrimSpace(in.NewName), postgres.RoleAttrs{
-		Login: in.Login, Super: in.Superuser, CreateDB: in.CreateDB, CreateRole: in.CreateRole, Password: in.Password,
+	stmts := eng.AlterUserSQL(strings.TrimSpace(in.Name), strings.TrimSpace(in.NewName), dbsql.RoleAttrs{
+		Login: in.Login, Super: in.Superuser, CreateDB: in.CreateDB, CreateRole: in.CreateRole,
+		Password: in.Password, Host: strings.TrimSpace(in.Host),
 	})
 	if len(stmts) == 0 {
 		apiErr(w, http.StatusBadRequest, "nothing to change")
 		return
 	}
-	if err := s.execScriptAudit(r, u, c, pool, "pg_ddl_alter_role", stmts); err != nil {
+	if err := s.execScriptAudit(r, u, c, eng, "sql_ddl_alter_role", stmts); err != nil {
 		apiErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -1255,24 +1272,25 @@ func (s *Server) apiRequireAdmin(w http.ResponseWriter, r *http.Request) (auth.U
 	return u, true
 }
 
-// apiPGPool resolves the URL's connection + Postgres pool for read endpoints.
-func (s *Server) apiPGPool(w http.ResponseWriter, r *http.Request) (store.Connection, *pgxpool.Pool, bool) {
+// apiSQL resolves the URL's connection + its dbsql.Engine for read endpoints
+// (Postgres or MySQL, per the connection's kind).
+func (s *Server) apiSQL(w http.ResponseWriter, r *http.Request) (store.Connection, dbsql.Engine, bool) {
 	c, err := s.connFor(r)
 	if err != nil {
 		apiErr(w, http.StatusNotFound, "connection not found")
 		return store.Connection{}, nil, false
 	}
-	pool, err := s.reg.PG(r.Context(), c)
+	eng, err := s.reg.Engine(r.Context(), c)
 	if err != nil {
 		apiErr(w, http.StatusBadGateway, "connect: "+err.Error())
 		return c, nil, false
 	}
-	return c, pool, true
+	return c, eng, true
 }
 
 // apiRequireWrite is the JSON twin of requireWrite: CSRF + write/admin + the
-// connection's read-only flag, then resolve the pool.
-func (s *Server) apiRequireWrite(w http.ResponseWriter, r *http.Request, admin bool) (auth.User, store.Connection, *pgxpool.Pool, bool) {
+// connection's read-only flag, then resolve the engine.
+func (s *Server) apiRequireWrite(w http.ResponseWriter, r *http.Request, admin bool) (auth.User, store.Connection, dbsql.Engine, bool) {
 	u, _ := auth.FromContext(r.Context())
 	if !s.auth.CheckCSRF(r) {
 		apiErr(w, http.StatusForbidden, "bad csrf")
@@ -1297,12 +1315,12 @@ func (s *Server) apiRequireWrite(w http.ResponseWriter, r *http.Request, admin b
 		apiErr(w, http.StatusConflict, "connection is read-only")
 		return u, c, nil, false
 	}
-	pool, err := s.reg.PG(r.Context(), c)
+	eng, err := s.reg.Engine(r.Context(), c)
 	if err != nil {
 		apiErr(w, http.StatusBadGateway, "connect: "+err.Error())
 		return u, c, nil, false
 	}
-	return u, c, pool, true
+	return u, c, eng, true
 }
 
 var _ = redis.Nil

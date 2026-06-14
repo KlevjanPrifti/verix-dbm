@@ -8,6 +8,7 @@
 // produced by exactly one code path what you see is what runs.
 
 import type { DocResponse } from './types'
+import type { Engine } from './dbkinds'
 
 let uidc = 0
 export const uid = () => `n${++uidc}`
@@ -65,63 +66,104 @@ export const emptyModel = (): TableModel => ({
   name: '', comment: '', cols: [], uniques: [], fks: [], indexes: [], checks: [],
 })
 
-// quoting
+// Dialect-aware SQL building. Postgres quotes identifiers with double quotes and
+// uses ALTER COLUMN ... TYPE / DROP CONSTRAINT / COMMENT ON TABLE; MySQL/MariaDB
+// quote with backticks and use MODIFY COLUMN / DROP PRIMARY KEY|FOREIGN KEY|INDEX|
+// CHECK / ALTER TABLE ... COMMENT. One Dx instance carries both the quoting and
+// the structural choices so generateCreate/generateModify read the same.
+interface Dx {
+  mysql: boolean
+  qi: (s: string) => string
+  ql: (s: string) => string
+  qual: (schema: string, t: string) => string
+  idList: (s: string) => string
+}
+const mkDx = (engine: Engine): Dx => {
+  const mysql = engine === 'mysql'
+  const q = mysql ? '`' : '"'
+  const qi = (s: string) => q + String(s).replace(new RegExp(q, 'g'), q + q) + q
+  const ql = (s: string) => {
+    let v = String(s)
+    if (mysql) v = v.replace(/\\/g, '\\\\')
+    return "'" + v.replace(/'/g, "''") + "'"
+  }
+  const qual = (schema: string, t: string) => qi(schema) + '.' + qi(t)
+  const idList = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean).map(qi).join(', ')
+  return { mysql, qi, ql, qual, idList }
+}
+
+// Postgres-flavoured quoting helpers kept for any non-designer caller.
 export const qi = (s: string) => '"' + String(s).replace(/"/g, '""') + '"'
 export const ql = (s: string) => "'" + String(s).replace(/'/g, "''") + "'"
-const qual = (schema: string, t: string) => qi(schema) + '.' + qi(t)
-// Comma-separated identifier list → quoted: `a, b ` → `"a", "b"`.
-const idList = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean).map(qi).join(', ')
 
-function colDef(c: Col): string {
-  let s = `${qi(c.name)} ${c.type.trim() || 'text'}`
+function colDef(dx: Dx, c: Col): string {
+  let s = `${dx.qi(c.name)} ${c.type.trim() || 'text'}`
   if (c.notNull) s += ' NOT NULL'
   if (c.def.trim()) s += ' DEFAULT ' + c.def.trim()
   return s
 }
-function fkClause(f: FK): string {
-  let s = `CONSTRAINT ${qi(f.name)} FOREIGN KEY (${idList(f.cols)}) REFERENCES ${f.refTable.trim()} (${idList(f.refCols)})`
+function fkClause(dx: Dx, f: FK): string {
+  let s = `CONSTRAINT ${dx.qi(f.name)} FOREIGN KEY (${dx.idList(f.cols)}) REFERENCES ${f.refTable.trim()} (${dx.idList(f.refCols)})`
   if (f.onDelete) s += ' ON DELETE ' + f.onDelete
   return s
+}
+function tableCommentSQL(dx: Dx, t: string, comment: string): string {
+  return dx.mysql ? `ALTER TABLE ${t} COMMENT = ${dx.ql(comment)}` : `COMMENT ON TABLE ${t} IS ${dx.ql(comment)}`
 }
 const pkName = (m: TableModel) => m.snapshot?.pkName || `${m.name}_pkey`
 
 // CREATE
-export function generateCreate(schema: string, m: TableModel): string[] {
-  const t = qual(schema, m.name || 'table_name')
-  const inner: string[] = m.cols.filter(c => c.name.trim()).map(colDef)
-  const pkCols = m.cols.filter(c => c.pk && c.name.trim()).map(c => qi(c.name))
-  if (pkCols.length) inner.push(`CONSTRAINT ${qi(pkName(m))} PRIMARY KEY (${pkCols.join(', ')})`)
-  for (const u of m.uniques) if (u.cols.trim()) inner.push(`CONSTRAINT ${qi(u.name)} UNIQUE (${idList(u.cols)})`)
-  for (const f of m.fks) if (f.cols.trim() && f.refTable.trim()) inner.push(fkClause(f))
-  for (const c of m.checks) if (c.expr.trim()) inner.push(`CONSTRAINT ${qi(c.name)} CHECK (${c.expr.trim()})`)
+export function generateCreate(schema: string, m: TableModel, engine: Engine = 'postgres'): string[] {
+  const dx = mkDx(engine)
+  const t = dx.qual(schema, m.name || 'table_name')
+  const inner: string[] = m.cols.filter(c => c.name.trim()).map(c => colDef(dx, c))
+  const pkCols = m.cols.filter(c => c.pk && c.name.trim()).map(c => dx.qi(c.name))
+  if (pkCols.length)
+    // MySQL ignores a name on a PK constraint, so emit a bare PRIMARY KEY there.
+    inner.push(dx.mysql ? `PRIMARY KEY (${pkCols.join(', ')})` : `CONSTRAINT ${dx.qi(pkName(m))} PRIMARY KEY (${pkCols.join(', ')})`)
+  for (const u of m.uniques) if (u.cols.trim()) inner.push(`CONSTRAINT ${dx.qi(u.name)} UNIQUE (${dx.idList(u.cols)})`)
+  for (const f of m.fks) if (f.cols.trim() && f.refTable.trim()) inner.push(fkClause(dx, f))
+  for (const c of m.checks) if (c.expr.trim()) inner.push(`CONSTRAINT ${dx.qi(c.name)} CHECK (${c.expr.trim()})`)
 
   const body = inner.length ? `(\n  ${inner.join(',\n  ')}\n)` : `()`
   const stmts = [`CREATE TABLE ${t} ${body}`]
   for (const i of m.indexes) if (i.cols.trim())
-    stmts.push(`CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX ${qi(i.name)} ON ${t} (${i.cols.trim()})`)
-  if (m.comment.trim()) stmts.push(`COMMENT ON TABLE ${t} IS ${ql(m.comment.trim())}`)
+    stmts.push(`CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX ${dx.qi(i.name)} ON ${t} (${i.cols.trim()})`)
+  if (m.comment.trim()) stmts.push(tableCommentSQL(dx, t, m.comment.trim()))
   return stmts
 }
 
 // MODIFY (diff against snapshot)
-export function generateModify(schema: string, m: TableModel): string[] {
+export function generateModify(schema: string, m: TableModel, engine: Engine = 'postgres'): string[] {
+  const dx = mkDx(engine)
   const snap = m.snapshot!
-  const t = qual(schema, m.origName!) // ALTER against the original name; rename comes last
+  const t = dx.qual(schema, m.origName!) // ALTER against the original name; rename comes last
   const out: string[] = []
   const alter = (body: string) => out.push(`ALTER TABLE ${t} ${body}`)
 
   // 1. add new columns
-  for (const c of m.cols) if (!c.orig && c.name.trim()) alter(`ADD COLUMN ${colDef(c)}`)
+  for (const c of m.cols) if (!c.orig && c.name.trim()) alter(`ADD COLUMN ${colDef(dx, c)}`)
 
-  // 2. alter existing columns (rename first, then type/null/default by new name)
+  // 2. alter existing columns (rename first, then type/null/default by new name).
+  //    MySQL redefines the whole column at once (MODIFY COLUMN); Postgres alters
+  //    type/null/default independently.
   for (const c of m.cols) {
     if (!c.orig) continue
     const o = c.orig
-    if (c.name !== o.name) alter(`RENAME COLUMN ${qi(o.name)} TO ${qi(c.name)}`)
-    if (c.type.trim() !== o.type.trim()) alter(`ALTER COLUMN ${qi(c.name)} TYPE ${c.type.trim()}`)
-    if (c.notNull !== o.notNull) alter(`ALTER COLUMN ${qi(c.name)} ${c.notNull ? 'SET' : 'DROP'} NOT NULL`)
-    if (c.def.trim() !== o.def.trim())
-      alter(c.def.trim() ? `ALTER COLUMN ${qi(c.name)} SET DEFAULT ${c.def.trim()}` : `ALTER COLUMN ${qi(c.name)} DROP DEFAULT`)
+    if (c.name !== o.name) alter(`RENAME COLUMN ${dx.qi(o.name)} TO ${dx.qi(c.name)}`)
+    if (dx.mysql) {
+      if (c.type.trim() !== o.type.trim() || c.notNull !== o.notNull || c.def.trim() !== o.def.trim()) {
+        let body = `MODIFY COLUMN ${dx.qi(c.name)} ${c.type.trim() || 'text'}`
+        if (c.notNull) body += ' NOT NULL'
+        if (c.def.trim()) body += ' DEFAULT ' + c.def.trim()
+        alter(body)
+      }
+    } else {
+      if (c.type.trim() !== o.type.trim()) alter(`ALTER COLUMN ${dx.qi(c.name)} TYPE ${c.type.trim()}`)
+      if (c.notNull !== o.notNull) alter(`ALTER COLUMN ${dx.qi(c.name)} ${c.notNull ? 'SET' : 'DROP'} NOT NULL`)
+      if (c.def.trim() !== o.def.trim())
+        alter(c.def.trim() ? `ALTER COLUMN ${dx.qi(c.name)} SET DEFAULT ${c.def.trim()}` : `ALTER COLUMN ${dx.qi(c.name)} DROP DEFAULT`)
+    }
   }
 
   // 3. drop constraints + indexes that were removed or changed (before col drops)
@@ -130,41 +172,50 @@ export function generateModify(schema: string, m: TableModel): string[] {
   const liveChk = new Set(m.checks.map(c => c.orig?.name).filter(Boolean))
   const liveIdx = new Set(m.indexes.map(i => i.orig?.name).filter(Boolean))
 
+  const dropUnique = (n: string) => alter(dx.mysql ? `DROP INDEX ${dx.qi(n)}` : `DROP CONSTRAINT ${dx.qi(n)}`)
+  const dropFk = (n: string) => alter(dx.mysql ? `DROP FOREIGN KEY ${dx.qi(n)}` : `DROP CONSTRAINT ${dx.qi(n)}`)
+  const dropChk = (n: string) => alter(dx.mysql ? `DROP CHECK ${dx.qi(n)}` : `DROP CONSTRAINT ${dx.qi(n)}`)
+  const dropStandaloneIdx = (n: string) => out.push(dx.mysql ? `ALTER TABLE ${t} DROP INDEX ${dx.qi(n)}` : `DROP INDEX ${dx.qual(schema, n)}`)
+
   const pkCols = m.cols.filter(c => c.pk && c.name.trim()).map(c => c.name)
   const pkChanged = pkColsChanged(m)
-  if (pkChanged && snap.pkName) alter(`DROP CONSTRAINT ${qi(snap.pkName)}`)
+  if (pkChanged && snap.pkName) alter(dx.mysql ? 'DROP PRIMARY KEY' : `DROP CONSTRAINT ${dx.qi(snap.pkName)}`)
 
-  for (const name of snap.uniqueNames) if (!liveUniq.has(name)) alter(`DROP CONSTRAINT ${qi(name)}`)
-  for (const u of m.uniques) if (u.orig && uniqChanged(u)) alter(`DROP CONSTRAINT ${qi(u.orig.name)}`)
-  for (const name of snap.fkNames) if (!liveFk.has(name)) alter(`DROP CONSTRAINT ${qi(name)}`)
-  for (const f of m.fks) if (f.orig && fkChanged(f)) alter(`DROP CONSTRAINT ${qi(f.orig.name)}`)
-  for (const name of snap.checkNames) if (!liveChk.has(name)) alter(`DROP CONSTRAINT ${qi(name)}`)
-  for (const c of m.checks) if (c.orig && chkChanged(c)) alter(`DROP CONSTRAINT ${qi(c.orig.name)}`)
-  for (const name of snap.indexNames) if (!liveIdx.has(name)) out.push(`DROP INDEX ${qual(schema, name)}`)
-  for (const i of m.indexes) if (i.orig && idxChanged(i)) out.push(`DROP INDEX ${qual(schema, i.orig.name)}`)
+  for (const name of snap.uniqueNames) if (!liveUniq.has(name)) dropUnique(name)
+  for (const u of m.uniques) if (u.orig && uniqChanged(u)) dropUnique(u.orig.name)
+  for (const name of snap.fkNames) if (!liveFk.has(name)) dropFk(name)
+  for (const f of m.fks) if (f.orig && fkChanged(f)) dropFk(f.orig.name)
+  for (const name of snap.checkNames) if (!liveChk.has(name)) dropChk(name)
+  for (const c of m.checks) if (c.orig && chkChanged(c)) dropChk(c.orig.name)
+  for (const name of snap.indexNames) if (!liveIdx.has(name)) dropStandaloneIdx(name)
+  for (const i of m.indexes) if (i.orig && idxChanged(i)) dropStandaloneIdx(i.orig.name)
 
   // 4. drop removed columns
   const liveCol = new Set(m.cols.map(c => c.orig?.name).filter(Boolean))
-  for (const name of snap.colNames) if (!liveCol.has(name)) alter(`DROP COLUMN ${qi(name)}`)
+  for (const name of snap.colNames) if (!liveCol.has(name)) alter(`DROP COLUMN ${dx.qi(name)}`)
 
   // 5. add new / changed constraints + indexes
   if (pkChanged && pkCols.length)
-    alter(`ADD CONSTRAINT ${qi(pkName(m))} PRIMARY KEY (${pkCols.map(qi).join(', ')})`)
+    alter(dx.mysql
+      ? `ADD PRIMARY KEY (${pkCols.map(dx.qi).join(', ')})`
+      : `ADD CONSTRAINT ${dx.qi(pkName(m))} PRIMARY KEY (${pkCols.map(dx.qi).join(', ')})`)
   for (const u of m.uniques) if (u.cols.trim() && (!u.orig || uniqChanged(u)))
-    alter(`ADD CONSTRAINT ${qi(u.name)} UNIQUE (${idList(u.cols)})`)
+    alter(`ADD CONSTRAINT ${dx.qi(u.name)} UNIQUE (${dx.idList(u.cols)})`)
   for (const f of m.fks) if (f.cols.trim() && f.refTable.trim() && (!f.orig || fkChanged(f)))
-    alter(`ADD ${fkClause(f)}`)
+    alter(`ADD ${fkClause(dx, f)}`)
   for (const c of m.checks) if (c.expr.trim() && (!c.orig || chkChanged(c)))
-    alter(`ADD CONSTRAINT ${qi(c.name)} CHECK (${c.expr.trim()})`)
+    alter(`ADD CONSTRAINT ${dx.qi(c.name)} CHECK (${c.expr.trim()})`)
   for (const i of m.indexes) if (i.cols.trim() && (!i.orig || idxChanged(i)))
-    out.push(`CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX ${qi(i.name)} ON ${t} (${i.cols.trim()})`)
+    out.push(`CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX ${dx.qi(i.name)} ON ${t} (${i.cols.trim()})`)
 
   // 6. table comment
-  if (m.comment.trim() !== snap.comment.trim())
-    out.push(`COMMENT ON TABLE ${t} IS ${m.comment.trim() ? ql(m.comment.trim()) : 'NULL'}`)
+  if (m.comment.trim() !== snap.comment.trim()) {
+    if (dx.mysql) out.push(`ALTER TABLE ${t} COMMENT = ${dx.ql(m.comment.trim())}`)
+    else out.push(`COMMENT ON TABLE ${t} IS ${m.comment.trim() ? dx.ql(m.comment.trim()) : 'NULL'}`)
+  }
 
   // 7. rename table (last, so every statement above used the original name)
-  if (m.name.trim() && m.name !== m.origName) out.push(`ALTER TABLE ${t} RENAME TO ${qi(m.name)}`)
+  if (m.name.trim() && m.name !== m.origName) out.push(`ALTER TABLE ${t} RENAME TO ${dx.qi(m.name)}`)
 
   return out
 }
@@ -239,7 +290,7 @@ export function loadModel(doc: DocResponse): TableModel {
 function parseFK(def: string): { table: string; cols: string; onDelete: string } {
   const m = /REFERENCES\s+([^\s(]+)\s*\(([^)]*)\)/i.exec(def || '')
   const od = /ON DELETE\s+(CASCADE|SET NULL|SET DEFAULT|RESTRICT|NO ACTION)/i.exec(def || '')
-  const cols = (m?.[2] || '').split(',').map(s => s.trim().replace(/^"|"$/g, '')).join(', ')
+  const cols = (m?.[2] || '').split(',').map(s => s.trim().replace(/^["`]|["`]$/g, '')).join(', ')
   return { table: m?.[1] || '', cols, onDelete: od ? od[1].toUpperCase() : '' }
 }
 function parseCheck(def: string): string {

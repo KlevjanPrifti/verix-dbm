@@ -9,6 +9,7 @@ import {
   emptyModel, generateCreate, generateModify, loadModel, uid,
   type Chk, type Col, type FK, type Idx, type TableModel, type Uniq,
 } from '../tableModel'
+import { kindEngine } from '../dbkinds'
 
 type Kind = 'table' | 'col' | 'uniq' | 'fk' | 'idx' | 'chk'
 interface Sel { kind: Kind; uid?: string }
@@ -24,6 +25,7 @@ export default function TableDesigner({ params, onClose, onApplied }: {
 }) {
   const app = useApp()
   const { connId, schema, mode, table } = params
+  const engine = kindEngine(app.connById(connId)?.kind || 'postgres')
   const [m, setM] = useState<TableModel>(emptyModel)
   const [sel, setSel] = useState<Sel>({ kind: 'table' })
   const [loading, setLoading] = useState(mode === 'modify')
@@ -44,9 +46,9 @@ export default function TableDesigner({ params, onClose, onApplied }: {
   }, [onClose])
 
   const statements = useMemo(() => {
-    try { return mode === 'create' ? generateCreate(schema, m) : generateModify(schema, m) }
+    try { return mode === 'create' ? generateCreate(schema, m, engine) : generateModify(schema, m, engine) }
     catch { return [] }
-  }, [mode, schema, m])
+  }, [mode, schema, m, engine])
   const preview = statements.length ? statements.join(';\n\n') + ';' : '-- nothing to apply'
 
   const base = (m.name || m.origName || 'table').trim() || 'table'
@@ -104,7 +106,7 @@ export default function TableDesigner({ params, onClose, onApplied }: {
     if (mode === 'create' && !m.name.trim()) { setErr('Table name is required'); setSel({ kind: 'table' }); return }
     if (!statements.length) { setErr('No changes to apply'); return }
     setBusy(true)
-    api.applyTable(connId, mode === 'create' ? 'pg_ddl_create_table' : 'pg_ddl_modify_table', statements)
+    api.applyTable(connId, mode === 'create' ? 'sql_ddl_create_table' : 'sql_ddl_modify_table', statements)
       .then(() => { app.notify(mode === 'create' ? 'Table created' : 'Table modified'); onApplied() })
       .catch(e => { setErr(String(e.message || e)); setBusy(false) })
   }
@@ -191,6 +193,11 @@ export default function TableDesigner({ params, onClose, onApplied }: {
 
             <div className="tdz-preview">
               <div className="tdz-preview-head hud-label"><span>Preview</span><span className="tb-grow" /><span className="dim">{statements.length} statement{statements.length === 1 ? '' : 's'}</span></div>
+              {engine === 'mysql' && statements.length > 1 && (
+                <div className="hint dim" style={{ padding: '.2rem .6rem' }}>
+                  MySQL DDL is not transactional: if a statement fails partway, earlier ones stay applied (no rollback).
+                </div>
+              )}
               <pre>{preview}</pre>
             </div>
           </div>

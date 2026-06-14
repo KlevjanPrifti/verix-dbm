@@ -44,9 +44,11 @@ export interface ExplorerData {
   error?: string
 }
 
-// Mirrors postgres.Role a cluster role/user with its privilege attributes.
+// Mirrors dbsql.Role a database role/user with its privilege attributes. Host is
+// the MySQL `'user'@'host'` host part (empty for Postgres).
 export interface Role {
   Name: string
+  Host: string
   Super: boolean
   CreateDB: boolean
   CreateRole: boolean

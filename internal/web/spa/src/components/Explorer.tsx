@@ -247,7 +247,7 @@ function RolesNode({ connId }: { connId: number }) {
         {err ? <div className="tree-err code">{err}</div>
           : roles === null ? <span className="dim loading">…</span>
           : roles.length === 0 ? <div className="tree-empty dim">none</div>
-          : roles.map(r => <RoleLeaf key={r.Name} connId={connId} role={r} />)}
+          : roles.map(r => <RoleLeaf key={`${r.Name}@${r.Host}`} connId={connId} role={r} />)}
       </div>
     </details>
   )
@@ -255,13 +255,15 @@ function RolesNode({ connId }: { connId: number }) {
 
 function RoleLeaf({ connId, role }: { connId: number; role: Role }) {
   const app = useApp()
+  // MySQL accounts are user@host; show the host so two same-named users differ.
+  const display = role.Host ? `${role.Name}@${role.Host}` : role.Name
   const payload: NodePayload = { type: 'role', connId, name: role.Name, role }
   const attrs = roleAttrText(role)
   return (
-    <div className="tree-row leaf" title={attrs ? `${role.Name} · ${attrs}` : role.Name}
+    <div className="tree-row leaf" title={attrs ? `${display} · ${attrs}` : display}
       onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
       <Ico name="role" className={role.Super ? 'pk' : undefined} />
-      <span className="tree-name">{role.Name}</span>
+      <span className="tree-name">{display}</span>
       {attrs && <span className="col-type dim">{attrs}</span>}
       <Kebab payload={payload} />
     </div>

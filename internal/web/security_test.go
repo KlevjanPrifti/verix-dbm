@@ -33,32 +33,43 @@ func TestServerSideBlocked(t *testing.T) {
 	reader := auth.User{Read: true}
 	writer := auth.User{Write: true, Read: true}
 
-	dangerous := []string{
-		`COPY (SELECT 1) TO PROGRAM 'curl evil'`,
-		`SELECT pg_read_file('/etc/passwd')`,
-		`select lo_import('/etc/shadow')`,
-		`SELECT pg_ls_dir('/')`,
+	// Each statement is dangerous on the named engine; the screen is dispatched
+	// per engine, so the Postgres primitives and the MySQL primitives differ.
+	dangerous := []struct{ kind, sql string }{
+		{"postgres", `COPY (SELECT 1) TO PROGRAM 'curl evil'`},
+		{"postgres", `SELECT pg_read_file('/etc/passwd')`},
+		{"postgres", `select lo_import('/etc/shadow')`},
+		{"postgres", `SELECT pg_ls_dir('/')`},
+		{"mysql", `LOAD DATA INFILE '/etc/passwd' INTO TABLE t`},
+		{"mysql", `LOAD DATA LOCAL INFILE '/etc/passwd' INTO TABLE t`},
+		{"mariadb", `SELECT * FROM t INTO OUTFILE '/tmp/x'`},
+		{"mysql", `SELECT load_file('/etc/shadow')`},
 	}
-	for _, sql := range dangerous {
-		if serverSideBlocked(admin, sql) {
-			t.Errorf("admin should NOT be blocked: %q", sql)
+	for _, d := range dangerous {
+		if serverSideBlocked(admin, d.kind, d.sql) {
+			t.Errorf("admin should NOT be blocked: %q", d.sql)
 		}
-		if !serverSideBlocked(reader, sql) {
-			t.Errorf("reader SHOULD be blocked: %q", sql)
+		if !serverSideBlocked(reader, d.kind, d.sql) {
+			t.Errorf("reader SHOULD be blocked: %q", d.sql)
 		}
-		if !serverSideBlocked(writer, sql) {
-			t.Errorf("writer SHOULD be blocked: %q", sql)
+		if !serverSideBlocked(writer, d.kind, d.sql) {
+			t.Errorf("writer SHOULD be blocked: %q", d.sql)
 		}
 	}
 
-	safe := []string{
-		`SELECT * FROM users`,
-		`UPDATE t SET x = 1 WHERE id = 2`,
-		`copy_status = 'done'`, // not a COPY…PROGRAM statement
+	safe := []struct{ kind, sql string }{
+		{"postgres", `SELECT * FROM users`},
+		{"postgres", `UPDATE t SET x = 1 WHERE id = 2`},
+		{"postgres", `copy_status = 'done'`}, // not a COPY…PROGRAM statement
+		{"mysql", `SELECT * FROM users`},
+		// pg primitives are not MySQL primitives and vice versa: each is safe on
+		// the other engine (the screen is engine-specific).
+		{"mysql", `SELECT pg_read_file('/etc/passwd')`},
+		{"postgres", `LOAD DATA INFILE '/etc/passwd' INTO TABLE t`},
 	}
-	for _, sql := range safe {
-		if serverSideBlocked(reader, sql) {
-			t.Errorf("safe statement wrongly blocked: %q", sql)
+	for _, sc := range safe {
+		if serverSideBlocked(reader, sc.kind, sc.sql) {
+			t.Errorf("safe statement wrongly blocked on %s: %q", sc.kind, sc.sql)
 		}
 	}
 }

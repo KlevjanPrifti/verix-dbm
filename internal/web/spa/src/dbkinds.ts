@@ -1,16 +1,18 @@
 // Single source of truth for the database types the app can connect to.
 //
-// The backend has two engines: a PostgreSQL path (pgx + pg_catalog) and a
-// special-cased Redis path. Every handler dispatches `kind == "redis"` → Redis,
-// everything else → PostgreSQL. So any database that speaks the PostgreSQL wire
-// protocol (CockroachDB, Greenplum, Redshift, …) works through the existing
-// engine for free it only needs an entry here.
+// The backend has three SQL/NoSQL engines: a PostgreSQL path (pgx + pg_catalog),
+// a MySQL/MariaDB path (database/sql + information_schema), and a special-cased
+// Redis path. Each handler dispatches on the engine family; any database that
+// speaks the PostgreSQL wire protocol (CockroachDB, Greenplum, Redshift, …) or
+// the MySQL wire protocol (MariaDB) works through the matching engine for free
+// it only needs an entry here.
 //
-// To add a new PG-wire-compatible type: add one row with engine 'postgres'.
-// A genuinely different SQL/NoSQL engine additionally needs backend support
-// (a new introspection package + handler dispatch) see the README/notes.
+// To add a new PG-wire- or MySQL-wire-compatible type: add one row with the right
+// engine. A genuinely different SQL/NoSQL engine additionally needs backend
+// support (a new internal/* package implementing dbsql.Engine + a registry
+// dispatch entry, mirrored by internal/dbsql.kindFamily on the Go side).
 
-export type Engine = 'postgres' | 'redis'
+export type Engine = 'postgres' | 'mysql' | 'redis'
 
 export interface DbKind {
   id: string          // value stored in Connection.kind
@@ -29,6 +31,8 @@ export const DB_KINDS: DbKind[] = [
   { id: 'yugabyte',  label: 'YugabyteDB',          engine: 'postgres', defaultPort: 5433,  schemes: ['yugabytedb', 'yugabyte', 'ysql'] },
   { id: 'timescale', label: 'TimescaleDB',         engine: 'postgres', defaultPort: 5432,  schemes: ['timescaledb', 'timescale'] },
   { id: 'aurorapg',  label: 'Aurora / RDS Postgres', engine: 'postgres', defaultPort: 5432, schemes: ['aurorapg'] },
+  { id: 'mysql',     label: 'MySQL',               engine: 'mysql',    defaultPort: 3306,  schemes: ['mysql'] },
+  { id: 'mariadb',   label: 'MariaDB',             engine: 'mysql',    defaultPort: 3306,  schemes: ['mariadb', 'maria'] },
   { id: 'redis',     label: 'Redis / Valkey',      engine: 'redis',    defaultPort: 6379,  schemes: ['redis', 'rediss', 'valkey'] },
 ]
 

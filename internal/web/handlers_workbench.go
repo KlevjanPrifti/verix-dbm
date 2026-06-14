@@ -2,34 +2,38 @@ package web
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"verix-dbm/internal/dbsql"
 	"verix-dbm/internal/store"
 )
 
 // Shared connection helpers. The legacy HTMX workbench that lived here has been
-// removed; these helpers are still used by the JSON API (pingPG/pingRedis) and
-// the CSV export handler (pgPoolFor).
+// removed; these helpers are still used by the JSON API (pingPG/pingMySQL/
+// pingRedis) and the CSV export handler (sqlEngineFor).
 
-// pgPoolFor resolves the URL's connection and its Postgres pool, writing an
-// error response and returning ok=false on failure.
-func (s *Server) pgPoolFor(w http.ResponseWriter, r *http.Request) (store.Connection, *pgxpool.Pool, bool) {
+// sqlEngineFor resolves the URL's connection and its dbsql.Engine (Postgres or
+// MySQL, per the connection's kind), writing an error response and returning
+// ok=false on failure.
+func (s *Server) sqlEngineFor(w http.ResponseWriter, r *http.Request) (store.Connection, dbsql.Engine, bool) {
 	c, err := s.connFor(r)
 	if err != nil {
 		http.Error(w, "connection not found", http.StatusNotFound)
 		return store.Connection{}, nil, false
 	}
-	pool, err := s.reg.PG(r.Context(), c)
+	eng, err := s.reg.Engine(r.Context(), c)
 	if err != nil {
 		http.Error(w, "connect: "+err.Error(), http.StatusBadGateway)
 		return c, nil, false
 	}
-	return c, pool, true
+	return c, eng, true
 }
 
 // pingPG opens a one-shot pool to verify Postgres connectivity for a candidate
@@ -46,6 +50,20 @@ func pingPG(ctx context.Context, c store.Connection, pw string) error {
 	}
 	defer pool.Close()
 	return pool.Ping(ctx)
+}
+
+// pingMySQL opens a one-shot pool to verify MySQL/MariaDB connectivity for a
+// candidate connection (used by the "Test connection" action).
+func pingMySQL(ctx context.Context, c store.Connection, pw string) error {
+	db, err := sql.Open("mysql", c.DSNMySQL(pw))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return db.PingContext(cctx)
 }
 
 // pingRedis verifies Redis/Valkey connectivity for a candidate connection.

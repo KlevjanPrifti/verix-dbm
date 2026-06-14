@@ -98,16 +98,16 @@ export const api = {
     req<{ ok: boolean }>('POST', `/api/c/${id}/pg/table/truncate`, { schema, table }),
   dropColumn: (id: number, schema: string, table: string, column: string) =>
     req<{ ok: boolean }>('POST', `/api/c/${id}/pg/column/drop`, { schema, table, column }),
-  dropIndex: (id: number, schema: string, name: string) =>
-    req<{ ok: boolean }>('POST', `/api/c/${id}/pg/index/drop`, { schema, name }),
+  dropIndex: (id: number, schema: string, table: string, name: string) =>
+    req<{ ok: boolean }>('POST', `/api/c/${id}/pg/index/drop`, { schema, table, name }),
   dropSchema: (id: number, schema: string, cascade: boolean) =>
     req<{ ok: boolean }>('POST', `/api/c/${id}/pg/schema/drop`, { schema, cascade }),
   alterSchema: (id: number, schema: string, newName: string, owner: string) =>
     req<{ ok: boolean }>('POST', `/api/c/${id}/pg/schema/alter`, { schema, newName, owner }),
 
   roles: (id: number) => get<{ roles: Role[] | null }>(`/api/c/${id}/pg/roles`),
-  dropRole: (id: number, name: string) =>
-    req<{ ok: boolean }>('POST', `/api/c/${id}/pg/role/drop`, { name }),
+  dropRole: (id: number, name: string, host = '') =>
+    req<{ ok: boolean }>('POST', `/api/c/${id}/pg/role/drop`, { name, host }),
   alterRole: (id: number, body: Record<string, unknown>) =>
     req<{ ok: boolean }>('POST', `/api/c/${id}/pg/role/alter`, body),
 

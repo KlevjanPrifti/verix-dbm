@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useApp, type DDLParams } from '../appctx'
+import { kindEngine } from '../dbkinds'
 import { X } from '../icons'
 
 const TITLES: Record<string, string> = {
@@ -12,7 +13,7 @@ const TITLES: Record<string, string> = {
 interface FormState {
   name: string; type: string; nullable: boolean; default: string; columns: string; unique: boolean
   password: string; login: boolean; createdb: boolean; createrole: boolean; superuser: boolean
-  owner: string
+  owner: string; host: string
 }
 
 // Parameter modal for form-backed DDL (add/modify column, rename, new schema/
@@ -23,7 +24,8 @@ export default function DDLModal({ params, onClose, onApplied }: {
 }) {
   const app = useApp()
   const { connId, kind, schema, table, column } = params
-  const [f, setF] = useState<FormState>({ name: '', type: '', nullable: true, default: '', columns: '', unique: false, password: '', login: true, createdb: false, createrole: false, superuser: false, owner: '' })
+  const mysql = kindEngine(app.connById(connId)?.kind || 'postgres') === 'mysql'
+  const [f, setF] = useState<FormState>({ name: '', type: '', nullable: true, default: '', columns: '', unique: false, password: '', login: true, createdb: false, createrole: false, superuser: false, owner: '', host: '%' })
   const [err, setErr] = useState('')
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF(p => ({ ...p, [k]: v }))
 
@@ -42,7 +44,7 @@ export default function DDLModal({ params, onClose, onApplied }: {
     if (kind === 'alter-schema') setF(s => ({ ...s, name: schema }))
     if (kind === 'alter-user' && params.role) {
       const r = params.role
-      setF(s => ({ ...s, name: r.Name, password: '', login: r.CanLogin, createdb: r.CreateDB, createrole: r.CreateRole, superuser: r.Super }))
+      setF(s => ({ ...s, name: r.Name, host: r.Host || '%', password: '', login: r.CanLogin, createdb: r.CreateDB, createrole: r.CreateRole, superuser: r.Super }))
     }
   }, [kind, schema, params.role])
 
@@ -64,6 +66,7 @@ export default function DDLModal({ params, onClose, onApplied }: {
       p = api.alterRole(connId, {
         name: params.role?.Name || '', newName: f.name, password: f.password,
         login: f.login, createdb: f.createdb, createrole: f.createrole, superuser: f.superuser,
+        host: params.role?.Host || f.host,
       })
     } else {
       p = api.runForm(connId, {
@@ -71,7 +74,7 @@ export default function DDLModal({ params, onClose, onApplied }: {
         name: f.name, type: f.type, default: f.default, columns: f.columns,
         nullable: f.nullable, unique: f.unique,
         password: f.password, login: f.login, createdb: f.createdb, createrole: f.createrole, superuser: f.superuser,
-        owner: f.owner,
+        owner: f.owner, host: f.host,
       })
     }
     p.then(() => { app.notify('Applied'); onApplied() }).catch(x => setErr(String(x.message || x)))
@@ -116,7 +119,9 @@ export default function DDLModal({ params, onClose, onApplied }: {
             <Row label="Table name"><input className="hud-input" required value={f.name} onChange={e => set('name', e.target.value)} /></Row>
             <Row label="Columns (SQL column definitions)">
               <textarea className="hud-input code" rows={6} value={f.columns} onChange={e => set('columns', e.target.value)}
-                placeholder={'id bigserial primary key,\nname text not null,\ncreated_at timestamptz default now()'} /></Row>
+                placeholder={mysql
+                  ? 'id bigint auto_increment primary key,\nname varchar(255) not null,\ncreated_at timestamp default current_timestamp'
+                  : 'id bigserial primary key,\nname text not null,\ncreated_at timestamptz default now()'} /></Row>
           </>}
 
           {kind === 'new-index' && <>
@@ -127,12 +132,14 @@ export default function DDLModal({ params, onClose, onApplied }: {
           </>}
 
           {kind === 'create-user' && <>
-            <Row label="Role name"><input className="hud-input" required value={f.name} onChange={e => set('name', e.target.value)} placeholder="reporting" /></Row>
+            <Row label={mysql ? 'User name' : 'Role name'}><input className="hud-input" required value={f.name} onChange={e => set('name', e.target.value)} placeholder="reporting" /></Row>
+            {mysql && <Row label="Host"><input className="hud-input code" value={f.host} onChange={e => set('host', e.target.value)} placeholder="% · localhost · 10.0.0.%" /></Row>}
             <Row label="Password (blank = none)"><input className="hud-input" type="password" autoComplete="new-password" value={f.password} onChange={e => set('password', e.target.value)} /></Row>
-            <Check checked={f.login} onChange={v => set('login', v)} label="Can log in (user)" />
-            <Check checked={f.createdb} onChange={v => set('createdb', v)} label="Create databases" />
-            <Check checked={f.createrole} onChange={v => set('createrole', v)} label="Create roles" />
-            <Check checked={f.superuser} onChange={v => set('superuser', v)} label="Superuser" />
+            <Check checked={f.login} onChange={v => set('login', v)} label={mysql ? 'Account unlocked' : 'Can log in (user)'} />
+            <Check checked={f.createdb} onChange={v => set('createdb', v)} label={mysql ? 'Grant CREATE (databases)' : 'Create databases'} />
+            <Check checked={f.createrole} onChange={v => set('createrole', v)} label={mysql ? 'Grant CREATE USER' : 'Create roles'} />
+            <Check checked={f.superuser} onChange={v => set('superuser', v)} label={mysql ? 'Grant SUPER' : 'Superuser'} />
+            {mysql && <div className="hint dim">Privileges are additive: unchecking a box here does not revoke it.</div>}
           </>}
 
           {kind === 'alter-schema' && <>
@@ -142,13 +149,14 @@ export default function DDLModal({ params, onClose, onApplied }: {
           </>}
 
           {kind === 'alter-user' && <>
-            <Row label="Role"><input className="hud-input" value={params.role?.Name || ''} disabled /></Row>
+            <Row label={mysql ? 'User' : 'Role'}><input className="hud-input" value={mysql ? `${params.role?.Name || ''}@${params.role?.Host || '%'}` : params.role?.Name || ''} disabled /></Row>
             <Row label="Rename to"><input className="hud-input" required value={f.name} onChange={e => set('name', e.target.value)} /></Row>
             <Row label="New password (blank = unchanged)"><input className="hud-input" type="password" autoComplete="new-password" value={f.password} onChange={e => set('password', e.target.value)} /></Row>
-            <Check checked={f.login} onChange={v => set('login', v)} label="Can log in (user)" />
-            <Check checked={f.createdb} onChange={v => set('createdb', v)} label="Create databases" />
-            <Check checked={f.createrole} onChange={v => set('createrole', v)} label="Create roles" />
-            <Check checked={f.superuser} onChange={v => set('superuser', v)} label="Superuser" />
+            <Check checked={f.login} onChange={v => set('login', v)} label={mysql ? 'Account unlocked' : 'Can log in (user)'} />
+            <Check checked={f.createdb} onChange={v => set('createdb', v)} label={mysql ? 'Grant CREATE (databases)' : 'Create databases'} />
+            <Check checked={f.createrole} onChange={v => set('createrole', v)} label={mysql ? 'Grant CREATE USER' : 'Create roles'} />
+            <Check checked={f.superuser} onChange={v => set('superuser', v)} label={mysql ? 'Grant SUPER' : 'Superuser'} />
+            {mysql && <div className="hint dim">Privileges are additive: unchecking a box here does not revoke it.</div>}
           </>}
 
           <div className="modal-foot">

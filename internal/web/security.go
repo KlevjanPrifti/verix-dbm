@@ -7,6 +7,8 @@ import (
 
 	"verix-dbm/internal/auth"
 	"verix-dbm/internal/config"
+	"verix-dbm/internal/dbsql"
+	"verix-dbm/internal/mysql"
 	"verix-dbm/internal/postgres"
 )
 
@@ -19,11 +21,15 @@ import (
 // this is defense in depth. (H3)
 const serverSideBlockedMsg = "blocked: server-side program execution / file access is restricted to admins see SECURITY.md"
 
-func serverSideBlocked(u auth.User, fragments ...string) bool {
+func serverSideBlocked(u auth.User, kind string, fragments ...string) bool {
 	if u.Admin {
 		return false
 	}
-	return postgres.IsServerSideExec(strings.Join(fragments, "\n"))
+	joined := strings.Join(fragments, "\n")
+	if dbsql.Family(kind) == dbsql.FamilyMySQL {
+		return mysql.IsServerSideExec(joined)
+	}
+	return postgres.IsServerSideExec(joined)
 }
 
 // sessionKey identifies the caller for per-user rate limiting: the authenticated
