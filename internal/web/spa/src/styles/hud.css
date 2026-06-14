@@ -258,8 +258,20 @@ details[open] > summary.tree-row::before { transform: rotate(90deg); }
 /* Tree icons Lucide SVGs, tinted to the theme via currentColor (see icons.tsx) */
 .ico { display: inline-flex; align-items: center; justify-content: center; width: 1.05em; height: 1.05em; flex-shrink: 0; color: rgba(var(--accent-rgb),0.8); }
 .ico svg { width: 100%; height: 100%; stroke-width: 2; }
-.ico-postgres { color: #3b9eff; }
-.ico-redis, .ico-keyspace { color: #45e0a5; }
+/* Per-kind brand colours: used wherever an icon has no name-derived tint (e.g.
+   the New-Source menu). Connection rows in the tree override these with a
+   name-derived hue (see nameColor in icons.tsx). */
+.ico-postgres  { color: #3b9eff; }
+.ico-cockroach { color: #8a6bff; }
+.ico-greenplum { color: #3ddc84; }
+.ico-redshift  { color: #ff8c42; }
+.ico-yugabyte  { color: #ff8a5c; }
+.ico-timescale { color: #ffc94d; }
+.ico-aurorapg  { color: #9b8cff; }
+.ico-mysql     { color: #4dd0e1; }
+.ico-mariadb   { color: #c98a5e; }
+.ico-redis     { color: #ff5a4d; }
+.ico-keyspace  { color: #45e0a5; }
 .ico-schema { color: rgb(var(--accent-rgb)); }
 .ico-table { color: rgba(var(--accent-rgb),0.85); }
 .ico-view, .ico-matview { color: #b48cff; }

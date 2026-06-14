@@ -14,24 +14,57 @@ import {
   ToggleLeft, Braces, Fingerprint, ListTree, Terminal, Columns3, Circle,
   User, Users,
 } from 'lucide-react'
+import {
+  SiPostgresql, SiCockroachlabs, SiMysql, SiMariadb, SiRedis, SiTimescale,
+} from 'react-icons/si'
 import { DB_KINDS } from './dbkinds'
+
+// Any icon component here needs only className/style; both Lucide glyphs and
+// react-icons brand logos satisfy it (the brand logos are solid fills that pick
+// up colour from currentColor, so a single accent tints the whole silhouette).
+type IconCmp = React.ComponentType<{ className?: string; style?: React.CSSProperties }>
+
+// Real brand logos for the database kinds that have one. The remaining
+// PostgreSQL-wire kinds (greenplum/redshift/yugabyte/aurora) have no published
+// mark, so they fall back to the generic Database cylinder below.
+const BRAND: Record<string, IconCmp> = {
+  postgres: SiPostgresql,
+  cockroach: SiCockroachlabs,
+  timescale: SiTimescale,
+  mysql: SiMysql,
+  mariadb: SiMariadb,
+  redis: SiRedis,
+}
 
 // Database-object types → icon. Keys match Explorer's dynamic names: connection
 // kinds (postgres/redis/…, sourced from the dbkinds registry), table kinds
 // (table/view/matview), column categories (num/text/time/bool/json/uuid/pk) and
-// the structural folders. Every connection kind renders the Database glyph.
-const TYPE_ICONS: Record<string, LucideIcon> = {
-  ...Object.fromEntries(DB_KINDS.map(k => [k.id, Database])),
-  keyspace: Database,
+// the structural folders. Connection kinds use their brand logo when known.
+const TYPE_ICONS: Record<string, IconCmp> = {
+  ...Object.fromEntries(DB_KINDS.map(k => [k.id, BRAND[k.id] || Database])),
+  keyspace: SiRedis,
   schema: Box, table: Table2, view: Eye, matview: Eye, folder: Folder,
   col: Columns3, pk: KeyRound, key: Key, fkey: Link2, idx: ListTree,
   num: Hash, text: Type, time: Clock, bool: ToggleLeft, json: Braces,
   uuid: Fingerprint, console: Terminal, roles: Users, role: User,
 }
 
-export function Ico({ name, className }: { name: string; className?: string }) {
+export function Ico({ name, className, color }: { name: string; className?: string; color?: string }) {
   const C = TYPE_ICONS[name] || Circle
-  return <C className={`ico ico-${name}${className ? ' ' + className : ''}`} aria-hidden />
+  return <C className={`ico ico-${name}${className ? ' ' + className : ''}`} style={color ? { color } : undefined} aria-hidden />
+}
+
+// nameColor derives a stable accent colour from a connection's name so two
+// connections of the same kind stay distinguishable at a glance in the tree.
+// FNV-1a hash → hue; saturation/lightness are fixed for legibility on the dark
+// HUD theme. The same name always yields the same colour.
+export function nameColor(name: string): string {
+  let h = 0x811c9dc5
+  for (let i = 0; i < name.length; i++) {
+    h ^= name.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return `hsl(${(h >>> 0) % 360} 70% 66%)`
 }
 
 export type { LucideIcon }

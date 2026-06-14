@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useApp, type NodePayload } from '../appctx'
 import type { Column, Connection, Index, Key, Role, Schema } from '../types'
-import { Ico, Plus, Terminal, Trash2, MoreHorizontal } from '../icons'
+import { Ico, nameColor, Plus, Terminal, Trash2, MoreHorizontal } from '../icons'
 import { DB_KINDS } from '../dbkinds'
 
 // Database Explorer: a lazy-loaded tree of connections → schemas → tables →
@@ -76,7 +76,7 @@ function ConnNode({ conn }: { conn: Connection }) {
         className="tree-row conn-row"
         onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}
       >
-        <Ico name={conn.kind} />
+        <Ico name={conn.kind} color={nameColor(conn.name)} />
         <span className="tree-name">{conn.name}<span className="conn-host dim"> · {conn.host}</span></span>
         <span className="badge">{conn.kind}</span>
         {conn.readOnly && <span className="ro-dot" title="read-only" />}
