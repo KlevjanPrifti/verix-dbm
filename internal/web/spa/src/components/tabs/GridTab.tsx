@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../api'
 import { useApp } from '../../appctx'
 import type { Column, GridResponse, QueryResponse } from '../../types'
 import CodeField, { qIdent, type Suggestion } from '../Autocomplete'
+import { kindEngine } from '../../dbkinds'
 import {
   type LucideIcon, Ico, RotateCw, Plus, Minus, ChevronUp, ChevronDown,
   ChevronLeft, ChevronRight, Copy, Maximize2, Filter, FilterX, Info, X,
@@ -151,9 +152,16 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
     ...['ASC', 'DESC', 'NULLS FIRST', 'NULLS LAST'].map(k => ({ label: k, kind: 'kw' })),
   ], [orderColSuggest])
 
-  // helpers shared by the menus
-  const qq = (s: string) => '"' + s.replace(/"/g, '""') + '"'
-  const lit = (s: string) => "'" + s.replace(/'/g, "''") + "'"
+  // helpers shared by the menus. Quoting is engine-aware so the generated SQL
+  // (inline edits, deletes, and the data extractors) matches the target dialect:
+  // MySQL/MariaDB quote identifiers with backticks and treat backslash as an
+  // escape inside string literals; Postgres & friends use ANSI double quotes and
+  // (with standard_conforming_strings) take backslashes literally.
+  const mysql = kindEngine(conn?.kind || 'postgres') === 'mysql'
+  const qq = (s: string) => mysql ? '`' + s.replace(/`/g, '``') + '`' : '"' + s.replace(/"/g, '""') + '"'
+  const lit = (s: string) => mysql
+    ? "'" + s.replace(/\\/g, '\\\\').replace(/'/g, "''") + "'"
+    : "'" + s.replace(/'/g, "''") + "'"
   const qual = `${qq(schema)}.${qq(table)}`
   const whereSuffix = where.trim() ? ` WHERE ${where.trim()}` : ''
   const setFilter = (w: string) => { setWhere(w); setPage(0); load(0, w, order) }
@@ -166,24 +174,51 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const sqlInsert = (r: number) =>
     `INSERT INTO ${qual} (${cols.map(qq).join(', ')}) VALUES (${rows[r].map(v => v === '' ? 'NULL' : lit(v)).join(', ')});`
   const jsonRow = (r: number) => JSON.stringify(Object.fromEntries(cols.map((c, i) => [c, rows[r][i]])))
-  const csvCell = (s: string) => /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
-  const csvRow = (r: number) => rows[r].map(csvCell).join(',')
   const tableTsv = () => [cols.join('\t'), ...rows.map(r => r.join('\t'))].join('\n')
+  // ── data extractors (clipboard formats) ──
+  // One INSERT statement carrying every selected row as its own VALUES tuple.
+  const sqlInsertMulti = (idx: number[]) =>
+    `INSERT INTO ${qual} (${cols.map(qq).join(', ')}) VALUES\n` +
+    idx.map(r => '  (' + rows[r].map(v => v === '' ? 'NULL' : lit(v)).join(', ') + ')').join(',\n') + ';'
+  // One UPDATE per row, setting every column, targeting the row by its full
+  // current contents (the grid tracks no primary key, same as the edit/delete path).
+  const sqlUpdate = (r: number) =>
+    `UPDATE ${qual}\nSET ${cols.map((c, i) => `${qq(c)} = ${cellLit(rows[r][i])}`).join(', ')}\nWHERE ${rowWhere(r)};`
+  // Generic delimited (CSV family): a field is quoted only when it contains the
+  // delimiter, a quote, or a newline, doubling any embedded quote.
+  const delimCell = (s: string, sep: string) =>
+    s.includes(sep) || s.includes('"') || s.includes('\n') ? '"' + s.replace(/"/g, '""') + '"' : s
+  const delimited = (idx: number[], sep: string) =>
+    [cols.map(c => delimCell(c, sep)).join(sep), ...idx.map(r => rows[r].map(c => delimCell(c, sep)).join(sep))].join('\n')
   const mdCell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ')
   const mdTable = (idx: number[]) => [
     `| ${cols.join(' | ')} |`,
     `| ${cols.map(() => '---').join(' | ')} |`,
     ...idx.map(r => `| ${rows[r].map(mdCell).join(' | ')} |`),
   ].join('\n')
-  // Render a set of rows in the active extractor's format. SQL Inserts emits one
-  // statement per row; CSV/TSV/Markdown lead with a header row; JSON is an array.
+  const xmlEsc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  const xmlRows = (idx: number[]) =>
+    '<rows>\n' + idx.map(r =>
+      '  <row>\n' + cols.map((c, i) => `    <col name="${xmlEsc(c)}">${xmlEsc(rows[r][i])}</col>`).join('\n') + '\n  </row>',
+    ).join('\n') + '\n</rows>'
+  const htmlTable = (idx: number[]) =>
+    '<table>\n  <thead>\n    <tr>' + cols.map(c => `<th>${xmlEsc(c)}</th>`).join('') + '</tr>\n  </thead>\n  <tbody>\n' +
+    idx.map(r => '    <tr>' + rows[r].map(v => `<td>${xmlEsc(v)}</td>`).join('') + '</tr>').join('\n') +
+    '\n  </tbody>\n</table>'
+  // Render the given rows in the active extractor's format.
   const extractRows = (idx: number[]): string => {
     switch (extractor) {
+      case 'sql-insert-multirow': return sqlInsertMulti(idx)
+      case 'sql-updates': return idx.map(sqlUpdate).join('\n')
+      case 'csv': return delimited(idx, ',')
+      case 'tsv': return delimited(idx, '\t')
+      case 'pipe': return delimited(idx, '|')
+      case 'semicolon': return delimited(idx, ';')
       case 'json': return '[\n' + idx.map(r => '  ' + jsonRow(r)).join(',\n') + '\n]'
-      case 'csv': return [cols.map(csvCell).join(','), ...idx.map(csvRow)].join('\n')
-      case 'tsv': return [cols.join('\t'), ...idx.map(r => rows[r].join('\t'))].join('\n')
+      case 'xml': return xmlRows(idx)
+      case 'html': return htmlTable(idx)
       case 'markdown': return mdTable(idx)
-      default: return idx.map(sqlInsert).join('\n')
+      default: return idx.map(sqlInsert).join('\n') // sql-inserts
     }
   }
 
@@ -415,7 +450,12 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const fullTextSearch = async () => {
     const term = await app.prompt({ title: 'Full-text search', body: 'Matches any column (cast to text).', placeholder: 'search term', submitLabel: 'Search' })
     if (!term) return
-    setFilter('(' + cols.map(c => `${qq(c)}::text ILIKE ${lit('%' + term + '%')}`).join(' OR ') + ')')
+    // ILIKE / ::text are Postgres-only; MySQL casts with CAST(... AS CHAR) and its
+    // LIKE is already case-insensitive on the common collations.
+    const like = (c: string) => mysql
+      ? `CAST(${qq(c)} AS CHAR) LIKE ${lit('%' + term + '%')}`
+      : `${qq(c)}::text ILIKE ${lit('%' + term + '%')}`
+    setFilter('(' + cols.map(like).join(' OR ') + ')')
   }
 
   // Unified right-click menu mirrors the DataGrip data-editor menu. One menu
@@ -659,13 +699,20 @@ const savePageSize = (n: number) => { try { localStorage.setItem(PAGE_SIZE_KEY, 
 // Data extractors: the clipboard format Copy uses (toolbar button, Ctrl+C, and
 // the grid menu). Mirrors DataGrip's extractor picker; the choice persists.
 const EXTRACTORS = [
-  { id: 'sql-inserts', label: 'SQL Inserts' },
-  { id: 'json', label: 'JSON' },
-  { id: 'csv', label: 'CSV' },
-  { id: 'tsv', label: 'TSV' },
-  { id: 'markdown', label: 'Markdown' },
+  { id: 'sql-inserts', label: 'SQL Inserts', group: 'SQL' },
+  { id: 'sql-insert-multirow', label: 'SQL Insert (multirow)', group: 'SQL' },
+  { id: 'sql-updates', label: 'SQL Updates', group: 'SQL' },
+  { id: 'csv', label: 'CSV', group: 'Delimited' },
+  { id: 'tsv', label: 'TSV', group: 'Delimited' },
+  { id: 'pipe', label: 'Pipe-separated', group: 'Delimited' },
+  { id: 'semicolon', label: 'Semicolon-separated', group: 'Delimited' },
+  { id: 'json', label: 'JSON', group: 'Structured' },
+  { id: 'xml', label: 'XML', group: 'Structured' },
+  { id: 'html', label: 'HTML', group: 'Structured' },
+  { id: 'markdown', label: 'Markdown', group: 'Structured' },
 ] as const
 type ExtractorId = typeof EXTRACTORS[number]['id']
+const EXTRACTOR_GROUPS = ['SQL', 'Delimited', 'Structured'] as const
 const EXTRACTOR_KEY = 'verix.grid.extractor'
 const loadExtractor = (): ExtractorId => {
   const v = localStorage.getItem(EXTRACTOR_KEY)
@@ -692,13 +739,17 @@ function ExtractorMenu({ value, label, onPick }: { value: ExtractorId; label: st
         {label} <ChevronDown size={13} />
       </button>
       {open && (
-        <div className="menu">
-          <div className="ctx-head">Copy rows as</div>
-          {EXTRACTORS.map(ex => (
-            <button key={ex.id} type="button" className="menu-item" onClick={() => { onPick(ex.id); setOpen(false) }}>
-              <span className="mi-ico">{ex.id === value ? <Check size={14} /> : null}</span>
-              <span className="mi-label">{ex.label}</span>
-            </button>
+        <div className="menu extractor-list">
+          {EXTRACTOR_GROUPS.map(g => (
+            <Fragment key={g}>
+              <div className="ctx-head">{g}</div>
+              {EXTRACTORS.filter(ex => ex.group === g).map(ex => (
+                <button key={ex.id} type="button" className="menu-item" onClick={() => { onPick(ex.id); setOpen(false) }}>
+                  <span className="mi-ico">{ex.id === value ? <Check size={14} /> : null}</span>
+                  <span className="mi-label">{ex.label}</span>
+                </button>
+              ))}
+            </Fragment>
           ))}
         </div>
       )}

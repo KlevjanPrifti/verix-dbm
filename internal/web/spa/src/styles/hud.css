@@ -480,6 +480,7 @@ table.data tbody tr.row-sel td.rownum { background: rgba(var(--accent-rgb),0.32)
    else the native button background shows through. */
 .extractor-menu > .tb-chip { display: inline-flex; align-items: center; gap: .3rem; background: none; color: rgba(var(--accent-rgb),0.85); cursor: pointer; }
 .extractor-menu > .tb-chip:hover { background: rgba(var(--accent-rgb),0.12); }
+.extractor-menu .extractor-list { max-height: 60vh; overflow: auto; }
 .pg-btn { cursor: pointer; border: 1px solid rgba(var(--accent-rgb),0.3); border-radius: 2px; padding: .05rem .4rem; color: rgb(var(--accent-rgb)); }
 .pg-btn:hover { background: rgba(var(--accent-rgb),0.12); text-decoration: none; }
 .pg-range { color: var(--muted); }
