@@ -237,9 +237,11 @@ summary.tree-row::-webkit-details-marker { display: none; }
 /* the tree row matching the active tab, so you can see where you are */
 .tree-row.active, .tree-row.active:hover { background: rgba(var(--accent-rgb),0.16); box-shadow: inset 2px 0 0 rgb(var(--accent-rgb)); }
 .tree-row.active .tree-name { color: var(--hud); font-weight: 600; }
-summary.tree-row::before { content: "▸"; display: inline-block; width: .7em; flex-shrink: 0; font-size: .72em; color: rgba(var(--accent-rgb),0.6); transition: transform .12s; }
-details[open] > summary.tree-row::before { transform: rotate(90deg); }
-.tree-row.leaf { padding-left: 1.45rem; }
+/* Disclosure caret is a real chevron icon (see Explorer's <Caret/>), rotated on
+   open. Leaves carry no caret, so they pad left to align with parent rows. */
+.tree-caret { flex: none; color: rgba(var(--accent-rgb),0.6); transition: transform .12s; }
+details[open] > summary > .tree-caret { transform: rotate(90deg); }
+.tree-row.leaf { padding-left: 1.6rem; }
 .tree-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .table-name { flex: 0 1 auto; }
 .table-name:hover { color: var(--cta); text-decoration: underline; }

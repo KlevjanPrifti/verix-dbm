@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { useApp, type NodePayload, type TabView } from '../appctx'
 import type { Column, Connection, Index, Key, Role, Schema } from '../types'
-import { Ico, nameColor, Plus, Terminal, Trash2, MoreHorizontal } from '../icons'
+import { Ico, nameColor, Plus, Terminal, Trash2, MoreHorizontal, ChevronRight } from '../icons'
 import { DB_KINDS } from '../dbkinds'
 
 // Database Explorer: a lazy-loaded tree of connections → schemas → tables →
@@ -86,6 +86,7 @@ function ConnNode({ conn }: { conn: Connection }) {
         className={`tree-row conn-row${rowActive ? ' active' : ''}`}
         onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}
       >
+        <Caret />
         <Ico name={conn.kind} color={nameColor(conn.name)} />
         <span className="tree-name">{conn.name}<span className="conn-host dim"> · {conn.host}</span></span>
         <span className="badge">{conn.kind}</span>
@@ -134,7 +135,7 @@ function SchemaNode({ connId, schema, defaultOpen }: { connId: number; schema: S
     <details ref={ref} className="tree-node" open={defaultOpen}>
       <summary className="tree-row schema-row"
         onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
-        <Ico name="schema" /><span className="tree-name">{schema.Name}</span>
+        <Caret /><Ico name="schema" /><span className="tree-name">{schema.Name}</span>
         <span className="count">{tables.length}</span>
         <Kebab payload={payload} />
       </summary>
@@ -157,7 +158,7 @@ function TableNode({ connId, schema, table, kind }: { connId: number; schema: st
     <details className="tree-node">
       <summary className={`tree-row table-row${active ? ' active' : ''}`}
         onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
-        <Ico name={kind} />
+        <Caret /><Ico name={kind} />
         <span className="tree-name table-name" title="click name to open"
           onClick={e => { e.preventDefault(); openGrid() }}>{table}</span>
         <Kebab payload={payload} />
@@ -182,7 +183,7 @@ function LeafFolder<T>({ label, load, render }: { label: string; load: () => Pro
       if ((e.target as HTMLDetailsElement).open && items === null && !err)
         load().then(setItems).catch(x => setErr(String(x.message || x)))
     }}>
-      <summary className="tree-row"><Ico name="folder" /><span className="tree-name">{label}</span></summary>
+      <summary className="tree-row"><Caret /><Ico name="folder" /><span className="tree-name">{label}</span></summary>
       <div className="node-children">
         {err ? <div className="tree-err code">{err}</div>
           : items === null ? <span className="dim loading">…</span>
@@ -254,7 +255,7 @@ function RolesNode({ connId }: { connId: number }) {
     <details className="tree-node" onToggle={e => { if ((e.target as HTMLDetailsElement).open) setOpenOnce(true) }}>
       <summary className="tree-row"
         onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
-        <Ico name="roles" /><span className="tree-name">roles</span>
+        <Caret /><Ico name="roles" /><span className="tree-name">roles</span>
         {roles && <span className="count">{roles.length}</span>}
         <Kebab payload={payload} />
       </summary>
@@ -298,6 +299,12 @@ function roleAttrText(r: Role): string {
 // tableActive reports whether the active tab (grid/doc/usages) targets this table.
 function tableActive(av: TabView | null, connId: number, schema: string, table: string): boolean {
   return !!av && 'table' in av && av.connId === connId && av.schema === schema && av.table === table
+}
+
+// Caret is the disclosure chevron for an expandable tree row; CSS rotates it
+// 90° when its parent <details> is open.
+function Caret() {
+  return <ChevronRight size={15} className="tree-caret" aria-hidden />
 }
 
 // Kebab opens the same context menu as right-click the touch-friendly path.
