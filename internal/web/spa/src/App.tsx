@@ -88,6 +88,26 @@ export default function App() {
     })
   }, [])
 
+  const closeOthers = useCallback((key: string) => {
+    setTabs(prev => prev.filter(t => t.key === key))
+    setActive(key)
+  }, [])
+
+  const closeAll = useCallback(() => {
+    setTabs([])
+    setActive(null)
+  }, [])
+
+  const closeRight = useCallback((key: string) => {
+    setTabs(prev => {
+      const i = prev.findIndex(t => t.key === key)
+      if (i < 0) return prev
+      const next = prev.slice(0, i + 1)
+      setActive(cur => (cur && next.some(t => t.key === cur)) ? cur : key)
+      return next
+    })
+  }, [])
+
   const refreshConn = useCallback((id: number) => {
     setRefreshTokens(t => ({ ...t, [id]: (t[id] || 0) + 1 }))
   }, [])
@@ -164,6 +184,9 @@ export default function App() {
             active={active}
             onSelect={setActive}
             onClose={closeTab}
+            onCloseOthers={closeOthers}
+            onCloseAll={closeAll}
+            onCloseRight={closeRight}
             onToggleDrawer={() => setDrawer(d => !d)}
           />
         </div>
