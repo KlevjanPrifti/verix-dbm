@@ -715,7 +715,8 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
   /* Row 1: heading (left) + close button (right, pushed by the growing heading).
      Row 2: the export buttons, reordered after the close button so they wrap
      down together instead of squashing the title. */
-  .modal-head .hud-heading { flex: 1; }
+  .modal-head .hud-heading { flex: 1; min-width: 0; font-size: .9rem; letter-spacing: .08em;
+    overflow: hidden; text-overflow: ellipsis; }
   .modal-head .tb-grow { display: none; }
   .modal-head .hud-btn-accent { order: 1; padding: .5rem .7rem; font-size: .72rem; }
   .modal-body { flex: 1; overflow: auto; }
