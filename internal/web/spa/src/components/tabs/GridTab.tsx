@@ -63,6 +63,14 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const [pendingDeletes, setPendingDeletes] = useState<Set<number>>(new Set())
   const [pendingInserts, setPendingInserts] = useState<Record<number, string>[]>([])
   const [committing, setCommitting] = useState(false)
+  // Row selection (DataGrip-style): drag over the row-number column to range-
+  // select, Ctrl/Cmd-click to toggle a single row, Shift-click to extend from the
+  // anchor, and click the "#" header to (de)select all. Copy emits the selected
+  // rows through the active "data extractor" (clipboard format).
+  const [selRows, setSelRows] = useState<Set<number>>(new Set())
+  const anchorRef = useRef<number | null>(null)
+  const draggingRef = useRef(false)
+  const [extractor, setExtractor] = useState<ExtractorId>(loadExtractor)
 
   const load = useCallback((p: number, w: string, o: string) => {
     setLoading(true)
@@ -83,6 +91,15 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       .then(r => setColMeta(Object.fromEntries((r.columns || []).map(c => [c.name, c]))))
       .catch(() => setColMeta({}))
   }, [connId, schema, table])
+
+  // Drop the selection whenever the page reloads (its indices would point at
+  // stale rows otherwise), and end any drag-select on mouseup anywhere.
+  useEffect(() => { setSelRows(new Set()); anchorRef.current = null }, [data])
+  useEffect(() => {
+    const up = () => { draggingRef.current = false }
+    window.addEventListener('mouseup', up)
+    return () => window.removeEventListener('mouseup', up)
+  }, [])
 
   const apply = (e: React.FormEvent) => { e.preventDefault(); setPage(0); load(0, where, order) }
   const sort = (col: string, dir: 'asc' | 'desc') => { const o = `"${col}" ${dir}`; setOrder(o); setPage(0); load(0, where, o) }
@@ -152,6 +169,70 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const csvCell = (s: string) => /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
   const csvRow = (r: number) => rows[r].map(csvCell).join(',')
   const tableTsv = () => [cols.join('\t'), ...rows.map(r => r.join('\t'))].join('\n')
+  const mdCell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ')
+  const mdTable = (idx: number[]) => [
+    `| ${cols.join(' | ')} |`,
+    `| ${cols.map(() => '---').join(' | ')} |`,
+    ...idx.map(r => `| ${rows[r].map(mdCell).join(' | ')} |`),
+  ].join('\n')
+  // Render a set of rows in the active extractor's format. SQL Inserts emits one
+  // statement per row; CSV/TSV/Markdown lead with a header row; JSON is an array.
+  const extractRows = (idx: number[]): string => {
+    switch (extractor) {
+      case 'json': return '[\n' + idx.map(r => '  ' + jsonRow(r)).join(',\n') + '\n]'
+      case 'csv': return [cols.map(csvCell).join(','), ...idx.map(csvRow)].join('\n')
+      case 'tsv': return [cols.join('\t'), ...idx.map(r => rows[r].join('\t'))].join('\n')
+      case 'markdown': return mdTable(idx)
+      default: return idx.map(sqlInsert).join('\n')
+    }
+  }
+
+  // ── row selection + copy ──
+  const rangeSet = (a: number, b: number) => {
+    const [lo, hi] = a <= b ? [a, b] : [b, a]
+    const s = new Set<number>()
+    for (let i = lo; i <= hi; i++) s.add(i)
+    return s
+  }
+  const selectedIdx = () => [...selRows].sort((a, b) => a - b)
+  const allSelected = rows.length > 0 && selRows.size === rows.length
+  const toggleAll = () => setSelRows(allSelected ? new Set() : new Set(rows.map((_, i) => i)))
+  const rowMouseDown = (i: number, e: React.MouseEvent) => {
+    if (e.button !== 0) return // left button only; right-click opens the menu
+    if (e.ctrlKey || e.metaKey) {
+      setSelRows(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n }); anchorRef.current = i
+    } else if (e.shiftKey && anchorRef.current !== null) {
+      setSelRows(rangeSet(anchorRef.current, i))
+    } else {
+      setSelRows(new Set([i])); anchorRef.current = i
+    }
+    draggingRef.current = true
+  }
+  const rowEnter = (i: number) => {
+    if (draggingRef.current && anchorRef.current !== null) setSelRows(rangeSet(anchorRef.current, i))
+  }
+  const extractorLabel = EXTRACTORS.find(e => e.id === extractor)?.label ?? 'SQL Inserts'
+  const changeExtractor = (id: ExtractorId) => { saveExtractor(id); setExtractor(id) }
+  // Copy the given rows (falling back to the whole page when none are selected)
+  // in the active extractor's format.
+  const copyRows = (idx: number[]) => {
+    const use = idx.length ? idx : rows.map((_, i) => i)
+    if (use.length === 0) return
+    app.copy(extractRows(use))
+    app.notify(`copied ${use.length} row${use.length === 1 ? '' : 's'} as ${extractorLabel}`)
+  }
+  const copySelection = () => copyRows(selectedIdx())
+  const copyRowOrSel = (r: number) => copyRows(selRows.size ? selectedIdx() : [r])
+  // Ctrl/Cmd-C copies the selection via the extractor, unless a cell editor has
+  // focus (then the browser's own copy applies).
+  const onGridKey = (e: React.KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || (e.key !== 'c' && e.key !== 'C')) return
+    const tag = (e.target as HTMLElement).tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+    if (selRows.size === 0) return
+    e.preventDefault()
+    copySelection()
+  }
 
   // ── write actions ──
   // The grid is a browser, not an inline editor, so write actions seed a query
@@ -362,13 +443,9 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         { label: 'Show aggregate view', Icon: Sigma, run: () => openPanel('aggregates', r, c) },
         { sep: true },
         { label: 'Revert selected', Icon: Undo2, disabled: true },
-        { label: 'Copy using data extractor (SQL Inserts)', Icon: FileCode, key: 'Ctrl+C', run: () => app.copy(sqlInsert(r)) },
-        { label: 'Change data extractor', Icon: Code, children: [
-          { label: 'SQL Inserts', run: () => app.copy(sqlInsert(r)) },
-          { label: 'JSON', run: () => app.copy(jsonRow(r)) },
-          { label: 'CSV', run: () => app.copy(csvRow(r)) },
-          { label: 'TSV', run: () => app.copy(rows[r].join('\t')) },
-        ] },
+        { label: selRows.size > 1 ? `Copy ${selRows.size} rows as ${extractorLabel}` : `Copy row as ${extractorLabel}`, Icon: FileCode, key: 'Ctrl+C', run: () => copyRowOrSel(r) },
+        { label: 'Change data extractor', Icon: Code,
+          children: EXTRACTORS.map(ex => ({ label: (ex.id === extractor ? '✓ ' : '') + ex.label, run: () => changeExtractor(ex.id) })) },
         { label: 'Copy aggregation result (SUM)', Icon: Sigma, key: 'Ctrl+Shift+C', run: () => copySum(col) },
         { sep: true },
         { label: 'Filter by', Icon: Filter, children: [
@@ -396,6 +473,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       { label: 'Refresh', Icon: RotateCw, run: () => load(page, where, order) },
       { sep: true },
       { label: 'Copy column names', Icon: Copy, run: () => app.copy(cols.join('\t')) },
+      { label: selRows.size ? `Copy ${selRows.size} selected rows as ${extractorLabel}` : `Copy page as ${extractorLabel}`, Icon: FileCode, run: copySelection },
       { label: 'Export table to clipboard', Icon: Download, run: () => app.copy(tableTsv()) },
       { label: 'Full-text search…', Icon: Search, key: 'Ctrl+Alt+Shift+F', run: fullTextSearch },
       ...(where ? [{ label: 'Clear filter', Icon: FilterX, run: () => setFilter('') } as MenuItem] : []),
@@ -431,7 +509,13 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
           <button className="tb-ico" title="roll back queued changes"
             disabled={pendingCount === 0 || committing} onClick={rollbackTx}><Undo2 size={16} /></button>
         </>}
+        <span className="tb-sep" />
+        <button className="tb-ico" disabled={rows.length === 0}
+          title={`copy ${selRows.size ? `${selRows.size} selected rows` : 'page'} as ${extractorLabel}`}
+          onClick={copySelection}><Copy size={16} /></button>
+        <ExtractorMenu value={extractor} label={extractorLabel} onPick={changeExtractor} />
         <span className="tb-grow" />
+        {selRows.size > 0 && <span className="tb-chip hud-label sel-chip">{selRows.size} selected</span>}
         {readOnly && <span className="ro">READ-ONLY</span>}
         {conn && <span className="tb-chip conn-chip hud-label" title={`${conn.kind}@${conn.host}`}>{conn.kind}@{conn.host}</span>}
       </div>
@@ -448,7 +532,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
 
       <div className="grid-split">
       <div className="grid-left">
-      <div className="grid-body"
+      <div className="grid-body" tabIndex={0} onKeyDown={onGridKey}
         onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, items: menuItems(-1, -1) }) }}>
         {data?.error ? <div className="alert error code">{data.error}</div>
           : !result ? <p className="dim">{loading ? 'loading…' : ''}</p>
@@ -459,7 +543,8 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
               <div className="tablewrap grid-table">
                 <table className="data">
                   <thead><tr>
-                    <th className="rownum">#</th>
+                    <th className="rownum" onClick={toggleAll}
+                      title={allSelected ? 'clear selection' : 'select all rows'}>#</th>
                     {cols.map((c, i) => (
                       <th key={i}>
                         <span className="th-name">{c}</span>
@@ -505,7 +590,8 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
                       const del = pendingDeletes.has(i)
                       const redits = pendingEdits[i]
                       return (
-                      <tr key={i} className={del ? 'row-pending-del' : ''}><td className="rownum">{i + 1}</td>{row.map((v, j) => {
+                      <tr key={i} className={`${del ? 'row-pending-del' : ''}${selRows.has(i) ? ' row-sel' : ''}`}
+                        onMouseEnter={() => rowEnter(i)}><td className="rownum" onMouseDown={e => rowMouseDown(i, e)}>{i + 1}</td>{row.map((v, j) => {
                         const pend = redits?.[j]
                         const display = pend !== undefined ? pend : v
                         return (
@@ -569,6 +655,56 @@ const loadPageSize = (): number => {
   return PAGE_SIZES.includes(n) ? n : 100
 }
 const savePageSize = (n: number) => { try { localStorage.setItem(PAGE_SIZE_KEY, String(n)) } catch { /* ignore */ } }
+
+// Data extractors: the clipboard format Copy uses (toolbar button, Ctrl+C, and
+// the grid menu). Mirrors DataGrip's extractor picker; the choice persists.
+const EXTRACTORS = [
+  { id: 'sql-inserts', label: 'SQL Inserts' },
+  { id: 'json', label: 'JSON' },
+  { id: 'csv', label: 'CSV' },
+  { id: 'tsv', label: 'TSV' },
+  { id: 'markdown', label: 'Markdown' },
+] as const
+type ExtractorId = typeof EXTRACTORS[number]['id']
+const EXTRACTOR_KEY = 'verix.grid.extractor'
+const loadExtractor = (): ExtractorId => {
+  const v = localStorage.getItem(EXTRACTOR_KEY)
+  return EXTRACTORS.some(e => e.id === v) ? (v as ExtractorId) : 'sql-inserts'
+}
+const saveExtractor = (id: ExtractorId) => { try { localStorage.setItem(EXTRACTOR_KEY, id) } catch { /* ignore */ } }
+
+// Toolbar dropdown that picks the active data extractor. Opens downward and
+// reuses the shared .menu styling.
+function ExtractorMenu({ value, label, onPick }: { value: ExtractorId; label: string; onPick: (id: ExtractorId) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: Event) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    window.addEventListener('mousedown', onDown, true)
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('mousedown', onDown, true); window.removeEventListener('keydown', onKey) }
+  }, [open])
+  return (
+    <div className="menu-wrap extractor-menu" ref={ref}>
+      <button type="button" className="tb-chip hud-label" title="data extractor used by Copy" onClick={() => setOpen(o => !o)}>
+        {label} <ChevronDown size={13} />
+      </button>
+      {open && (
+        <div className="menu">
+          <div className="ctx-head">Copy rows as</div>
+          {EXTRACTORS.map(ex => (
+            <button key={ex.id} type="button" className="menu-item" onClick={() => { onPick(ex.id); setOpen(false) }}>
+              <span className="mi-ico">{ex.id === value ? <Check size={14} /> : null}</span>
+              <span className="mi-label">{ex.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // Footer page-size dropdown (opens upward). Picking a size reloads from page 1
 // and persists the choice as the default for future grids.

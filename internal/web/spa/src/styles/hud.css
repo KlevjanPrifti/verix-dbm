@@ -464,6 +464,18 @@ button.logout-link:hover { text-decoration: underline; }
 
 /* selected cell follows into the inspector */
 .data td.cell-sel { outline: 1px solid rgb(var(--accent-rgb)); outline-offset: -1px; background: rgba(var(--accent-rgb),0.1); }
+
+/* Row selection (drag over the # column / Ctrl-click). The grid copies via the
+   data extractors rather than native text selection, so suppress text selection
+   to keep drag-select clean; inline-edit inputs stay selectable. */
+.grid-table table { user-select: none; }
+.grid-table input, .grid-table select, .grid-table textarea { user-select: text; }
+.grid-table td.rownum, .grid-table th.rownum { cursor: pointer; }
+.grid-body:focus, .grid-body:focus-visible { outline: none; }
+table.data tbody tr.row-sel td { background: rgba(var(--accent-rgb),0.2); color: var(--hud); }
+table.data tbody tr.row-sel:hover td { background: rgba(var(--accent-rgb),0.26); }
+table.data tbody tr.row-sel td.rownum { background: rgba(var(--accent-rgb),0.32); color: var(--hud); }
+.sel-chip { color: rgb(var(--accent-rgb)); border-color: rgba(var(--accent-rgb),0.4); }
 .pg-btn { cursor: pointer; border: 1px solid rgba(var(--accent-rgb),0.3); border-radius: 2px; padding: .05rem .4rem; color: rgb(var(--accent-rgb)); }
 .pg-btn:hover { background: rgba(var(--accent-rgb),0.12); text-decoration: none; }
 .pg-range { color: var(--muted); }
