@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
-import { useApp, type NodePayload } from '../appctx'
+import { useApp, type NodePayload, type TabView } from '../appctx'
 import type { Column, Connection, Index, Key, Role, Schema } from '../types'
 import { Ico, nameColor, Plus, Terminal, Trash2, MoreHorizontal } from '../icons'
 import { DB_KINDS } from '../dbkinds'
@@ -57,12 +57,22 @@ function ConnNode({ conn }: { conn: Connection }) {
   const [data, setData] = useState<{ kind: string; schemas?: Schema[] | null; error?: string } | null>(null)
   const [openOnce, setOpenOnce] = useState(false)
   const token = app.refreshToken(conn.id)
+  const ref = useRef<HTMLDetailsElement>(null)
 
   // (Re)load when first expanded, and whenever this conn is asked to refresh.
   useEffect(() => {
     if (!openOnce) return
     api.explorer(conn.id).then(setData).catch(e => setData({ kind: conn.kind, error: String(e.message || e) }))
   }, [openOnce, token, conn.id, conn.kind])
+
+  // When the active tab lives under this connection, expand it so the user can
+  // see where they are. A conn-level tab (console/redis) highlights the row itself.
+  const av = app.activeView
+  const hasActive = av?.connId === conn.id
+  const rowActive = hasActive && (av.type === 'console' || av.type === 'redis')
+  useEffect(() => {
+    if (hasActive && ref.current) { ref.current.open = true; setOpenOnce(true) }
+  }, [hasActive, av])
 
   const payload: NodePayload = { type: 'conn', connId: conn.id, name: conn.name, kind: conn.kind }
   const openConsole = () => app.openTab({
@@ -71,9 +81,9 @@ function ConnNode({ conn }: { conn: Connection }) {
   })
 
   return (
-    <details className="tree-node conn-node" onToggle={e => { if ((e.target as HTMLDetailsElement).open) setOpenOnce(true) }}>
+    <details ref={ref} className="tree-node conn-node" onToggle={e => { if ((e.target as HTMLDetailsElement).open) setOpenOnce(true) }}>
       <summary
-        className="tree-row conn-row"
+        className={`tree-row conn-row${rowActive ? ' active' : ''}`}
         onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}
       >
         <Ico name={conn.kind} color={nameColor(conn.name)} />
@@ -115,8 +125,13 @@ function SchemaNode({ connId, schema, defaultOpen }: { connId: number; schema: S
   const app = useApp()
   const payload: NodePayload = { type: 'schema', connId, schema: schema.Name, name: schema.Name }
   const tables = schema.Tables || []
+  const ref = useRef<HTMLDetailsElement>(null)
+  // Reveal the schema when the active tab's table lives inside it.
+  const av = app.activeView
+  const hasActive = !!av && 'table' in av && av.connId === connId && av.schema === schema.Name
+  useEffect(() => { if (hasActive && ref.current) ref.current.open = true }, [hasActive, av])
   return (
-    <details className="tree-node" open={defaultOpen}>
+    <details ref={ref} className="tree-node" open={defaultOpen}>
       <summary className="tree-row schema-row"
         onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
         <Ico name="schema" /><span className="tree-name">{schema.Name}</span>
@@ -133,13 +148,14 @@ function SchemaNode({ connId, schema, defaultOpen }: { connId: number; schema: S
 function TableNode({ connId, schema, table, kind }: { connId: number; schema: string; table: string; kind: string }) {
   const app = useApp()
   const payload: NodePayload = { type: 'table', connId, schema, table, name: table }
+  const active = tableActive(app.activeView, connId, schema, table)
   const openGrid = () => app.openTab({
     key: `grid:${connId}:${schema}.${table}`, title: `${schema}.${table}`, icon: 'grid',
     view: { type: 'grid', connId, schema, table },
   })
   return (
     <details className="tree-node">
-      <summary className="tree-row table-row"
+      <summary className={`tree-row table-row${active ? ' active' : ''}`}
         onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
         <Ico name={kind} />
         <span className="tree-name table-name" title="click name to open"
@@ -277,6 +293,11 @@ function roleAttrText(r: Role): string {
   if (r.CreateDB) t.push('createdb')
   if (r.CreateRole) t.push('createrole')
   return t.join(' · ')
+}
+
+// tableActive reports whether the active tab (grid/doc/usages) targets this table.
+function tableActive(av: TabView | null, connId: number, schema: string, table: string): boolean {
+  return !!av && 'table' in av && av.connId === connId && av.schema === schema && av.table === table
 }
 
 // Kebab opens the same context menu as right-click the touch-friendly path.

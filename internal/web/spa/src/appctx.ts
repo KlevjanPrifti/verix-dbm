@@ -70,6 +70,7 @@ export type DialogRequest =
 export interface AppActions {
   caps: Caps
   conns: Connection[]
+  activeView: TabView | null // view of the currently selected tab, so the Explorer can mark where the user is
   connById: (id: number) => Connection | undefined
   openTab: (t: TabDef) => void
   closeTab: (key: string) => void

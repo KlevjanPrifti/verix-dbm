@@ -94,9 +94,12 @@ export default function App() {
 
   const connById = useCallback((id: number) => conns.find(c => c.id === id), [conns])
 
+  const activeView = useMemo(() => tabs.find(t => t.key === active)?.view ?? null, [tabs, active])
+
   const actions = useMemo<AppActions>(() => ({
     caps: { admin: me?.user.admin ?? false, write: me?.user.write ?? false, csrf: me?.csrf ?? '', scopedAccess: me?.scopedAccess ?? false },
     conns,
+    activeView,
     connById,
     openTab,
     closeTab,
@@ -112,7 +115,7 @@ export default function App() {
     openDDL: (p) => setDDL(p),
     openTableDesigner: (p) => setDesigner(p),
     reloadConns,
-  }), [me, conns, connById, openTab, closeTab, copy, notify, confirm, prompt, refreshConn, refreshTokens, reloadConns])
+  }), [me, conns, activeView, connById, openTab, closeTab, copy, notify, confirm, prompt, refreshConn, refreshTokens, reloadConns])
 
   // Tint the HUD to match the active tab's connection engine
   // (cyan pg / amber mysql / emerald redis).
