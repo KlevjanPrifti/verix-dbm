@@ -481,9 +481,9 @@ table.data tbody tr.row-sel td.rownum { background: rgba(var(--accent-rgb),0.32)
 .extractor-menu > .tb-chip { display: inline-flex; align-items: center; gap: .3rem; background: none; color: rgba(var(--accent-rgb),0.85); cursor: pointer; }
 .extractor-menu > .tb-chip:hover { background: rgba(var(--accent-rgb),0.12); }
 .extractor-menu .extractor-list { max-height: 60vh; overflow: auto; }
-.pg-btn { cursor: pointer; border: 1px solid rgba(var(--accent-rgb),0.3); border-radius: 2px; padding: .05rem .4rem; color: rgb(var(--accent-rgb)); }
+.pg-btn { cursor: pointer; border: 1px solid rgba(var(--accent-rgb),0.3); border-radius: 2px; padding: .05rem .4rem; color: rgb(var(--accent-rgb)); white-space: nowrap; }
 .pg-btn:hover { background: rgba(var(--accent-rgb),0.12); text-decoration: none; }
-.pg-range { color: var(--muted); }
+.pg-range, .gf-page { color: var(--muted); white-space: nowrap; }
 /* page-size dropdown: trigger anchors an upward-opening menu in the footer */
 .pg-size { position: relative; display: inline-flex; }
 .pg-size .pg-btn { gap: .2rem; }
@@ -683,6 +683,12 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
   .tb-ico { width: 2.2rem; height: 2.2rem; font-size: 1.1rem; }
   .th-sort { font-size: .85rem; }
   .pg-btn { padding: .3rem .7rem; }
+
+  /* Paginator: drop the redundant location (it's in the tab title) and let the
+     controls wrap as whole chips instead of breaking their text mid-word. */
+  .grid-footer { flex-wrap: wrap; gap: .45rem .55rem; padding: .5rem .6rem; }
+  .grid-footer .gf-ico, .grid-footer .gf-loc, .grid-footer .tb-grow { display: none; }
+  .pg-size .pg-btn { padding: .35rem .6rem; }
 
   /* Context menu: wider + capped so it never runs off a narrow screen */
   .ctx-menu { min-width: 240px; max-width: 92vw; }

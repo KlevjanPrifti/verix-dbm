@@ -654,15 +654,15 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       </div>
 
       <div className="grid-footer hud-label">
-        {conn && <Ico name={conn.kind} />}
-        <span>{schema}.{table}</span>
+        {conn && <Ico name={conn.kind} className="gf-ico" />}
+        <span className="gf-loc">{schema}.{table}</span>
         <span className="tb-grow" />
         <PageSizeMenu size={size} onPick={changeSize} />
         <span className="pg-range" title="rows on this page (total unknown until the last page)">
           {first === last ? `${last}` : `${first}-${last}`} of {totalLabel}
         </span>
         {page > 0 && <a className="pg-btn" onClick={() => setPage(p => p - 1)}><ChevronLeft size={14} /> prev</a>}
-        <span>page {page + 1}</span>
+        <span className="gf-page">page {page + 1}</span>
         {hasNext && <a className="pg-btn" onClick={() => setPage(p => p + 1)}>next <ChevronRight size={14} /></a>}
       </div>
       </div>{/* grid-left */}
