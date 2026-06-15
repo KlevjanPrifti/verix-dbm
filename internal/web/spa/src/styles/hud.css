@@ -476,6 +476,10 @@ table.data tbody tr.row-sel td { background: rgba(var(--accent-rgb),0.2); color:
 table.data tbody tr.row-sel:hover td { background: rgba(var(--accent-rgb),0.26); }
 table.data tbody tr.row-sel td.rownum { background: rgba(var(--accent-rgb),0.32); color: var(--hud); }
 .sel-chip { color: rgb(var(--accent-rgb)); border-color: rgba(var(--accent-rgb),0.4); }
+/* Extractor dropdown button: a tb-chip <button> needs the same reset tx-chip has,
+   else the native button background shows through. */
+.extractor-menu > .tb-chip { display: inline-flex; align-items: center; gap: .3rem; background: none; color: rgba(var(--accent-rgb),0.85); cursor: pointer; }
+.extractor-menu > .tb-chip:hover { background: rgba(var(--accent-rgb),0.12); }
 .pg-btn { cursor: pointer; border: 1px solid rgba(var(--accent-rgb),0.3); border-radius: 2px; padding: .05rem .4rem; color: rgb(var(--accent-rgb)); }
 .pg-btn:hover { background: rgba(var(--accent-rgb),0.12); text-decoration: none; }
 .pg-range { color: var(--muted); }
