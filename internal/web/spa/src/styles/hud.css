@@ -425,12 +425,43 @@ button.logout-link:hover { text-decoration: underline; }
 .ac-kind { flex: none; font-size: .6rem; letter-spacing: .04em; text-transform: uppercase; color: rgba(var(--accent-rgb),0.7); font-family: var(--sans); }
 .ac-detail { flex: 1; min-width: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .55; font-size: .72rem; font-family: var(--sans); }
 
+/* The grid and its docked cell inspector sit side by side below the filter bar. */
+.grid-split { flex: 1; min-height: 0; min-width: 0; display: flex; }
+.grid-left { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .grid-body { flex: 1; min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
 /* The table scrolls in both axes inside here; min-width:0 up the chain (above)
    lets a table wider than the pane scroll instead of stretching the layout. */
 .grid-body .tablewrap { flex: 1; min-height: 0; min-width: 0; max-height: none; overflow: auto; border: none; border-radius: 0; }
 .grid-footer { display: flex; align-items: center; gap: .6rem; padding: .3rem .6rem; border-top: 1px solid rgba(var(--accent-rgb),0.15); background: var(--panel); }
 .grid-meta { padding: .25rem .6rem; margin: 0; flex-shrink: 0; }
+
+/* ── docked cell inspector (Record / Value / Aggregates) ── */
+.grid-side { width: 360px; min-width: 280px; max-width: 50%; flex-shrink: 0; display: flex; flex-direction: column;
+  border-left: 1px solid rgba(var(--accent-rgb),0.2); background: var(--panel); overflow: hidden; resize: horizontal; }
+.side-tabs { display: flex; align-items: center; gap: .15rem; padding: .25rem .35rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.15); }
+.side-tab { background: none; border: none; color: var(--hud-dim); font-family: var(--sans); font-size: .76rem; letter-spacing: .02em;
+  padding: .3rem .55rem; border-radius: 2px; cursor: pointer; }
+.side-tab:hover { background: rgba(var(--accent-rgb),0.08); color: var(--hud); }
+.side-tab.on { color: var(--hud); background: rgba(var(--accent-rgb),0.14); box-shadow: inset 0 -2px 0 rgb(var(--accent-rgb)); }
+.side-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.side-scroll { flex: 1; min-height: 0; overflow: auto; }
+.side-foot { display: flex; align-items: center; gap: .5rem; padding: .4rem .55rem; border-top: 1px solid rgba(var(--accent-rgb),0.15); }
+.side-valhead { display: flex; align-items: center; gap: .5rem; padding: .4rem .55rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.1); }
+.mini-toggle { display: inline-flex; align-items: center; gap: .25rem; background: none; cursor: pointer;
+  border: 1px solid rgba(var(--accent-rgb),0.3); border-radius: 2px; color: var(--hud-dim); font-size: .68rem; padding: .12rem .35rem; }
+.mini-toggle.on { color: rgb(var(--accent-rgb)); border-color: rgba(var(--accent-rgb),0.5); }
+.grid-side .value-viewer { max-height: none; border: none; border-radius: 0; }
+.grid-side .record-view { width: 100%; }
+.grid-side .rv-val { cursor: default; }
+/* JSON syntax colours in the value viewer */
+.json-view .j-key { color: rgb(var(--accent-rgb)); }
+.json-view .j-str { color: #9ece6a; }
+.json-view .j-num { color: #ff9e64; }
+.json-view .j-bool { color: #bb9af7; }
+.json-view .j-null { color: #f7768e; }
+
+/* selected cell follows into the inspector */
+.data td.cell-sel { outline: 1px solid rgb(var(--accent-rgb)); outline-offset: -1px; background: rgba(var(--accent-rgb),0.1); }
 .pg-btn { cursor: pointer; border: 1px solid rgba(var(--accent-rgb),0.3); border-radius: 2px; padding: .05rem .4rem; color: rgb(var(--accent-rgb)); }
 .pg-btn:hover { background: rgba(var(--accent-rgb),0.12); text-decoration: none; }
 .pg-range { color: var(--muted); }
@@ -665,6 +696,12 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 
   /* Data grid scrolls in both directions; sticky row numbers (.rownum) stay put */
   .grid-body .tablewrap { overflow: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Cell inspector overlays the grid as a right-side drawer on phones instead of
+     squeezing the table into a sliver. */
+  .grid-split { position: relative; }
+  .grid-side { position: absolute; top: 0; right: 0; bottom: 0; width: 90%; max-width: 90%; min-width: 0;
+    z-index: 30; resize: none; box-shadow: -8px 0 24px rgba(0,5,12,0.5); }
 
   /* Modals go full-screen so forms are comfortable to fill on a phone */
   .modal { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0;

@@ -34,9 +34,12 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const [loading, setLoading] = useState(false)
   // Right-click menu (cell or table-level) and the modals it can open.
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
-  const [viewer, setViewer] = useState<{ col: string; value: string } | null>(null)
-  const [record, setRecord] = useState<number | null>(null)
-  const [agg, setAgg] = useState<string | null>(null)
+  // Cell inspector: a docked right-side panel (DataGrip-style) with Record /
+  // Value / Aggregates tabs. `sel` is the cell it follows (set on single click);
+  // `panel` is the open tab, or null when the inspector is hidden.
+  const [sel, setSel] = useState<{ r: number; c: number } | null>(null)
+  const [panel, setPanel] = useState<PanelTab | null>(null)
+  const openPanel = (tab: PanelTab, r: number, c: number) => { setSel({ r, c }); setPanel(tab) }
   // Inline "add row" draft (DataGrip-style). `draft` maps a column index to the
   // value typed for it; columns absent from the map stay unset and render their
   // <default>/<null> placeholder. `editing` is the column index currently shown
@@ -354,9 +357,9 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       // ── cell-specific actions: need a row + column under the cursor ──
       ...(cell ? [
         { label: 'Edit', Icon: SquarePen, key: 'F2', disabled: readOnly, run: () => setEdit({ r, c }) },
-        { label: 'Show record view', Icon: TableProperties, run: () => setRecord(r) },
-        { label: 'Open in value editor', Icon: Maximize2, run: () => setViewer({ col, value: val }) },
-        { label: 'Show aggregate view', Icon: Sigma, run: () => setAgg(col) },
+        { label: 'Show record view', Icon: TableProperties, run: () => openPanel('record', r, c) },
+        { label: 'Open in value editor', Icon: Maximize2, run: () => openPanel('value', r, c) },
+        { label: 'Show aggregate view', Icon: Sigma, run: () => openPanel('aggregates', r, c) },
         { sep: true },
         { label: 'Revert selected', Icon: Undo2, disabled: true },
         { label: 'Copy using data extractor (SQL Inserts)', Icon: FileCode, key: 'Ctrl+C', run: () => app.copy(sqlInsert(r)) },
@@ -443,6 +446,8 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         <button className="hud-btn-accent sm" type="submit">apply</button>
       </form>
 
+      <div className="grid-split">
+      <div className="grid-left">
       <div className="grid-body"
         onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, items: menuItems(-1, -1) }) }}>
         {data?.error ? <div className="alert error code">{data.error}</div>
@@ -504,7 +509,8 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
                         const pend = redits?.[j]
                         const display = pend !== undefined ? pend : v
                         return (
-                        <td key={j} className={`code${!readOnly ? ' editable-cell' : ''}${pend !== undefined ? ' cell-dirty' : ''}`}
+                        <td key={j} className={`code${!readOnly ? ' editable-cell' : ''}${pend !== undefined ? ' cell-dirty' : ''}${sel && sel.r === i && sel.c === j ? ' cell-sel' : ''}`}
+                          onClick={() => setSel({ r: i, c: j })}
                           onDoubleClick={() => { if (!readOnly && !savingCell && !del) setEdit({ r: i, c: j }) }}
                           onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, items: menuItems(i, j) }) }}>
                           {edit && edit.r === i && edit.c === j
@@ -533,14 +539,24 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         <span>page {page + 1}</span>
         {hasNext && <a className="pg-btn" onClick={() => setPage(p => p + 1)}>next <ChevronRight size={14} /></a>}
       </div>
+      </div>{/* grid-left */}
+
+      {panel && sel && (
+        <InspectorPanel
+          tab={panel} onTab={setPanel} onClose={() => setPanel(null)}
+          connId={connId} cols={cols} row={rows[sel.r] || []}
+          col={cols[sel.c] ?? ''} value={rows[sel.r]?.[sel.c] ?? ''}
+          aggSql={`SELECT count(*) AS "rows", count(${qq(cols[sel.c] ?? '')}) AS "non null", count(DISTINCT ${qq(cols[sel.c] ?? '')}) AS "distinct", min(${qq(cols[sel.c] ?? '')}) AS "min", max(${qq(cols[sel.c] ?? '')}) AS "max" FROM ${qual}${whereSuffix}`}
+        />
+      )}
+      </div>{/* grid-split */}
 
       {menu && <CellMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
-      {viewer && <ValueViewer col={viewer.col} value={viewer.value} onClose={() => setViewer(null)} />}
-      {record != null && <RecordView cols={cols} row={rows[record] || []} title={`${schema}.${table}`} onClose={() => setRecord(null)} />}
-      {agg && <AggregateView connId={connId} col={agg} sql={`SELECT count(*) AS "rows", count(${qq(agg)}) AS "non null", count(DISTINCT ${qq(agg)}) AS "distinct", min(${qq(agg)}) AS "min", max(${qq(agg)}) AS "max" FROM ${qual}${whereSuffix}`} onClose={() => setAgg(null)} />}
     </div>
   )
 }
+
+type PanelTab = 'record' | 'value' | 'aggregates'
 
 const MW = 260, MH = 380
 
@@ -703,113 +719,148 @@ function CellEditor({ initial, onCommit, onCancel }: {
   )
 }
 
-// Full-value viewer: the grid truncates wide cells, so this shows the complete
-// value (long text / JSON) with a copy button.
-function ValueViewer({ col, value, onClose }: { col: string; value: string; onClose: () => void }) {
-  const app = useApp()
+// InspectorPanel is the docked right-side cell inspector (DataGrip-style),
+// replacing the old Record / Value / Aggregate modals. It follows the selected
+// cell and switches between three tabs without leaving the grid.
+function InspectorPanel({ tab, onTab, onClose, connId, cols, row, col, value, aggSql }: {
+  tab: PanelTab; onTab: (t: PanelTab) => void; onClose: () => void
+  connId: number; cols: string[]; row: string[]; col: string; value: string; aggSql: string
+}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+  const TABS: { id: PanelTab; label: string }[] = [
+    { id: 'record', label: 'Record' }, { id: 'value', label: 'Value' }, { id: 'aggregates', label: 'Aggregates' },
+  ]
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal hud-panel hud-panel-glow">
-        <div className="modal-head">
-          <span className="hud-heading">{col}</span>
-          <button type="button" className="ico-btn" onClick={onClose}><X size={16} /></button>
-        </div>
-        <div className="modal-body">
-          <pre className="code value-viewer">{value === '' ? '(empty / null)' : value}</pre>
-          <div className="modal-foot">
-            <span className="hud-label dim">{value.length} chars</span>
-            <span className="tb-grow" />
-            <button type="button" className="hud-btn-accent" onClick={() => app.copy(value)}>Copy</button>
-            <button type="button" className="hud-btn-cta" onClick={onClose}>Close</button>
-          </div>
-        </div>
+    <aside className="grid-side hud-panel">
+      <div className="side-tabs">
+        {TABS.map(t => (
+          <button key={t.id} type="button" className={`side-tab${tab === t.id ? ' on' : ''}`}
+            onClick={() => onTab(t.id)}>{t.label}</button>
+        ))}
+        <span className="tb-grow" />
+        <button type="button" className="ico-btn" title="close inspector" onClick={onClose}><X size={15} /></button>
       </div>
-    </div>
+      <div className="side-body">
+        {tab === 'record' ? <RecordPanel cols={cols} row={row} />
+          : tab === 'value' ? <ValuePanel col={col} value={value} />
+          : <AggregatesPanel connId={connId} col={col} sql={aggSql} />}
+      </div>
+    </aside>
   )
 }
 
-// Record view: the whole row laid out vertically as column → value, handy when a
-// table is wider than the screen.
-function RecordView({ cols, row, title, onClose }: { cols: string[]; row: string[]; title: string; onClose: () => void }) {
+// Record tab: the whole row laid out vertically as column → value.
+function RecordPanel({ cols, row }: { cols: string[]; row: string[] }) {
   const app = useApp()
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
   const asJson = () => app.copy(JSON.stringify(Object.fromEntries(cols.map((c, i) => [c, row[i]])), null, 2))
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal hud-panel hud-panel-glow">
-        <div className="modal-head">
-          <span className="hud-heading">Record · {title}</span>
-          <button type="button" className="ico-btn" onClick={onClose}><X size={16} /></button>
-        </div>
-        <div className="modal-body">
-          <div className="tablewrap" style={{ maxHeight: '60vh' }}>
-            <table className="data record-view">
-              <tbody>
-                {cols.map((c, i) => (
-                  <tr key={i}>
-                    <td className="rv-key hud-label">{c}</td>
-                    <td className="code rv-val">{row[i] === '' ? <span className="dim">null</span> : row[i]}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="modal-foot">
-            <span className="tb-grow" />
-            <button type="button" className="hud-btn-accent" onClick={asJson}>Copy JSON</button>
-            <button type="button" className="hud-btn-cta" onClick={onClose}>Close</button>
-          </div>
-        </div>
+    <>
+      <div className="side-scroll">
+        <table className="data record-view">
+          <tbody>
+            {cols.map((c, i) => (
+              <tr key={i}>
+                <td className="rv-key hud-label">{c}</td>
+                <td className="code rv-val" onClick={() => app.copy(row[i] ?? '')} title="click to copy">
+                  {row[i] === '' ? <span className="dim">null</span> : row[i]}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
+      <div className="side-foot">
+        <span className="tb-grow" />
+        <button type="button" className="hud-btn-accent sm" onClick={asJson}>Copy JSON</button>
+      </div>
+    </>
+  )
+}
+
+// Value tab: the full cell value. When it parses as JSON it is pretty-printed
+// and syntax-highlighted (DataGrip-style); a toggle falls back to the raw text.
+function ValuePanel({ col, value }: { col: string; value: string }) {
+  const app = useApp()
+  const pretty = useMemo(() => tryFormatJson(value), [value])
+  const [raw, setRaw] = useState(false)
+  const showJson = pretty !== null && !raw
+  return (
+    <>
+      <div className="side-valhead hud-label">
+        <span className="dim">{col}</span>
+        <span className="tb-grow" />
+        {pretty !== null && (
+          <button type="button" className={`mini-toggle${showJson ? ' on' : ''}`}
+            title="toggle JSON formatting" onClick={() => setRaw(r => !r)}>
+            <Code size={13} /> {showJson ? 'JSON' : 'Raw'}
+          </button>
+        )}
+      </div>
+      <div className="side-scroll">
+        {value === '' ? <pre className="code value-viewer dim">(empty / null)</pre>
+          : showJson
+            ? <pre className="code value-viewer json-view" dangerouslySetInnerHTML={{ __html: highlightJson(pretty!) }} />
+            : <pre className="code value-viewer">{value}</pre>}
+      </div>
+      <div className="side-foot">
+        <span className="hud-label dim">{value.length} chars</span>
+        <span className="tb-grow" />
+        <button type="button" className="hud-btn-accent sm" onClick={() => app.copy(showJson ? pretty! : value)}>Copy</button>
+      </div>
+    </>
+  )
+}
+
+// Aggregates tab: count / distinct / min / max for the selected column (honouring
+// the current WHERE), recomputed whenever the column or filter changes.
+function AggregatesPanel({ connId, col, sql }: { connId: number; col: string; sql: string }) {
+  const [resp, setResp] = useState<QueryResponse | null>(null)
+  useEffect(() => {
+    setResp(null)
+    api.query(connId, sql, true).then(setResp).catch(e => setResp({ readOnly: true, error: String(e.message || e) }))
+  }, [connId, sql])
+  const r = resp?.result
+  return (
+    <div className="side-scroll">
+      <div className="side-valhead hud-label"><span className="dim">{col}</span></div>
+      {!resp ? <p className="dim" style={{ padding: '.6rem' }}>computing…</p>
+        : resp.error ? <div className="alert error code">{resp.error}</div>
+        : r && r.rows?.[0] ? (
+          <table className="data record-view">
+            <tbody>
+              {(r.columns || []).map((c, i) => (
+                <tr key={i}><td className="rv-key hud-label">{c}</td><td className="code rv-val">{r.rows![0][i]}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <p className="dim" style={{ padding: '.6rem' }}>no result</p>}
     </div>
   )
 }
 
-// Aggregate view: count / distinct / min / max for a column (honouring the
-// current WHERE), run on open.
-function AggregateView({ connId, col, sql, onClose }: { connId: number; col: string; sql: string; onClose: () => void }) {
-  const [resp, setResp] = useState<QueryResponse | null>(null)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    api.query(connId, sql, true).then(setResp).catch(e => setResp({ readOnly: true, error: String(e.message || e) }))
-    return () => window.removeEventListener('keydown', onKey)
-  }, [connId, sql, onClose])
-  const r = resp?.result
-  return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal hud-panel hud-panel-glow">
-        <div className="modal-head">
-          <span className="hud-heading">Aggregate · {col}</span>
-          <button type="button" className="ico-btn" onClick={onClose}><X size={16} /></button>
-        </div>
-        <div className="modal-body">
-          {!resp ? <p className="dim">computing…</p>
-            : resp.error ? <div className="alert error code">{resp.error}</div>
-            : r && r.rows?.[0] ? (
-              <table className="data record-view">
-                <tbody>
-                  {(r.columns || []).map((c, i) => (
-                    <tr key={i}><td className="rv-key hud-label">{c}</td><td className="code rv-val">{r.rows![0][i]}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : <p className="dim">no result</p>}
-          <div className="modal-foot">
-            <span className="tb-grow" />
-            <button type="button" className="hud-btn-cta" onClick={onClose}>Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+// tryFormatJson returns the value pretty-printed if it parses as a JSON object or
+// array, else null (scalars and plain text are left to render verbatim).
+function tryFormatJson(s: string): string | null {
+  const t = s.trim()
+  if (!t || (t[0] !== '{' && t[0] !== '[')) return null
+  try { return JSON.stringify(JSON.parse(t), null, 2) } catch { return null }
+}
+
+// highlightJson wraps tokens of a pretty-printed JSON string in coloured spans.
+// Input is HTML-escaped first, so the result is safe to inject.
+function highlightJson(json: string): string {
+  const esc = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return esc.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false)\b|\bnull\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
+    m => {
+      let cls = 'j-num'
+      if (/^"/.test(m)) cls = /:$/.test(m) ? 'j-key' : 'j-str'
+      else if (m === 'true' || m === 'false') cls = 'j-bool'
+      else if (m === 'null') cls = 'j-null'
+      return `<span class="${cls}">${m}</span>`
+    })
 }
