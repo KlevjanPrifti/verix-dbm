@@ -534,12 +534,15 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .modal-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .8rem 1rem; border-bottom: 1px solid rgba(var(--accent-rgb),0.2); flex: none; }
 .modal-head .hud-heading { margin: 0; white-space: nowrap; }
 .modal-head .hud-btn-accent { white-space: nowrap; }
+/* Form modals wrap their scrolling body + static footer in this flex column so
+   the footer is a sibling of the scroll area, not part of it. */
+.modal-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .modal-body { display: flex; flex-direction: column; gap: .7rem; padding: 1rem; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .mrow { display: flex; flex-direction: column; gap: .25rem; }
 .mrow2 { display: flex; gap: 1rem; }
 .mcol { flex: 1; display: flex; flex-direction: column; gap: .25rem; }
 .mcol.port { max-width: 120px; }
-.modal-foot { display: flex; align-items: center; gap: .6rem; margin-top: auto; padding: .8rem 0 0; border-top: 1px solid rgba(var(--accent-rgb),0.15); position: sticky; bottom: -1rem; background: var(--panel); }
+.modal-foot { display: flex; align-items: center; gap: .6rem; flex: none; padding: .8rem 1rem; border-top: 1px solid rgba(var(--accent-rgb),0.15); background: var(--panel); }
 .test-result { font-size: .78rem; display: flex; align-items: flex-start; gap: .3rem; overflow-wrap: anywhere; }
 .test-result svg { flex: none; margin-top: 2px; }
 

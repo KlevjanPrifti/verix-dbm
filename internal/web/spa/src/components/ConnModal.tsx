@@ -104,7 +104,8 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
           <span className="hud-heading">{title}</span>
           <button type="button" className="ico-btn" onClick={onClose}><X size={16} /></button>
         </div>
-        <form className="modal-body" onSubmit={save(false)}>
+        <form className="modal-form" onSubmit={save(false)}>
+          <div className="modal-body">
           {err && <div className="alert error code">{err}</div>}
           <div className="mrow"><label className="hud-label">URL <span className="dim">(paste to autofill the fields below)</span></label>
             <input className="hud-input code" placeholder="postgresql://user:pass@host:5432/dbname" onChange={e => applyUrl(e.target.value)} /></div>
@@ -142,6 +143,7 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
               {test.ok ? <Check size={13} /> : <X size={13} />}<span>{test.msg}</span>
             </div>
           )}
+          </div>
           <div className="modal-foot">
             <button type="button" className="hud-btn-accent" onClick={onTest}>Test Connection</button>
             <span className="tb-grow" />

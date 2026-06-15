@@ -31,10 +31,12 @@ export default function Dialog({ req, onResolve }: {
         </div>
 
         {req.kind === 'prompt' ? (
-          <form className="modal-body" onSubmit={e => { e.preventDefault(); onResolve(text) }}>
+          <form className="modal-form" onSubmit={e => { e.preventDefault(); onResolve(text) }}>
+            <div className="modal-body">
             {req.body && <p className="dialog-body dim">{req.body}</p>}
             <input ref={inputRef} className="hud-input" value={text} placeholder={req.placeholder}
               onChange={e => setText(e.target.value)} />
+            </div>
             <div className="modal-foot">
               <span className="tb-grow" />
               <button type="button" className="hud-btn-accent" onClick={() => onResolve(null)}>Cancel</button>
@@ -42,8 +44,10 @@ export default function Dialog({ req, onResolve }: {
             </div>
           </form>
         ) : (
-          <div className="modal-body">
-            {req.body && <p className="dialog-body dim">{req.body}</p>}
+          <>
+            <div className="modal-body">
+              {req.body && <p className="dialog-body dim">{req.body}</p>}
+            </div>
             <div className="modal-foot">
               <span className="tb-grow" />
               <button type="button" className="hud-btn-accent" onClick={() => onResolve(null)}>{req.cancelLabel ?? 'Cancel'}</button>
@@ -52,7 +56,7 @@ export default function Dialog({ req, onResolve }: {
                   onClick={() => onResolve(b.value)}>{b.label}</button>
               ))}
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>

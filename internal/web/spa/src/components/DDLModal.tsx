@@ -87,7 +87,8 @@ export default function DDLModal({ params, onClose, onApplied }: {
           <span className="hud-heading">{TITLES[kind] || 'DDL'}</span>
           <button type="button" className="ico-btn" onClick={onClose}><X size={16} /></button>
         </div>
-        <form className="modal-body" onSubmit={submit}>
+        <form className="modal-form" onSubmit={submit}>
+          <div className="modal-body">
           {err && <div className="alert error code">{err}</div>}
 
           {kind === 'add-column' && <>
@@ -159,6 +160,7 @@ export default function DDLModal({ params, onClose, onApplied }: {
             {mysql && <div className="hint dim">Privileges are additive: unchecking a box here does not revoke it.</div>}
           </>}
 
+          </div>
           <div className="modal-foot">
             <span className="hud-label dim">{schema}{table ? `.${table}` : ''}</span>
             <span className="tb-grow" />
