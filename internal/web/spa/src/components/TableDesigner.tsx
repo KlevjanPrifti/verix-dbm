@@ -115,7 +115,7 @@ export default function TableDesigner({ params, onClose, onApplied }: {
   const canMove = sel.kind === 'col'
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-overlay">
       <div className="modal modal-wide hud-panel hud-panel-glow">
         <div className="modal-head">
           <span className="hud-heading">{title}</span>

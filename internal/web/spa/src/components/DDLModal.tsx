@@ -81,7 +81,7 @@ export default function DDLModal({ params, onClose, onApplied }: {
   }
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-overlay">
       <div className="modal hud-panel hud-panel-glow">
         <div className="modal-head">
           <span className="hud-heading">{TITLES[kind] || 'DDL'}</span>

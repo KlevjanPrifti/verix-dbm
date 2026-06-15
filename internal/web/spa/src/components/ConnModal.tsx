@@ -98,7 +98,7 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
   const title = mode === 'edit' ? <>Data Sources &amp; Drivers <span className="dim">· edit</span></> : 'Data Sources & Drivers'
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-overlay">
       <div className="modal hud-panel hud-panel-glow">
         <div className="modal-head">
           <span className="hud-heading">{title}</span>

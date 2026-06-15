@@ -23,7 +23,7 @@ export default function Dialog({ req, onResolve }: {
     v === 'danger' ? 'btn-danger' : v === 'accent' ? 'hud-btn-accent' : 'hud-btn-cta'
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onResolve(null) }}>
+    <div className="modal-overlay">
       <div className="modal hud-panel hud-panel-glow dialog">
         <div className="modal-head">
           <span className="hud-heading">{req.title}</span>

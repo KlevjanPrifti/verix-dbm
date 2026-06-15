@@ -16,7 +16,7 @@ export default function AuditModal({ onClose }: { onClose: () => void }) {
   }, [onClose])
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="modal-overlay">
       <div className="modal hud-panel hud-panel-glow" style={{ maxWidth: '60rem', width: '90vw' }}>
         <div className="modal-head">
           <span className="hud-heading">Audit log <span className="dim">· last 200</span></span>
