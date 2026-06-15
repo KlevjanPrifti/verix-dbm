@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -71,7 +72,26 @@ func auditDetail(s string) string {
 // @import); scripts and everything else are locked to same-origin, and framing is
 // denied outright. Tightening script/style-src further is gated on dropping
 // Alpine and self-hosting fonts.
+// originOf returns the scheme://host of a URL, or "" if it can't be parsed into
+// an absolute origin. Used to whitelist the IdP in the CSP form-action directive.
+func originOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
 func securityHeaders(cfg *config.Config) func(http.Handler) http.Handler {
+	// RP-initiated logout submits the logout form to /auth/logout, which 302s to
+	// the IdP's end_session_endpoint. Browsers apply form-action to the whole
+	// redirect chain, so the IdP origin must be allowed or the logout redirect is
+	// blocked (session is cleared but the user is stranded). Allow the issuer's
+	// scheme://host; the end_session endpoint shares it.
+	formAction := "'self'"
+	if origin := originOf(cfg.OIDCIssuer); origin != "" {
+		formAction += " " + origin
+	}
 	csp := strings.Join([]string{
 		"default-src 'self'",
 		"script-src 'self' 'unsafe-eval'",
@@ -81,7 +101,7 @@ func securityHeaders(cfg *config.Config) func(http.Handler) http.Handler {
 		"connect-src 'self'",
 		"object-src 'none'",
 		"base-uri 'self'",
-		"form-action 'self'",
+		"form-action " + formAction,
 		"frame-ancestors 'none'",
 	}, "; ")
 	https := len(cfg.BaseURL) >= 5 && cfg.BaseURL[:5] == "https"
