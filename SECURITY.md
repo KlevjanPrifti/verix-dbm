@@ -126,7 +126,7 @@ network, and run the container with egress restricted to the databases it needs.
 
 ## Reporting
 
-Found something? Email to_be_defined_email with details and a PoC if you
+Found something? Email [redacted] with details and a PoC if you
 have one. Please don't open a public issue for an unpatched vulnerability.
 
 ## Maintainer checklist

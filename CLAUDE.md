@@ -84,6 +84,6 @@ internal/web/spa    React + TypeScript + Vite workbench (embedded via go:embed)
 
 Key Go deps: chi v5 (router), pgx v5 (Postgres), go-redis v9, coreos/go-oidc v3 + x/oauth2 (auth), modernc.org/sqlite (pure-Go SQLite), prometheus/client_golang (metrics).
 
-Engines today are **PostgreSQL** (pgx) and **Redis/Valkey** (go-redis); no others. Postgres can also serve as the *metadata* store backend for HA, separate from the databases users connect to.
+Engines today are **PostgreSQL** (pgx), **MySQL/MariaDB** (go-sql-driver, behind the engine-neutral `internal/dbsql` interface shared with Postgres), and **Redis/Valkey** (go-redis); no others. Postgres can also serve as the *metadata* store backend for HA, separate from the databases users connect to.
 
 Configuration is via env vars - see [.env.example](.env.example). Required in production: `DBM_ENC_KEY` (64 hex chars) or `DBM_ENC_KEYS`, the `OIDC_*` set, and `DBM_BASE_URL`. Optional subsystems are gated by env: HA (`DBM_STORE_DRIVER`/`DBM_STORE_DSN`, `DBM_SESSION_BACKEND`/`DBM_SESSION_REDIS_URL`, `DBM_PG_POOL_MAX_CONNS`), access scoping (`DBM_SCOPED_ACCESS`, `DBM_OPEN_READ`), and observability (`DBM_LOG_*`, `DBM_METRICS_TOKEN`, `DBM_AUDIT_RETENTION_DAYS`).

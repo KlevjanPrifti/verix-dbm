@@ -1,10 +1,34 @@
 # verix-dbm
 
-A low-footprint, self-hostable **web database manager** for **PostgreSQL** and
-**Redis/Valkey**. It ships as a single static Go binary with a React workbench
-UI baked in (`go:embed`), Keycloak OIDC login, and the SyncLink "HUD" theme.
-The whole app backend, JSON API, and the compiled frontend is one
-dependency-free distroless container.
+**Put your databases behind SSO and an audit log without exposing their ports.**
+
+verix-dbm is a self-hosted web database manager for **PostgreSQL**,
+**MySQL / MariaDB**, and **Redis / Valkey**. Drop one container onto the same
+private network as your database and reach it by hostname (`postgres:5432`) - the
+database never has to publish a port to the host or the internet. The only thing
+exposed is a workbench UI behind Keycloak OIDC login, role-based access, and a
+full audit trail.
+
+It ships as a single dependency-free distroless container: a static Go binary
+with the React workbench baked in (`go:embed`). No agent, no sidecar, no external
+service required to start.
+
+## Why
+
+The usual way to reach a production database is to publish its port and share the
+password, or to stand up a VPN / SSH bastion that keeps no record of who ran what.
+verix-dbm replaces that with a governed front door:
+
+- **No exposed database.** The container talks to the DB over the internal Docker
+  / Kubernetes network; the database keeps its port closed to everything else.
+- **SSO, not shared passwords.** Login is Keycloak OIDC; access is deny-by-default,
+  mapped to **admin / write / read** realm roles, and optionally scoped
+  per-connection.
+- **Every action is audited.** Queries, logins, credential use, and schema changes
+  are logged, redacted of secrets, and exportable to your SIEM.
+- **Least privilege by design.** Saved passwords are AES-256-GCM encrypted at rest
+  and never sent to the browser; the database role you connect as stays the real
+  security boundary (see [SECURITY.md](SECURITY.md)).
 
 ---
 
@@ -17,9 +41,9 @@ dependency-free distroless container.
 - **Tabbed workspace** open as many tabs as you like, side by side:
   - **Grid** paginated, read-only table browse with `WHERE` / `ORDER BY`
     filters and per-column sort arrows.
-  - **Console (Postgres)** run SQL with read/write modes, a 30s statement
-    timeout, a 1000-row result cap, and a confirmation gate for destructive
-    statements (`DROP`/`TRUNCATE`, unguarded `DELETE`/`UPDATE`).
+  - **Console (Postgres / MySQL)** run SQL with read/write modes, a 30s
+    statement timeout, a 1000-row result cap, and a confirmation gate for
+    destructive statements (`DROP`/`TRUNCATE`, unguarded `DELETE`/`UPDATE`).
   - **Doc** quick documentation view: columns, keys, indexes, and table
     comment.
   - **Usages** find-usages: inbound foreign keys that reference a table.
@@ -38,6 +62,15 @@ dependency-free distroless container.
   audited.
 - **CSV / JSON export** of a table's rows (honours the grid's `WHERE`/`ORDER BY`,
   same 1000-row cap a convenience snapshot, not a full dump).
+
+### MySQL / MariaDB
+- Schema/table tree and paginated browse, same workbench as Postgres.
+- SQL console (read/write) with statement timeout (`MAX_EXECUTION_TIME` hint on
+  selects + context deadline), row cap, and destructive-statement confirmation.
+- Engine-aware identifier/literal quoting and `MODIFY COLUMN`-style DDL forms
+  (add / modify column, rename table, create/drop table / index).
+- Non-admin users are blocked from `LOAD DATA INFILE`, `LOAD_FILE()`, and
+  `INTO OUTFILE/DUMPFILE` as a backstop on top of the connection's DB role.
 
 ### Redis / Valkey
 - `SCAN`-based keyspace browser with `MATCH` (prefix-friendly).
@@ -68,6 +101,8 @@ dependency-free distroless container.
 **Backend (Go 1.25)**
 - [chi](https://github.com/go-chi/chi) HTTP router
 - [pgx v5](https://github.com/jackc/pgx) PostgreSQL driver + introspection
+- [go-sql-driver/mysql](https://github.com/go-sql-driver/mysql) MySQL/MariaDB
+  driver (via `database/sql`)
 - [go-redis v9](https://github.com/redis/go-redis) Redis/Valkey client
 - [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) **pure-Go**
   SQLite (no cgo → fully static binary) for connection + audit metadata
@@ -144,12 +179,14 @@ image.
 ```
 cmd/server          entrypoint
 internal/config     env config
-internal/crypto     AES-GCM credential encryption
-internal/store      SQLite (connections, audit)
+internal/crypto     AES-GCM credential encryption (versioned, rotatable keys)
+internal/store      metadata store: SQLite (default) or Postgres (HA)
 internal/conn       pooled connection registry (idle-close)
+internal/dbsql      engine-neutral SQL interface shared by postgres + mysql
 internal/postgres   pgx introspection / query / DDL / generators
+internal/mysql      MySQL/MariaDB introspection / query / DDL
 internal/redisdb    go-redis scan / value / command
-internal/auth       OIDC + sessions + RBAC + CSRF
+internal/auth       OIDC + sessions (memory|redis) + RBAC + per-conn grants + CSRF
 internal/web        chi router, JSON API (api.go) + legacy html/template pages,
                     DDL / export / workbench handlers, rate limiter
 internal/web/spa    React + TypeScript + Vite workbench (embedded via go:embed)
@@ -175,12 +212,24 @@ internal/web/spa    React + TypeScript + Vite workbench (embedded via go:embed)
   Valkey, so they survive restarts and scale out.
 
 ### More database connections
-- **MySQL / MariaDB**
 - **MongoDB**
 - **SQLite** (browse/edit local `.db` files)
 - **ClickHouse** and other analytical stores
 
 The connection layer (`internal/conn` registry + per-engine packages like
-`internal/postgres` and `internal/redisdb`) is structured so a new engine is a
-new package plus its API/UI tabs adding databases shouldn't require touching
-the auth, crypto, or workbench shell.
+`internal/postgres`, `internal/mysql`, and `internal/redisdb`, behind the
+`internal/dbsql` interface) is structured so a new engine is a new package plus
+its API/UI tabs adding databases shouldn't require touching the auth, crypto,
+or workbench shell.
+
+---
+
+## License
+
+verix-dbm is licensed under the **GNU Affero General Public License v3.0**
+([LICENSE](LICENSE)). You are free to self-host, study, modify, and redistribute
+it. If you run a modified version as a network service, the AGPL requires you to
+offer that version's source to its users.
+
+For a commercial license without the AGPL's network-copyleft obligation, contact
+the maintainer.
