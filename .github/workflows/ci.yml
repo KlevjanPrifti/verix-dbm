@@ -7,7 +7,7 @@ name: ci
 #  - Run workflow:     release on demand (optionally type an exact version).
 #
 # The bump defaults to a patch; put "#minor" / "#major" in the head commit to bump
-# those, or "#norelease" to skip the release for that push. The binaries only build
+# those, or "#norelease" to skip the release for that push. The release is only cut
 # after CI passes, and never on a pull request.
 #
 # IMPORTANT: for the bot to push the tag, the repo must allow it:
@@ -55,15 +55,6 @@ jobs:
       - name: npm audit (high+)
         run: npm --prefix internal/web/spa audit --audit-level=high
         continue-on-error: true
-
-      # Hand the built SPA to the binaries job so it never rebuilds it. ci runs
-      # on the same commit the tag is cut from, so this dist matches the release.
-      - name: upload SPA dist
-        uses: actions/upload-artifact@v4
-        with:
-          name: spa-dist
-          path: internal/web/spa/dist
-          retention-days: 1
 
       - name: go vet
         run: go vet ./...
@@ -161,51 +152,19 @@ jobs:
           git tag -a "${VERSION}" -m "${VERSION}"
           git push origin "${VERSION}"
 
-  # Cross-compile standalone static binaries and attach them to the GitHub Release.
-  # The binary is pure-Go (CGO_ENABLED=0), so every target cross-compiles natively
-  # on the runner; the SPA is built once and baked in via go:embed.
-  binaries:
+  # Publish the GitHub Release with categorized notes. No binaries are attached;
+  # the release is the tag plus its changelog.
+  release:
     needs: tag
     if: needs.tag.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # create the GitHub Release and upload binaries
+      contents: write # create the GitHub Release
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.tag.outputs.version }}
           fetch-depth: 0 # git-cliff needs full history + tags to build the changelog
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.26'
-          check-latest: true
-
-      # Reuse the SPA dist built by ci instead of rebuilding it here. go:embed
-      # reads internal/web/spa/dist at compile time, so just restore it there.
-      - name: download SPA dist
-        uses: actions/download-artifact@v4
-        with:
-          name: spa-dist
-          path: internal/web/spa/dist
-
-      - name: build release binaries
-        env:
-          CGO_ENABLED: '0'
-          VERSION: ${{ needs.tag.outputs.version }}
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
-            os="${target%/*}"; arch="${target#*/}"
-            name="verix-dbm_${VERSION}_${os}_${arch}"
-            echo "::group::build ${name}"
-            GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "dist/verix-dbm" ./cmd/server
-            tar -C dist -czf "dist/${name}.tar.gz" verix-dbm
-            rm dist/verix-dbm
-            echo "::endgroup::"
-          done
-          (cd dist && sha256sum *.tar.gz > checksums.txt)
-          ls -la dist
 
       # Build categorized notes (Features / Bug fixes / Documentation / Chores)
       # from the conventional-commit history of just this tag. See cliff.toml.
@@ -222,6 +181,5 @@ jobs:
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ needs.tag.outputs.version }}
-          files: dist/*
           body: ${{ steps.changelog.outputs.content }}
           prerelease: ${{ contains(needs.tag.outputs.version, '-') }}
