@@ -279,6 +279,17 @@ table,
   border-bottom: 1px solid rgba(0, 220, 255, 0.18);
 }
 
+// Keep the header pinned to the top while the content scrolls (the sidebar is
+// already fixed). md+ only: the bar is hidden on mobile until the nav opens.
+@media (min-width: 50rem) {
+  .main-header,
+  #main-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+}
+
 .search,
 .aux-nav {
   background-color: transparent !important;
