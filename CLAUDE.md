@@ -34,11 +34,9 @@ The Go binary is fully static (`CGO_ENABLED=0`, pure-Go SQLite via `modernc.org/
 
 ## Architecture
 
-Single static Go binary with a React workbench baked in. One process serves the JSON API, a legacy server-rendered UI, and the embedded SPA.
+Single static Go binary with a React workbench baked in. One process serves the JSON API and the embedded SPA (an earlier `html/template` server-rendered UI has been removed; the `handlers_*.go` files now hold shared helpers, ping probes, and CSV/JSON export, not page templates).
 
-**Two HTTP surfaces, one router.** [internal/web/server.go](internal/web/server.go) wires everything. The same auth/RBAC/CSRF/rate-limit middleware stack protects both:
-- Legacy `html/template` pages (handlers in `handlers_*.go`, templates in `internal/web/templates`) - kept reachable but no longer the landing page.
-- JSON API mounted at `/api` - this is what the React SPA calls. [internal/web/api.go](internal/web/api.go) holds the route table, JSON plumbing, session endpoint, and shared request gates; the handlers are split by domain into `api_connections.go`, `api_sql.go` (Postgres/MySQL/SQLite), `api_redis.go`, `api_mongo.go`, and `api_audit.go`. The two surfaces largely mirror each other (e.g. `s.pgQuery` vs `s.apiQuery`).
+**One UI, one JSON API, one router.** [internal/web/server.go](internal/web/server.go) wires everything; the auth/RBAC/CSRF/rate-limit middleware stack protects the whole authed surface. The JSON API is mounted at `/api` - this is what the React SPA calls. [internal/web/api.go](internal/web/api.go) holds the route table, JSON plumbing, session endpoint, and shared request gates; the handlers are split by domain into `api_connections.go`, `api_sql.go` (Postgres/MySQL/SQLite), `api_redis.go`, `api_mongo.go`, and `api_audit.go`.
 
 The root `/` serves the React SPA; the SPA lives in `internal/web/spa` and is the primary UI. It is an IDE-style workbench (React 18 + TypeScript 5 + Vite 5, Lucide icons, custom HUD theme in [styles/hud.css](internal/web/spa/src/styles/hud.css)): an Explorer tree on the left and a tabbed workspace whose tabs stay mounted so state survives switching. Tab kinds live in [components/tabs](internal/web/spa/src/components/tabs): **grid** (paginated browse with WHERE/ORDER BY, sort, inline TX-mode toggle, queued edits), **console** (SQL with read/write modes and the destructive-statement gate), **redis** (keyspace browser + read-only command console), **doc** (columns/keys/indexes/comments), and **usages** (inbound foreign keys). Other components: TableDesigner (form-backed DDL), ConnModal, DDLModal, AuditModal, GrantsPanel, ContextMenu, Dialog, Toasts. The shell is mobile-aware: the Explorer collapses to an off-canvas drawer and the tab bar pins its drawer toggle.
 
@@ -100,7 +98,7 @@ internal/sqlite     modernc.org/sqlite introspection / query / DDL over a file (
 internal/redisdb    go-redis scan / value / command (non-SQL)
 internal/mongodb    mongo-driver databases / collections / find / command console (non-SQL)
 internal/auth       OIDC + sessions (memory|redis) + RBAC + per-conn grants + CSRF
-internal/web        chi router, JSON API (api.go), legacy html/template pages, security, ratelimit, observ
+internal/web        chi router, JSON API (api_*.go), security headers, SSRF egress guard, ratelimit, observ
 internal/web/spa    React + TypeScript + Vite workbench (embedded via go:embed)
 ```
 

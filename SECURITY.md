@@ -34,6 +34,10 @@ model, the controls in place, and the deployment choices that keep it safe.
 - **CSRF** protects every state-changing request (`X-CSRF-Token` header or a
   `csrf` form field), including logout. Session cookies are `HttpOnly`,
   `SameSite=Lax`, and `Secure` when `DBM_BASE_URL` is `https`.
+- **Login flow hardening.** The OIDC authorization-code flow uses **PKCE** and a
+  per-login **nonce**, and the callback validates `state` against a single-use
+  server-side entry (not just a cookie), so a stolen code can't be redeemed and
+  an injected/replayed ID token is rejected.
 
 ## The database role IS the security boundary
 
@@ -57,14 +61,19 @@ As defense in depth, verix-dbm additionally:
   `CONFIG`, replication (`SLAVEOF`/`REPLICAOF`), `MIGRATE`, and admin/persistence
   commands behind **admin + explicit confirmation**; read-only users are limited
   to a read allowlist.
+- For MongoDB, blocks **server-side JavaScript** (`$where`, `$function`,
+  `$accumulator`) in find filters for non-admins, and gates `drop`,
+  `dropDatabase`, `mapReduce`, `eval`, and other destructive commands behind
+  admin + confirmation; read-only users are limited to a read allowlist.
 
 ## Credentials & secrets
 
 - Saved connection passwords are **AES-256-GCM encrypted at rest** in SQLite
   (`DBM_ENC_KEY`, 32 bytes). The ciphertext is never sent to the browser;
-  "Save as copy" duplicates it server-side. Set a stable `DBM_ENC_KEY` in
-  production  without it an ephemeral key is used and saved passwords become
-  unreadable after a restart.
+  "Save as copy" duplicates it server-side. A stable key is **mandatory in
+  production**: the app refuses to start without `DBM_ENC_KEY`/`DBM_ENC_KEYS`
+  rather than mint a throwaway ephemeral key (which would make saved passwords
+  unreadable after a restart and diverge across HA replicas).
 - **Keys are versioned and rotatable without downtime.** `DBM_ENC_KEYS`
   (`id:key,id:key,...`, first = primary) lets a new key coexist with the old one;
   an admin then runs **Re-encrypt** (`POST /api/admin/reencrypt`) to roll stored
@@ -73,10 +82,13 @@ As defense in depth, verix-dbm additionally:
   material. Every decryption of a stored credential for use is audited
   (`cred_access`). See
   [docs/phases/phase-3-secrets-key-management.md](docs/phases/phase-3-secrets-key-management.md).
-- The **audit log redacts** `PASSWORD '…'` / `IDENTIFIED BY '…'` (SQL) and
-  Redis `AUTH` / `CONFIG SET requirepass` values before persisting, so role
+- The **audit log redacts** secrets before persisting: SQL `PASSWORD '…'` /
+  `IDENTIFIED BY '…'` (including dollar-quoted literals), MongoDB `pwd` /
+  `password` JSON fields, and Redis `AUTH` / `CONFIG SET requirepass`, so role
   passwords you set through the UI don't land in SQLite in cleartext. The same
-  redaction applies to events mirrored to the structured log and to exports.
+  redaction applies to events mirrored to the structured log and to exports, and
+  the **CSV export neutralises spreadsheet formula injection** (cells starting
+  with `=`/`+`/`-`/`@`).
 - **Audit forwarding, export, and retention.** Every audit event is mirrored to
   the structured (JSON) log, so a log shipper forwards it to your SIEM with no
   extra integration. Admins can pull the full log via
@@ -93,22 +105,29 @@ As defense in depth, verix-dbm additionally:
   Options so credentials and data are encrypted and the server is authenticated.
 - Responses carry `X-Frame-Options: DENY` (+ CSP `frame-ancestors 'none'`),
   `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and a CSP.
-  The CSP still allows `script-src 'unsafe-eval'` (the legacy Alpine.js workbench
-  needs it) and inline styles; tightening it further is tracked alongside
-  self-hosting fonts and retiring the legacy pages.
+  `script-src` is `'self'` only (no `'unsafe-eval'`); the remaining relaxation is
+  `style-src 'unsafe-inline'` plus the Google Fonts origins, which self-hosting
+  fonts would remove.
 - **Operational endpoints are unauthenticated by design:** `/healthz` and
   `/readyz` (liveness/readiness) expose no sensitive data, and `/metrics` exposes
   only aggregate counters with bounded-cardinality labels (no SQL, no
   credentials). Set `DBM_METRICS_TOKEN` to require a Bearer token on `/metrics`,
   or restrict these paths at your ingress, when the port is internet-reachable.
 
-## Network exposure (SSRF)  admins are trusted
+## Network exposure (SSRF)
 
-An admin can register a connection pointing at any host:port, and the server
-will connect to it. That's inherent to a database manager, but it means an admin
-can make the server reach internal/cloud-metadata endpoints. Connection CRUD is
-admin-only by design  grant `dbm-admin` only to operators you trust on the
-network, and run the container with egress restricted to the databases it needs.
+An admin can register a connection pointing at any host:port, and the server will
+connect to it - inherent to a database manager. Connection CRUD is admin-only by
+design, so grant `dbm-admin` only to operators you trust on the network.
+
+As a backstop, before dialing any target the server resolves the host and
+**rejects loopback, link-local, and cloud-metadata addresses**
+(`169.254.169.254`, `fe80::/10`, `127.0.0.0/8`, `::1`, …); a hostname is rejected
+if **any** resolved IP is in those ranges. Private RFC1918 ranges stay allowed
+because real databases live there. Set `DBM_ALLOW_LOCAL_TARGETS=true` (or DEV
+mode) to relax this when a target legitimately lives on localhost (e.g. a
+sidecar). This guard is defense in depth - still run the container with egress
+restricted to the databases it needs.
 
 ## Known limitations / roadmap
 

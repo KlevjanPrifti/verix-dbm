@@ -39,8 +39,9 @@ verix-dbm replaces that with a governed front door:
   columns / keys / indexes, with right-click + kebab (`⋯`) context menus on every
   node.
 - **Tabbed workspace** open as many tabs as you like, side by side:
-  - **Grid** paginated, read-only table browse with `WHERE` / `ORDER BY`
-    filters and per-column sort arrows.
+  - **Grid** paginated table browse with `WHERE` / `ORDER BY` filters and
+    per-column sort arrows, plus inline **add row / edit / delete** (auto-commit,
+    or an opt-in transaction mode that queues changes until you commit).
   - **Console (Postgres / MySQL / SQLite)** run SQL with read/write modes, a 30s
     statement timeout, a 1000-row result cap, and a confirmation gate for
     destructive statements (`DROP`/`TRUNCATE`, unguarded `DELETE`/`UPDATE`).
@@ -85,9 +86,14 @@ verix-dbm replaces that with a governed front door:
 - Explorer tree of databases → collections.
 - Document browser with JSON filter / sort / projection and skip-based paging
   (30s timeout, 1000-document cap), plus per-collection index listing.
+- **Create database / collection** and **insert documents** (extended JSON) from
+  the tree and the document view; **drop collection / database** is admin-gated
+  and confirmed. (MongoDB has no DDL: a database and its first collection
+  materialise on the first write.)
 - Command console that runs a JSON command document, with a read-only allowlist
   and an admin + confirmation gate for destructive commands (`drop`,
-  `dropDatabase`, ...).
+  `dropDatabase`, `mapReduce`, ...). Server-side JavaScript (`$where`,
+  `$function`, `$accumulator`) in find filters is blocked for non-admins.
 
 ### Redis / Valkey
 - `SCAN`-based keyspace browser with `MATCH` (prefix-friendly).
@@ -99,23 +105,27 @@ verix-dbm replaces that with a governed front door:
   access is **deny-by-default** (no role → 403). See [SECURITY.md](SECURITY.md).
 - **DEV mode** (auto-login as a local admin) for local hacking opt-in only via
   `DBM_DEV_MODE=true`. In production the app **refuses to start** without OIDC
-  rather than fall back to an open mode.
-- Saved connection passwords **AES-256-GCM encrypted at rest** in SQLite (never
-  sent to the browser); the **audit log redacts** role passwords.
+  **and** without an encryption key, rather than fall back to an open or
+  throwaway-key mode.
+- Saved connection passwords **AES-256-GCM encrypted at rest** with a versioned,
+  rotatable keyring (never sent to the browser); the **audit log redacts** role
+  passwords (SQL, Mongo, Redis) and the CSV export is formula-injection safe.
 - **CSRF** on every mutating request (form posts and the SPA's
   `X-CSRF-Token` header), including logout.
-- **Security headers** (CSP with `frame-ancestors 'none'`, `nosniff`,
-  `no-referrer`, HSTS over TLS) on every response.
-- **Audit log** of all mutating actions, viewable by admins.
-- **In-process rate limiting** on auth endpoints (brute-force / redirect-spam
-  floor).
+- **Security headers** (strict CSP: `script-src 'self'`, `frame-ancestors 'none'`,
+  `nosniff`, `no-referrer`, HSTS over TLS) on every response.
+- **SSRF egress guard**: connection targets resolving to loopback, link-local, or
+  cloud-metadata (`169.254.169.254`) are blocked by default
+  (`DBM_ALLOW_LOCAL_TARGETS` to override for localhost sidecars).
+- **Audit log** of all mutating actions, viewable by admins, CSV/JSONL export.
+- **In-process rate limiting** (bounded) on auth and authenticated endpoints.
 - Lazy, idle-closing connection pools.
 
 ---
 
 ## Technologies used
 
-**Backend (Go 1.25)**
+**Backend (Go 1.26)**
 - [chi](https://github.com/go-chi/chi) HTTP router
 - [pgx v5](https://github.com/jackc/pgx) PostgreSQL driver + introspection
 - [go-sql-driver/mysql](https://github.com/go-sql-driver/mysql) MySQL/MariaDB
@@ -125,9 +135,8 @@ verix-dbm replaces that with a governed front door:
 - [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) **pure-Go**
   SQLite (no cgo → fully static binary) for the SQLite engine + connection/audit metadata
 - [go-oidc](https://github.com/coreos/go-oidc) + `golang.org/x/oauth2` Keycloak
-  OIDC
+  OIDC (authorization-code flow with PKCE + nonce)
 - `crypto/aes` (GCM) credential encryption
-- `html/template` legacy server-rendered pages (the React SPA is the primary UI)
 
 **Frontend (`internal/web/spa`)**
 - [React 18](https://react.dev) + [TypeScript 5](https://www.typescriptlang.org)
@@ -176,9 +185,9 @@ npm install
 npm run dev
 ```
 
-- React workbench: the Vite dev URL it prints (proxies the API to `:8080`).
-- Embedded/built UI + legacy pages: <http://localhost:8080> (the SPA is mounted
-  at <http://localhost:8080/app> once built).
+- React workbench (dev): the Vite dev URL it prints (proxies the API to `:8080`).
+- Embedded/built UI: <http://localhost:8080> (the SPA is served at the root once
+  built, and also at <http://localhost:8080/app>).
 
 To run everything from the single binary, build the SPA first so it gets embedded:
 
@@ -192,11 +201,15 @@ or a Valkey at `127.0.0.1:6379` (username `default`).
 
 ## Configuration
 
-See [.env.example](.env.example). Key vars: `DBM_BASE_URL`, `DBM_ENC_KEY`
-(64 hex chars `openssl rand -hex 32`), the `OIDC_*` set, and the role names
-(`OIDC_ADMIN_ROLE` / `OIDC_WRITE_ROLE` / `OIDC_READ_ROLE`). For local development
+See [.env.example](.env.example) for the full, annotated list. Required in
+production: `DBM_BASE_URL`, `DBM_ENC_KEY` (64 hex chars `openssl rand -hex 32`),
+and the `OIDC_*` set - the app **refuses to start** without them. Common optional
+vars: the role names (`OIDC_ADMIN_ROLE` / `OIDC_WRITE_ROLE` / `OIDC_READ_ROLE`),
+`DBM_SCOPED_ACCESS` (per-connection grants), `DBM_SQLITE_DIR` (enable the SQLite
+engine), `DBM_ALLOW_LOCAL_TARGETS` (relax the SSRF guard for localhost targets),
+and the HA set (`DBM_STORE_DRIVER` / `DBM_SESSION_BACKEND`). For local development
 without Keycloak set `DBM_DEV_MODE=true`. **Read [SECURITY.md](SECURITY.md)
-before deploying** least-privilege DB roles and the deny-by-default model
+before deploying** - least-privilege DB roles and the deny-by-default model
 matter for safe operation.
 
 ## Deploy (Dokploy)
@@ -211,7 +224,26 @@ matter for safe operation.
 
 The [Dockerfile](Dockerfile) builds the SPA, compiles the static Go binary, and
 ships only the binary + an empty `/data` (for SQLite) in a distroless nonroot
-image.
+image. Dokploy builds this image from source on each deploy (the compose files
+use `build:`, not a prebuilt image), so no external registry is required.
+
+## CI & releases
+
+A single GitHub Actions workflow ([.github/workflows/ci.yml](.github/workflows/ci.yml))
+covers both checks and releases:
+
+- **Pull requests / pushes**: build the SPA, `go vet`, `go test`, and
+  `govulncheck`.
+- **Releases**: on a push to `main` (or a manual run, or a pushed `v*` tag) it
+  creates the next semver tag and a GitHub Release with auto-generated notes and
+  cross-compiled static binaries (`linux`/`darwin`, `amd64`/`arm64`).
+
+The bump defaults to a patch; put `#minor` / `#major` in the head commit message
+to bump those, or `#norelease` to skip a release for that push. You can also tag
+by hand: `git tag v1.2.0 && git push origin v1.2.0`.
+
+> For the workflow to push the tag, the repo must allow it:
+> **Settings → Actions → General → Workflow permissions → "Read and write"**.
 
 ## Layout
 
@@ -228,8 +260,8 @@ internal/sqlite     SQLite (file) introspection / query / DDL (pure-Go driver)
 internal/redisdb    go-redis scan / value / command
 internal/mongodb    MongoDB databases / collections / find / command console
 internal/auth       OIDC + sessions (memory|redis) + RBAC + per-conn grants + CSRF
-internal/web        chi router, JSON API (api.go) + legacy html/template pages,
-                    DDL / export / workbench handlers, rate limiter
+internal/web        chi router, JSON API (api_*.go), security headers,
+                    DDL / export / workbench handlers, rate limiter, SSRF guard
 internal/web/spa    React + TypeScript + Vite workbench (embedded via go:embed)
 ```
 
@@ -238,30 +270,28 @@ internal/web/spa    React + TypeScript + Vite workbench (embedded via go:embed)
 ## Roadmap
 
 ### More features
-- **Inline grid editing** edit / insert / delete rows directly in the data grid
-  (today writes go through the SQL/command console or form-backed DDL).
 - **Saved queries library** and query history per connection.
-- **Per-connection ACLs** finer-grained access than the global admin/write/read
-  roles.
+- **Sub-connection scopes** finer-grained access than per-connection grants
+  (per-database / per-schema), and a per-connection `admin` grant.
 - **Full table export** beyond the 1000-row snapshot cap (streamed dump, server-
   side pagination).
 - **Schema diff / migration helpers** built on the existing DDL generators.
 - **Redis editing** type-aware value editors (SET/HSET/LPUSH/…) with the same
-  confirmation gating as Postgres.
-- Self-host fonts (currently Google Fonts `@import`) for a strict CSP.
-- Move sessions out of memory (currently lost on restart) to the shared
-  Valkey, so they survive restarts and scale out.
+  confirmation gating as the SQL engines.
+- Self-host fonts (currently Google Fonts `@import`) to drop the remaining CSP
+  `style-src` / `font-src` allowances.
 
 ### More database connections
-- **MongoDB**
-- **SQLite** (browse/edit local `.db` files)
-- **ClickHouse** and other analytical stores
+- **ClickHouse** and other analytical stores.
+- Any **PostgreSQL-wire** (CockroachDB, Greenplum, Redshift, Yugabyte, …) or
+  **MySQL-wire** database already works via the existing engines - it just needs
+  a row in [dbkinds.ts](internal/web/spa/src/dbkinds.ts).
 
 The connection layer (`internal/conn` registry + per-engine packages like
-`internal/postgres`, `internal/mysql`, and `internal/redisdb`, behind the
-`internal/dbsql` interface) is structured so a new engine is a new package plus
-its API/UI tabs adding databases shouldn't require touching the auth, crypto,
-or workbench shell.
+`internal/postgres`, `internal/mysql`, `internal/sqlite`, `internal/mongodb`, and
+`internal/redisdb`, behind the `internal/dbsql` interface) is structured so a new
+engine is a new package plus its API/UI tabs - adding databases doesn't require
+touching the auth, crypto, or workbench shell.
 
 ---
 
