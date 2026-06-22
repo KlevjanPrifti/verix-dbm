@@ -1,12 +1,38 @@
 name: ci
 
+# One workflow for both CI and releases.
+#  - Pull requests:    run the CI checks only.
+#  - Push to main:     run CI, then auto-create the next tag and release it.
+#  - Push a v* tag:    run CI, then release that tag.
+#  - Run workflow:     release on demand (optionally type an exact version).
+#
+# The bump defaults to a patch; put "#minor" / "#major" in the head commit to bump
+# those, or "#norelease" to skip the release for that push. The image + binaries
+# only build after CI passes, and never on a pull request.
+#
+# IMPORTANT: for the bot to push the tag, the repo must allow it:
+#   Settings -> Actions -> General -> Workflow permissions -> "Read and write".
+# Without that the tag step fails with 403 no matter what this file says.
+
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact version tag, e.g. v1.2.0 (leave blank to auto-bump the patch)'
+        required: false
+
+permissions:
+  contents: write # create the tag + GitHub Release and upload binaries
+  packages: write # push the image to GHCR
 
 jobs:
-  build:
+  # CI: build the SPA, vet, test, and scan. Runs for every trigger and gates the
+  # release jobs (they `needs: ci`).
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,3 +60,183 @@ jobs:
         run: go test ./...
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  # Decide the version for every release trigger and, when needed, create + push
+  # the tag. Skipped on pull requests. Outputs version (vX.Y.Z) and release.
+  tag:
+    needs: ci
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: resolve version
+        id: v
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force >/dev/null 2>&1 || true
+
+          # A tag was pushed directly: build it, create nothing.
+          if [ "$EVENT" = "push" ] && [ "$REF_TYPE" = "tag" ]; then
+            echo "version=$REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "release=true"      >> "$GITHUB_OUTPUT"
+            echo "create=false"      >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$EVENT" = "workflow_dispatch" ] && [ -n "${INPUT_VERSION:-}" ]; then
+            # Manual run with an explicit version.
+            version="$INPUT_VERSION"
+          else
+            # Auto-bump from the latest v* tag (push to main, or a blank dispatch).
+            latest="$(git tag -l 'v*' --sort=-v:refname | head -n1)"
+            if [ -z "$latest" ]; then
+              version="v0.1.0"
+            else
+              msg="$(git log -1 --pretty=%B)"
+              if printf '%s' "$msg" | grep -qiE '#norelease|#skip[- ]?release'; then
+                echo "head commit opted out of a release (#norelease)"
+                echo "version=$latest" >> "$GITHUB_OUTPUT"
+                echo "release=false"   >> "$GITHUB_OUTPUT"
+                echo "create=false"    >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              base="${latest#v}"; base="${base%%-*}"   # strip leading v and any -suffix
+              major="${base%%.*}"; rest="${base#*.}"; minor="${rest%%.*}"; patch="${rest##*.}"
+              if printf '%s' "$msg" | grep -qiE '(^|[^a-z])#major'; then
+                major=$((major + 1)); minor=0; patch=0
+              elif printf '%s' "$msg" | grep -qiE '(^|[^a-z])#minor'; then
+                minor=$((minor + 1)); patch=0
+              else
+                patch=$((patch + 1))
+              fi
+              version="v${major}.${minor}.${patch}"
+            fi
+          fi
+
+          if ! printf '%s' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::computed version '$version' is not semver (expected vX.Y.Z)"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${version}" >/dev/null 2>&1; then
+            echo "::error::tag ${version} already exists"
+            exit 1
+          fi
+          echo "resolved version ${version}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release=true"     >> "$GITHUB_OUTPUT"
+          echo "create=true"      >> "$GITHUB_OUTPUT"
+
+      - name: create and push tag
+        if: steps.v.outputs.create == 'true'
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git tag -a "${VERSION}" -m "${VERSION}"
+          git push origin "${VERSION}"
+
+  # Build and push the multi-arch container image to GHCR (the primary deploy
+  # artifact: the Dockerfile already produces a static, distroless image).
+  image:
+    needs: tag
+    if: needs.tag.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag.outputs.version }}
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.tag.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.tag.outputs.version }}
+            type=raw,value=latest,enable=${{ !contains(needs.tag.outputs.version, '-') }}
+
+      - name: build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Cross-compile standalone static binaries and attach them to the GitHub Release.
+  # The binary is pure-Go (CGO_ENABLED=0), so every target cross-compiles natively
+  # on the runner; the SPA is built once and baked in via go:embed.
+  binaries:
+    needs: tag
+    if: needs.tag.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag.outputs.version }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: build SPA (embedded, platform-independent)
+        run: |
+          npm --prefix internal/web/spa ci
+          npm --prefix internal/web/spa run build
+
+      - name: build release binaries
+        env:
+          CGO_ENABLED: '0'
+          VERSION: ${{ needs.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            os="${target%/*}"; arch="${target#*/}"
+            name="verix-dbm_${VERSION}_${os}_${arch}"
+            echo "::group::build ${name}"
+            GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "dist/verix-dbm" ./cmd/server
+            tar -C dist -czf "dist/${name}.tar.gz" verix-dbm
+            rm dist/verix-dbm
+            echo "::endgroup::"
+          done
+          (cd dist && sha256sum *.tar.gz > checksums.txt)
+          ls -la dist
+
+      - name: create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.tag.outputs.version }}
+          files: dist/*
+          generate_release_notes: true
+          prerelease: ${{ contains(needs.tag.outputs.version, '-') }}
