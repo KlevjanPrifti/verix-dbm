@@ -39,6 +39,7 @@ verix-dbm replaces that with a governed front door:
 **One workbench, every engine.** SQL, document, and key-value stores all browse
 through the same Explorer tree, tabs, and console:
 
+| | |
 |---|---|
 | ![Multi-engine explorer](screenshots/main_explorer.png) | ![Add a data source](screenshots/add_data_sources.png) |
 | Postgres, MySQL/MariaDB, MongoDB and Redis side by side in one tree. | Paste a URL or fill the form; test before saving. Passwords are encrypted at rest. |
