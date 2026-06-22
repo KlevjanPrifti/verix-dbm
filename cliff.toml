@@ -1,0 +1,47 @@
+# git-cliff configuration: turn conventional-commit history into a
+# categorized changelog (Features / Bug fixes / Documentation / Chores),
+# matching the release-notes layout we want on each GitHub Release.
+# Docs: https://git-cliff.org/docs/configuration
+
+[changelog]
+# No header: the GitHub Release already has the tag as its title.
+header = ""
+# One section per release. {{ body }} is rendered from the [git] groups below.
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+{% for commit in commits %}
+- {{ commit.message | upper_first }}{% if commit.id %} ({{ commit.id | truncate(length=7, end="") }}){% endif %}
+{%- endfor %}
+{% endfor %}
+"""
+trim = true
+footer = ""
+
+[git]
+conventional_commits = true
+# Keep non-conventional commits out of the notes instead of dumping them raw.
+filter_unconventional = true
+split_commits = false
+# Strip the conventional-commit type prefix from the rendered line.
+commit_preprocessors = []
+protect_breaking_commits = false
+filter_commits = true
+tag_pattern = "v[0-9]*"
+topo_order = false
+sort_commits = "newest"
+
+# Map commit type -> changelog section. Anything not listed is skipped.
+commit_parsers = [
+  { message = "^feat", group = "Features" },
+  { message = "^fix", group = "Bug fixes" },
+  { message = "^docs", group = "Documentation" },
+  { message = "^perf", group = "Performance" },
+  { message = "^refactor", group = "Refactor" },
+  { message = "^chore", group = "Chores" },
+  { message = "^ci", group = "Chores" },
+  { message = "^build", group = "Chores" },
+  { message = "^test", group = "Chores" },
+  { message = "^revert", group = "Reverts" },
+  { message = ".*", skip = true },
+]
