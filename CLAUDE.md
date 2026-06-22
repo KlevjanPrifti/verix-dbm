@@ -75,15 +75,21 @@ internal/config     env config
 internal/crypto     AES-GCM credential encryption
 internal/store      SQLite (connections, audit)
 internal/conn       pooled connection registry (idle-close)
-internal/postgres   pgx introspection / query / DDL / generators
-internal/redisdb    go-redis scan / value / command
+internal/dbsql      engine-neutral SQL interface (Dialect + Engine) shared by the SQL engines
+internal/postgres   pgx introspection / query / DDL / generators (dbsql.Engine)
+internal/mysql      go-sql-driver introspection / query / DDL (dbsql.Engine)
+internal/sqlite     modernc.org/sqlite introspection / query / DDL over a file (dbsql.Engine)
+internal/redisdb    go-redis scan / value / command (non-SQL)
+internal/mongodb    mongo-driver databases / collections / find / command console (non-SQL)
 internal/auth       OIDC + sessions (memory|redis) + RBAC + per-conn grants + CSRF
 internal/web        chi router, JSON API (api.go), legacy html/template pages, security, ratelimit, observ
 internal/web/spa    React + TypeScript + Vite workbench (embedded via go:embed)
 ```
 
-Key Go deps: chi v5 (router), pgx v5 (Postgres), go-redis v9, coreos/go-oidc v3 + x/oauth2 (auth), modernc.org/sqlite (pure-Go SQLite), prometheus/client_golang (metrics).
+Key Go deps: chi v5 (router), pgx v5 (Postgres), go-redis v9, go.mongodb.org/mongo-driver (MongoDB), coreos/go-oidc v3 + x/oauth2 (auth), modernc.org/sqlite (pure-Go SQLite), prometheus/client_golang (metrics).
 
-Engines today are **PostgreSQL** (pgx), **MySQL/MariaDB** (go-sql-driver, behind the engine-neutral `internal/dbsql` interface shared with Postgres), and **Redis/Valkey** (go-redis); no others. Postgres can also serve as the *metadata* store backend for HA, separate from the databases users connect to.
+Engines today are **PostgreSQL** (pgx), **MySQL/MariaDB** (go-sql-driver), and **SQLite** (modernc.org/sqlite) - all three behind the engine-neutral `internal/dbsql` interface so they share the grid/console/doc/usages workbench - plus two non-SQL verticals with their own tabs and `/api/c/{id}/{redis,mongo}/*` endpoints: **Redis/Valkey** (go-redis) and **MongoDB** (mongo-driver). Postgres can also serve as the *metadata* store backend for HA, separate from the databases users connect to.
+
+SQLite targets are a server-side **file path** (stored in the connection's `dbname`), so they are gated by the `DBM_SQLITE_DIR` allowlist: a SQLite connection opens only files resolving under that directory, and the engine is disabled (fail closed) when the var is unset.
 
 Configuration is via env vars - see [.env.example](.env.example). Required in production: `DBM_ENC_KEY` (64 hex chars) or `DBM_ENC_KEYS`, the `OIDC_*` set, and `DBM_BASE_URL`. Optional subsystems are gated by env: HA (`DBM_STORE_DRIVER`/`DBM_STORE_DSN`, `DBM_SESSION_BACKEND`/`DBM_SESSION_REDIS_URL`, `DBM_PG_POOL_MAX_CONNS`), access scoping (`DBM_SCOPED_ACCESS`, `DBM_OPEN_READ`), and observability (`DBM_LOG_*`, `DBM_METRICS_TOKEN`, `DBM_AUDIT_RETENTION_DAYS`).

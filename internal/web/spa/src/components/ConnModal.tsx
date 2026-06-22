@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type ConnInput } from '../api'
 import { useApp } from '../appctx'
 import { X, Check } from '../icons'
-import { DB_KINDS, DEFAULT_KIND, defaultPort, dbKindByScheme } from '../dbkinds'
+import { DB_KINDS, DEFAULT_KIND, defaultPort, dbKindByScheme, isFileBased } from '../dbkinds'
 import GrantsPanel from './GrantsPanel'
 
 type Form = ConnInput & { port: number }
@@ -48,6 +48,7 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
   const [test, setTest] = useState<{ ok: boolean; msg: string } | null>(null)
   const [err, setErr] = useState('')
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF(p => ({ ...p, [k]: v }))
+  const fileBased = isFileBased(f.kind) // SQLite: a server file path, no host/port/creds
 
   useEffect(() => {
     if (mode === 'edit' && editId != null) {
@@ -107,8 +108,10 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
         <form className="modal-form" onSubmit={save(false)}>
           <div className="modal-body">
           {err && <div className="alert error code">{err}</div>}
+          {!fileBased && (
           <div className="mrow"><label className="hud-label">URL <span className="dim">(paste to autofill the fields below)</span></label>
             <input className="hud-input code" placeholder="postgresql://user:pass@host:5432/dbname" onChange={e => applyUrl(e.target.value)} /></div>
+          )}
           <div className="mrow"><label className="hud-label">Name</label>
             <input className="hud-input" required value={f.name} onChange={e => set('name', e.target.value)} placeholder="postgres@localhost" /></div>
           <div className="mrow"><label className="hud-label">Driver</label>
@@ -117,6 +120,10 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
               {DB_KINDS.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
             </select>
           </div>
+          {fileBased ? (
+            <div className="mrow"><label className="hud-label">File path <span className="dim">(server path under DBM_SQLITE_DIR)</span></label>
+              <input className="hud-input code" required value={f.dbname} onChange={e => set('dbname', e.target.value)} placeholder="/data/sqlite/app.db" /></div>
+          ) : (<>
           <div className="mrow2">
             <div className="mcol"><label className="hud-label">Host</label>
               <input className="hud-input" required value={f.host} onChange={e => set('host', e.target.value)} placeholder="localhost" /></div>
@@ -134,6 +141,7 @@ export default function ConnModal({ mode, editId, initialKind, onClose, onSaved 
             <input className="hud-input" value={f.dbname} onChange={e => set('dbname', e.target.value)} placeholder="postgres" /></div>
           <div className="mrow"><label className="hud-label">Options</label>
             <input className="hud-input" value={f.options} onChange={e => set('options', e.target.value)} placeholder="sslmode=verify-full (default: prefer)" /></div>
+          </>)}
           <label className="check"><input type="checkbox" checked={f.readOnly} onChange={e => set('readOnly', e.target.checked)} /> <span className="hud-label">Read-only</span></label>
           {mode === 'edit' && editId != null && app.caps.admin && app.caps.scopedAccess && (
             <GrantsPanel connId={editId} />

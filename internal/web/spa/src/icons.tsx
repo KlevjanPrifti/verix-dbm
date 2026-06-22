@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import {
   SiPostgresql, SiCockroachlabs, SiMysql, SiMariadb, SiRedis, SiTimescale,
+  SiSqlite, SiMongodb,
 } from 'react-icons/si'
 import { FaAws } from 'react-icons/fa'
 import { DB_KINDS } from './dbkinds'
@@ -35,6 +36,8 @@ const BRAND: Record<string, IconCmp> = {
   timescale: SiTimescale,
   mysql: SiMysql,
   mariadb: SiMariadb,
+  sqlite: SiSqlite,
+  mongodb: SiMongodb,
   redis: SiRedis,
   redshift: FaAws,
   aurorapg: FaAws,

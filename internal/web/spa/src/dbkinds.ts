@@ -12,7 +12,7 @@
 // support (a new internal/* package implementing dbsql.Engine + a registry
 // dispatch entry, mirrored by internal/dbsql.kindFamily on the Go side).
 
-export type Engine = 'postgres' | 'mysql' | 'redis'
+export type Engine = 'postgres' | 'mysql' | 'sqlite' | 'mongodb' | 'redis'
 
 export interface DbKind {
   id: string          // value stored in Connection.kind
@@ -20,7 +20,12 @@ export interface DbKind {
   engine: Engine      // which backend path serves this kind
   defaultPort: number // pre-filled in the connection form
   schemes: string[]   // URL protocol aliases that resolve to this kind
+  fileBased?: boolean // true for engines addressed by a file path, not host/port
 }
+
+// fileBased engines (SQLite) store a server-side file path in the Database field
+// and have no host/port/credentials; the connection form adapts accordingly.
+export const isFileBased = (id: string): boolean => !!BY_ID.get(id)?.fileBased
 
 // Order here is the order shown in the pickers.
 export const DB_KINDS: DbKind[] = [
@@ -33,6 +38,8 @@ export const DB_KINDS: DbKind[] = [
   { id: 'aurorapg',  label: 'Aurora / RDS Postgres', engine: 'postgres', defaultPort: 5432, schemes: ['aurorapg'] },
   { id: 'mysql',     label: 'MySQL',               engine: 'mysql',    defaultPort: 3306,  schemes: ['mysql'] },
   { id: 'mariadb',   label: 'MariaDB',             engine: 'mysql',    defaultPort: 3306,  schemes: ['mariadb', 'maria'] },
+  { id: 'sqlite',    label: 'SQLite',              engine: 'sqlite',   defaultPort: 0,     schemes: ['sqlite', 'file'], fileBased: true },
+  { id: 'mongodb',   label: 'MongoDB',             engine: 'mongodb',  defaultPort: 27017, schemes: ['mongodb', 'mongodb+srv', 'mongo'] },
   { id: 'redis',     label: 'Redis / Valkey',      engine: 'redis',    defaultPort: 6379,  schemes: ['redis', 'rediss', 'valkey'] },
 ]
 

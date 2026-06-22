@@ -10,6 +10,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"verix-dbm/internal/dbsql"
 	"verix-dbm/internal/store"
@@ -64,6 +66,39 @@ func pingMySQL(ctx context.Context, c store.Connection, pw string) error {
 	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	return db.PingContext(cctx)
+}
+
+// pingSQLite verifies a SQLite target file is reachable (and inside the
+// DBM_SQLITE_DIR allowlist) for a candidate connection. modernc.org/sqlite
+// creates the file if it does not exist yet, which is the expected way to start
+// a fresh database; the allowlist still fences where that can happen.
+func pingSQLite(ctx context.Context, c store.Connection, allowDir string) error {
+	path, err := store.ResolveSQLitePath(allowDir, c.DBName)
+	if err != nil {
+		return err
+	}
+	db, err := sql.Open("sqlite", store.SQLiteDSN(path))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return db.PingContext(cctx)
+}
+
+// pingMongo verifies MongoDB connectivity for a candidate connection.
+func pingMongo(ctx context.Context, c store.Connection, pw string) error {
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	client, err := mongo.Connect(cctx, options.Client().ApplyURI(c.DSNMongo(pw)).
+		SetServerSelectionTimeout(5*time.Second))
+	if err != nil {
+		return err
+	}
+	defer client.Disconnect(context.Background())
+	return client.Ping(cctx, nil)
 }
 
 // pingRedis verifies Redis/Valkey connectivity for a candidate connection.

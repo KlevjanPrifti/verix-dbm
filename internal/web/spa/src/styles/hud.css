@@ -548,6 +548,17 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .redis-keys { padding: .6rem; height: 100%; min-height: 0; overflow: auto; }
 .redis-main { min-width: 0; height: 100%; display: flex; flex-direction: column; gap: 1rem; }
 
+/* MongoDB document browser (reuses the grid-pane shell) */
+.mongo-docs { display: flex; flex-direction: column; gap: .6rem; padding: .6rem; overflow: auto; }
+.mongo-doc { position: relative; padding: .5rem .6rem; }
+.mongo-doc pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.mongo-doc-copy { position: absolute; top: .35rem; right: .35rem; opacity: 0; }
+.mongo-doc:hover .mongo-doc-copy { opacity: .8; }
+.mongo-console { margin: 0 .6rem .6rem; padding: .6rem .8rem; }
+.mongo-console > summary { cursor: pointer; }
+.mongo-console p { margin: .4rem 0; }
+.mongo-cmd-input { width: 100%; resize: vertical; }
+
 /* Connection modal */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,5,12,0.7); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .modal { width: min(620px, 92vw); max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; background: var(--panel); }

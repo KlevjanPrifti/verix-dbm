@@ -5,6 +5,7 @@
 import type {
   Me, Connection, ExplorerData, Column, Index, Key, GridResponse, QueryResponse,
   DocResponse, UsagesResponse, RedisKeysResponse, RedisValue, RedisCmdResponse,
+  MongoDocsResponse, MongoIndex, MongoCmdResponse,
   AuditRow, DDLPrefill, Role, Grant, GrantLevel,
 } from './types'
 
@@ -117,6 +118,13 @@ export const api = {
     get<{ value: RedisValue }>(`/api/c/${id}/redis/value${qs({ key })}`),
   redisCmd: (id: number, cmd: string, confirm = false) =>
     req<RedisCmdResponse>('POST', `/api/c/${id}/redis/cmd`, { cmd, confirm }),
+
+  mongoDocs: (id: number, p: { db: string; coll: string; filter?: string; sort?: string; projection?: string; page?: number; size?: number }) =>
+    get<MongoDocsResponse>(`/api/c/${id}/mongo/docs${qs(p)}`),
+  mongoIndexes: (id: number, db: string, coll: string) =>
+    get<{ indexes: MongoIndex[] | null }>(`/api/c/${id}/mongo/indexes${qs({ db, coll })}`),
+  mongoCmd: (id: number, db: string, cmd: string, confirm = false) =>
+    req<MongoCmdResponse>('POST', `/api/c/${id}/mongo/cmd`, { db, cmd, confirm }),
 
   audit: () => get<{ rows: AuditRow[] }>('/api/audit'),
   // Full audit log download (admin) for SIEM/forensics. jsonl or csv.

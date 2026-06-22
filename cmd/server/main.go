@@ -50,7 +50,7 @@ func main() {
 	}
 	defer st.Close()
 
-	reg := conn.NewRegistry(box, cfg.PGPoolMaxConns)
+	reg := conn.NewRegistry(box, cfg.PGPoolMaxConns, cfg.SQLiteDir)
 
 	ctx := context.Background()
 	a, err := auth.New(ctx, cfg)

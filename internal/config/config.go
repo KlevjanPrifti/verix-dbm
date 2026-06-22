@@ -11,6 +11,11 @@ import (
 type Config struct {
 	Addr       string // HTTP bind address, e.g. ":8080"
 	SQLitePath string // path to the metadata DB file
+	// SQLiteDir is the directory SQLite *target* database files must live under
+	// (DBM_SQLITE_DIR). Opening a SQLite connection reads a file on the server's
+	// filesystem, so this allowlist fences which files are reachable. Empty
+	// disables the SQLite engine entirely (fail closed): SQLite is opt-in.
+	SQLiteDir string
 	EncKey     string // hex/base64 32-byte key for credential encryption ("" => ephemeral)
 	// EncKeys is the multi-key form for rotation: "id:key,id:key,..." with the
 	// first entry the primary (new writes) and the rest retained for decryption.
@@ -82,6 +87,7 @@ func Load() (*Config, error) {
 	c := &Config{
 		Addr:               env("DBM_ADDR", ":8080"),
 		SQLitePath:         env("DBM_SQLITE_PATH", "./data/verix-dbm.db"),
+		SQLiteDir:          os.Getenv("DBM_SQLITE_DIR"),
 		EncKey:             os.Getenv("DBM_ENC_KEY"),
 		EncKeys:            os.Getenv("DBM_ENC_KEYS"),
 		BaseURL:            env("DBM_BASE_URL", "http://localhost:8080"),

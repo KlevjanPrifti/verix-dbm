@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -521,4 +522,74 @@ func (c Connection) DSNMySQL(password string) string {
 		}
 	}
 	return cfg.FormatDSN()
+}
+
+// DSNMongo builds a mongodb:// connection URI for a MongoDB target. Credentials,
+// host, and database are URL-encoded so special characters can't break parsing
+// or inject parameters; Options is passed through verbatim as the query string
+// (e.g. "replicaSet=rs0&tls=true&authSource=admin").
+func (c Connection) DSNMongo(password string) string {
+	u := url.URL{
+		Scheme: "mongodb",
+		Host:   fmt.Sprintf("%s:%d", c.Host, c.Port),
+		Path:   "/" + c.DBName,
+	}
+	if c.Username != "" {
+		u.User = url.UserPassword(c.Username, password)
+	}
+	if c.Options != "" {
+		u.RawQuery = c.Options
+	}
+	return u.String()
+}
+
+// SQLiteDSN builds a modernc.org/sqlite DSN (database/sql driver "sqlite") for a
+// target database file. The path must already be validated with
+// ResolveSQLitePath. Safety pragmas mirror the metadata store; read-only
+// connections rely on the per-call query_only guard in internal/sqlite, so no
+// connection-level read-only flag is set here.
+func SQLiteDSN(path string) string {
+	return path + "?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+}
+
+// ResolveSQLitePath validates a user-supplied SQLite file path against the
+// configured allowlist directory (DBM_SQLITE_DIR). Opening a SQLite connection
+// reads a file on the server's filesystem, so the path must resolve to a
+// location inside allowDir; ".." traversal and symlinks that escape the
+// directory are rejected. An empty allowDir disables SQLite entirely (fail
+// closed). It returns the cleaned, symlink-resolved absolute path.
+func ResolveSQLitePath(allowDir, p string) (string, error) {
+	if strings.TrimSpace(allowDir) == "" {
+		return "", fmt.Errorf("sqlite connections are disabled: set DBM_SQLITE_DIR to a directory of allowed database files")
+	}
+	if strings.TrimSpace(p) == "" {
+		return "", fmt.Errorf("sqlite file path is required")
+	}
+	root, err := filepath.Abs(allowDir)
+	if err != nil {
+		return "", err
+	}
+	// Resolve symlinks on the allow-dir so containment compares real paths. The
+	// directory must exist for SQLite to be usable.
+	if r, err := filepath.EvalSymlinks(root); err == nil {
+		root = r
+	} else {
+		return "", fmt.Errorf("DBM_SQLITE_DIR %q is not accessible: %w", allowDir, err)
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", err
+	}
+	// Resolve symlinks on the target when it exists so a symlink inside the
+	// allow-dir can't point outside it. A not-yet-created file falls back to its
+	// cleaned absolute path.
+	if r, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = r
+	}
+	abs = filepath.Clean(abs)
+	rel, err := filepath.Rel(root, abs)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("sqlite path %q is outside the allowed directory (DBM_SQLITE_DIR)", p)
+	}
+	return abs, nil
 }

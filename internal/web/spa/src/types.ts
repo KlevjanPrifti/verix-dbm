@@ -41,6 +41,31 @@ export interface Schema {
 export interface ExplorerData {
   kind: string
   schemas?: Schema[] | null
+  databases?: MongoDatabase[] | null // mongodb engine
+  error?: string
+}
+
+export interface MongoDatabase {
+  Name: string
+  Collections: string[] | null
+}
+
+export interface MongoIndex {
+  Name: string
+  Keys: string
+  Unique: boolean
+}
+
+export interface MongoDocsResponse {
+  docs: string[] | null
+  hasMore: boolean
+  page: number
+}
+
+export interface MongoCmdResponse {
+  out?: string
+  needConfirm?: boolean
+  cmd?: string
   error?: string
 }
 

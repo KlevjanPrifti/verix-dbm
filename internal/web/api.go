@@ -18,6 +18,7 @@ import (
 
 	"verix-dbm/internal/auth"
 	"verix-dbm/internal/dbsql"
+	"verix-dbm/internal/mongodb"
 	"verix-dbm/internal/redisdb"
 	"verix-dbm/internal/store"
 )
@@ -66,6 +67,10 @@ func (s *Server) mountAPI(r chi.Router) {
 	r.Get("/c/{id}/redis/keys", s.apiRedisKeys)
 	r.Get("/c/{id}/redis/value", s.apiRedisValue)
 	r.Post("/c/{id}/redis/cmd", s.apiRedisCmd)
+
+	r.Get("/c/{id}/mongo/docs", s.apiMongoDocs)
+	r.Get("/c/{id}/mongo/indexes", s.apiMongoIndexes)
+	r.Post("/c/{id}/mongo/cmd", s.apiMongoCmd)
 
 	r.Get("/audit", s.apiAudit)
 	r.Get("/audit/export", s.apiAuditExport)
@@ -406,6 +411,10 @@ func (s *Server) apiTestConnection(w http.ResponseWriter, r *http.Request) {
 		err = pingRedis(ctx, c, in.Password)
 	case dbsql.FamilyMySQL:
 		err = pingMySQL(ctx, c, in.Password)
+	case dbsql.FamilySQLite:
+		err = pingSQLite(ctx, c, s.cfg.SQLiteDir)
+	case dbsql.FamilyMongo:
+		err = pingMongo(ctx, c, in.Password)
 	default:
 		err = pingPG(ctx, c, in.Password)
 	}
@@ -427,6 +436,20 @@ func (s *Server) apiExplorer(w http.ResponseWriter, r *http.Request) {
 	engine := c.Engine()
 	if engine == dbsql.FamilyRedis {
 		writeJSON(w, http.StatusOK, map[string]any{"kind": "redis"})
+		return
+	}
+	if engine == dbsql.FamilyMongo {
+		client, err := s.reg.Mongo(r.Context(), c)
+		if err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"kind": "mongodb", "error": "connect: " + err.Error()})
+			return
+		}
+		dbs, err := mongodb.Databases(r.Context(), client)
+		resp := map[string]any{"kind": "mongodb", "databases": dbs}
+		if err != nil {
+			resp["error"] = err.Error()
+		}
+		writeJSON(w, http.StatusOK, resp)
 		return
 	}
 	eng, err := s.reg.Engine(r.Context(), c)

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { useApp, type NodePayload, type TabView } from '../appctx'
-import type { Column, Connection, Index, Key, Role, Schema } from '../types'
+import type { Column, Connection, Index, Key, MongoDatabase, Role, Schema } from '../types'
 import { Ico, nameColor, Plus, Terminal, Trash2, MoreHorizontal, ChevronRight } from '../icons'
 import { DB_KINDS } from '../dbkinds'
 
@@ -54,7 +54,7 @@ function NewSourceMenu() {
 
 function ConnNode({ conn }: { conn: Connection }) {
   const app = useApp()
-  const [data, setData] = useState<{ kind: string; schemas?: Schema[] | null; error?: string } | null>(null)
+  const [data, setData] = useState<{ kind: string; schemas?: Schema[] | null; databases?: MongoDatabase[] | null; error?: string } | null>(null)
   const [openOnce, setOpenOnce] = useState(false)
   const token = app.refreshToken(conn.id)
   const ref = useRef<HTMLDetailsElement>(null)
@@ -111,6 +111,8 @@ function ConnNode({ conn }: { conn: Connection }) {
           : data.error ? <div className="tree-err code">{data.error}</div>
           : data.kind === 'redis'
             ? <div className="tree-row leaf" onClick={openConsole}><Ico name="keyspace" /><span className="tree-name">keyspace</span></div>
+          : data.kind === 'mongodb'
+            ? <MongoTree connId={conn.id} databases={data.databases} />
             : <><SchemaList connId={conn.id} schemas={data.schemas} />{app.caps.admin && <RolesNode connId={conn.id} />}</>}
       </div>
     </details>
@@ -120,6 +122,45 @@ function ConnNode({ conn }: { conn: Connection }) {
 function SchemaList({ connId, schemas }: { connId: number; schemas?: Schema[] | null }) {
   if (!schemas || schemas.length === 0) return <div className="tree-empty dim">no user schemas</div>
   return <>{schemas.map(s => <SchemaNode key={s.Name} connId={connId} schema={s} defaultOpen={schemas.length === 1} />)}</>
+}
+
+// ── MongoDB tree: databases → collections ──
+
+function MongoTree({ connId, databases }: { connId: number; databases?: MongoDatabase[] | null }) {
+  if (!databases || databases.length === 0) return <div className="tree-empty dim">no databases</div>
+  return <>{databases.map(d => <MongoDbNode key={d.Name} connId={connId} db={d} defaultOpen={databases.length === 1} />)}</>
+}
+
+function MongoDbNode({ connId, db, defaultOpen }: { connId: number; db: MongoDatabase; defaultOpen: boolean }) {
+  const colls = db.Collections || []
+  return (
+    <details className="tree-node" open={defaultOpen}>
+      <summary className="tree-row schema-row">
+        <Caret /><Ico name="schema" /><span className="tree-name">{db.Name}</span>
+        <span className="count">{colls.length}</span>
+      </summary>
+      <div className="node-children">
+        {colls.length === 0 ? <div className="tree-empty dim">no collections</div>
+          : colls.map(c => <MongoCollNode key={c} connId={connId} db={db.Name} coll={c} />)}
+      </div>
+    </details>
+  )
+}
+
+function MongoCollNode({ connId, db, coll }: { connId: number; db: string; coll: string }) {
+  const app = useApp()
+  const av = app.activeView
+  const active = !!av && av.type === 'mongo' && av.connId === connId && av.db === db && av.coll === coll
+  const open = () => app.openTab({
+    key: `mongo:${connId}:${db}.${coll}`, title: `${db}.${coll}`, icon: 'grid',
+    view: { type: 'mongo', connId, db, coll },
+  })
+  return (
+    <div className={`tree-row leaf table-row${active ? ' active' : ''}`}>
+      <Ico name="table" />
+      <span className="tree-name table-name" title="click to browse documents" onClick={open}>{coll}</span>
+    </div>
+  )
 }
 
 function SchemaNode({ connId, schema, defaultOpen }: { connId: number; schema: Schema; defaultOpen: boolean }) {

@@ -4,6 +4,7 @@ import { Copy, PanelLeft, Table2, Terminal, X } from '../icons'
 import GridTab from './tabs/GridTab'
 import ConsoleTab from './tabs/ConsoleTab'
 import RedisTab from './tabs/RedisTab'
+import MongoTab from './tabs/MongoTab'
 import DocTab from './tabs/DocTab'
 import UsagesTab from './tabs/UsagesTab'
 
@@ -143,6 +144,7 @@ function TabContent({ tab }: { tab: TabDef }) {
       return c?.kind === 'redis' ? <RedisTab connId={v.connId} /> : <ConsoleTab connId={v.connId} initialSql={v.sql} schema={v.schema} />
     }
     case 'redis': return <RedisTab connId={v.connId} />
+    case 'mongo': return <MongoTab connId={v.connId} db={v.db} coll={v.coll} />
     case 'doc': return <DocTab connId={v.connId} schema={v.schema} table={v.table} />
     case 'usages': return <UsagesTab connId={v.connId} schema={v.schema} table={v.table} />
   }

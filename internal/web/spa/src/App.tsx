@@ -138,12 +138,14 @@ export default function App() {
   }), [me, conns, activeView, connById, openTab, closeTab, copy, notify, confirm, prompt, refreshConn, refreshTokens, reloadConns])
 
   // Tint the HUD to match the active tab's connection engine
-  // (cyan pg / amber mysql / emerald redis).
+  // (cyan pg / amber mysql / violet sqlite / emerald redis+mongo).
   useEffect(() => {
     const t = tabs.find(x => x.key === active)
     const c = t ? conns.find(x => x.id === ('connId' in t.view ? t.view.connId : -1)) : undefined
     const engine = c ? kindEngine(c.kind) : 'postgres'
-    document.documentElement.dataset.accent = engine === 'redis' ? 'emerald' : engine === 'mysql' ? 'amber' : 'cyan'
+    document.documentElement.dataset.accent =
+      engine === 'redis' || engine === 'mongodb' ? 'emerald'
+        : engine === 'mysql' ? 'amber' : engine === 'sqlite' ? 'violet' : 'cyan'
   }, [active, tabs, conns])
 
   if (!me) return <div className="boot dim" style={{ padding: '2rem' }}>loading…</div>

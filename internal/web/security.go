@@ -11,6 +11,7 @@ import (
 	"verix-dbm/internal/dbsql"
 	"verix-dbm/internal/mysql"
 	"verix-dbm/internal/postgres"
+	"verix-dbm/internal/sqlite"
 )
 
 // serverSideBlocked reports whether the given SQL fragments (a console statement,
@@ -27,8 +28,11 @@ func serverSideBlocked(u auth.User, kind string, fragments ...string) bool {
 		return false
 	}
 	joined := strings.Join(fragments, "\n")
-	if dbsql.Family(kind) == dbsql.FamilyMySQL {
+	switch dbsql.Family(kind) {
+	case dbsql.FamilyMySQL:
 		return mysql.IsServerSideExec(joined)
+	case dbsql.FamilySQLite:
+		return sqlite.IsServerSideExec(joined)
 	}
 	return postgres.IsServerSideExec(joined)
 }

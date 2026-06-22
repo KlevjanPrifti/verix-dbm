@@ -242,15 +242,26 @@ const (
 	FamilyPostgres = "postgres"
 	FamilyMySQL    = "mysql"
 	FamilyRedis    = "redis"
+	FamilySQLite   = "sqlite"
+	FamilyMongo    = "mongodb"
 )
 
 var kindFamily = map[string]string{
 	// PostgreSQL-wire kinds all share the Postgres engine.
-	"postgres": FamilyPostgres, "cockroach": FamilyPostgres, "greenplum": FamilyPostgres,
-	"redshift": FamilyPostgres, "yugabyte": FamilyPostgres, "timescale": FamilyPostgres,
+	"postgres": FamilyPostgres, 
+	"cockroach": FamilyPostgres, 
+	"greenplum": FamilyPostgres,
+	"redshift": FamilyPostgres, 
+	"yugabyte": FamilyPostgres, 
+	"timescale": FamilyPostgres,
 	"aurorapg": FamilyPostgres,
 	// MySQL-wire kinds share the MySQL engine.
-	"mysql": FamilyMySQL, "mariadb": FamilyMySQL,
+	"mysql": FamilyMySQL, 
+	"mariadb": FamilyMySQL,
+	// Embedded file engine.
+	"sqlite": FamilySQLite,
+	// Document store (its own non-SQL vertical, like Redis).
+	"mongodb": FamilyMongo,
 	// Key-value.
 	"redis": FamilyRedis,
 }

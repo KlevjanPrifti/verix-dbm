@@ -13,11 +13,15 @@ import (
 	_ "github.com/go-sql-driver/mysql" // database/sql driver "mysql" (MySQL/MariaDB)
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	_ "modernc.org/sqlite" // database/sql driver "sqlite" (embedded file engine)
 
 	"verix-dbm/internal/crypto"
 	"verix-dbm/internal/dbsql"
 	"verix-dbm/internal/mysql"
 	"verix-dbm/internal/postgres"
+	"verix-dbm/internal/sqlite"
 	"verix-dbm/internal/store"
 )
 
@@ -33,18 +37,31 @@ type mysqlEntry struct {
 	lastUsed time.Time
 }
 
+type sqliteEntry struct {
+	db       *sql.DB
+	lastUsed time.Time
+}
+
 type redisEntry struct {
 	client   *redis.Client
+	lastUsed time.Time
+}
+
+type mongoEntry struct {
+	client   *mongo.Client
 	lastUsed time.Time
 }
 
 type Registry struct {
 	box        *crypto.Box
 	pgMaxConns int32
+	sqliteDir  string // DBM_SQLITE_DIR: allowlist root for SQLite target files ("" => disabled)
 	mu         sync.Mutex
 	pg         map[int64]*pgEntry
 	mysql      map[int64]*mysqlEntry
+	sqlite     map[int64]*sqliteEntry
 	redis      map[int64]*redisEntry
+	mongo      map[int64]*mongoEntry
 	// onCred, if set, is called whenever a stored credential is decrypted to open
 	// a pool (i.e. the secret is actually used). Lets the app audit credential
 	// access without coupling this package to the store.
@@ -52,14 +69,17 @@ type Registry struct {
 }
 
 // NewRegistry builds the pool registry. pgMaxConns caps the pooled connections
-// opened to each Postgres target (<= 0 falls back to 4).
-func NewRegistry(box *crypto.Box, pgMaxConns int) *Registry {
+// opened to each Postgres/MySQL/SQLite target (<= 0 falls back to 4). sqliteDir
+// is the DBM_SQLITE_DIR allowlist root for SQLite files ("" disables SQLite).
+func NewRegistry(box *crypto.Box, pgMaxConns int, sqliteDir string) *Registry {
 	if pgMaxConns <= 0 {
 		pgMaxConns = 4
 	}
 	r := &Registry{
-		box: box, pgMaxConns: int32(pgMaxConns),
-		pg: map[int64]*pgEntry{}, mysql: map[int64]*mysqlEntry{}, redis: map[int64]*redisEntry{},
+		box: box, pgMaxConns: int32(pgMaxConns), sqliteDir: sqliteDir,
+		pg: map[int64]*pgEntry{}, mysql: map[int64]*mysqlEntry{},
+		sqlite: map[int64]*sqliteEntry{}, redis: map[int64]*redisEntry{},
+		mongo: map[int64]*mongoEntry{},
 	}
 	go r.janitor()
 	return r
@@ -87,10 +107,24 @@ func (r *Registry) janitor() {
 				delete(r.mysql, id)
 			}
 		}
+		for id, e := range r.sqlite {
+			if now.Sub(e.lastUsed) > idleTTL {
+				_ = e.db.Close()
+				delete(r.sqlite, id)
+			}
+		}
 		for id, e := range r.redis {
 			if now.Sub(e.lastUsed) > idleTTL {
 				_ = e.client.Close()
 				delete(r.redis, id)
+			}
+		}
+		for id, e := range r.mongo {
+			if now.Sub(e.lastUsed) > idleTTL {
+				dctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				_ = e.client.Disconnect(dctx)
+				cancel()
+				delete(r.mongo, id)
 			}
 		}
 		r.mu.Unlock()
@@ -164,16 +198,60 @@ func (r *Registry) MySQL(ctx context.Context, c store.Connection) (*sql.DB, erro
 	return db, nil
 }
 
+// SQLite returns a pooled connection to a SQLite target file. The path (stored
+// in the connection's DBName) is validated against the DBM_SQLITE_DIR allowlist
+// before the file is opened, so an out-of-allowlist or traversal path is refused
+// here, the single open choke point. *sql.DB is itself a pool.
+func (r *Registry) SQLite(ctx context.Context, c store.Connection) (*sql.DB, error) {
+	r.mu.Lock()
+	if e, ok := r.sqlite[c.ID]; ok {
+		e.lastUsed = time.Now()
+		r.mu.Unlock()
+		return e.db, nil
+	}
+	r.mu.Unlock()
+
+	path, err := store.ResolveSQLitePath(r.sqliteDir, c.DBName)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", store.SQLiteDSN(path))
+	if err != nil {
+		return nil, err
+	}
+	// SQLite serialises writers; a small pool avoids "database is locked" churn
+	// while still allowing concurrent readers in WAL mode.
+	db.SetMaxOpenConns(int(r.pgMaxConns))
+	db.SetConnMaxIdleTime(idleTTL)
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := db.PingContext(cctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	r.mu.Lock()
+	r.sqlite[c.ID] = &sqliteEntry{db: db, lastUsed: time.Now()}
+	r.mu.Unlock()
+	return db, nil
+}
+
 // Engine returns the dbsql.Engine for a SQL connection, dispatching on the
 // connection's engine family. It is the single seam the web layer uses for every
 // SQL operation; Redis connections are handled separately (Registry.Redis).
 func (r *Registry) Engine(ctx context.Context, c store.Connection) (dbsql.Engine, error) {
-	if c.Engine() == dbsql.FamilyMySQL {
+	switch c.Engine() {
+	case dbsql.FamilyMySQL:
 		db, err := r.MySQL(ctx, c)
 		if err != nil {
 			return nil, err
 		}
 		return mysql.New(db), nil
+	case dbsql.FamilySQLite:
+		db, err := r.SQLite(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+		return sqlite.New(db), nil
 	}
 	pool, err := r.PG(ctx, c)
 	if err != nil {
@@ -224,6 +302,40 @@ func (r *Registry) Redis(ctx context.Context, c store.Connection) (*redis.Client
 	return client, nil
 }
 
+// Mongo returns a connected client for the given profile. The driver pools
+// connections internally; the registry caches one client per connection and
+// closes it after the idle TTL.
+func (r *Registry) Mongo(ctx context.Context, c store.Connection) (*mongo.Client, error) {
+	r.mu.Lock()
+	if e, ok := r.mongo[c.ID]; ok {
+		e.lastUsed = time.Now()
+		r.mu.Unlock()
+		return e.client, nil
+	}
+	r.mu.Unlock()
+
+	pw, err := r.password(c)
+	if err != nil {
+		return nil, err
+	}
+	opts := options.Client().ApplyURI(c.DSNMongo(pw)).
+		SetServerSelectionTimeout(5 * time.Second)
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	client, err := mongo.Connect(cctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	if err := client.Ping(cctx, nil); err != nil {
+		_ = client.Disconnect(context.Background())
+		return nil, err
+	}
+	r.mu.Lock()
+	r.mongo[c.ID] = &mongoEntry{client: client, lastUsed: time.Now()}
+	r.mu.Unlock()
+	return client, nil
+}
+
 // Forget drops any cached pool/client for a connection (e.g. after delete).
 func (r *Registry) Forget(id int64) {
 	r.mu.Lock()
@@ -236,9 +348,19 @@ func (r *Registry) Forget(id int64) {
 		_ = e.db.Close()
 		delete(r.mysql, id)
 	}
+	if e, ok := r.sqlite[id]; ok {
+		_ = e.db.Close()
+		delete(r.sqlite, id)
+	}
 	if e, ok := r.redis[id]; ok {
 		_ = e.client.Close()
 		delete(r.redis, id)
+	}
+	if e, ok := r.mongo[id]; ok {
+		dctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = e.client.Disconnect(dctx)
+		cancel()
+		delete(r.mongo, id)
 	}
 }
 

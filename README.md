@@ -3,7 +3,7 @@
 **Put your databases behind SSO and an audit log without exposing their ports.**
 
 verix-dbm is a self-hosted web database manager for **PostgreSQL**,
-**MySQL / MariaDB**, and **Redis / Valkey**. Drop one container onto the same
+**MySQL / MariaDB**, **SQLite**, **MongoDB**, and **Redis / Valkey**. Drop one container onto the same
 private network as your database and reach it by hostname (`postgres:5432`) - the
 database never has to publish a port to the host or the internet. The only thing
 exposed is a workbench UI behind Keycloak OIDC login, role-based access, and a
@@ -41,12 +41,13 @@ verix-dbm replaces that with a governed front door:
 - **Tabbed workspace** open as many tabs as you like, side by side:
   - **Grid** paginated, read-only table browse with `WHERE` / `ORDER BY`
     filters and per-column sort arrows.
-  - **Console (Postgres / MySQL)** run SQL with read/write modes, a 30s
+  - **Console (Postgres / MySQL / SQLite)** run SQL with read/write modes, a 30s
     statement timeout, a 1000-row result cap, and a confirmation gate for
     destructive statements (`DROP`/`TRUNCATE`, unguarded `DELETE`/`UPDATE`).
   - **Doc** quick documentation view: columns, keys, indexes, and table
     comment.
   - **Usages** find-usages: inbound foreign keys that reference a table.
+  - **MongoDB** collection document browser + guarded command console (see below).
   - **Redis/Valkey** keyspace browser + command console (see below).
 - **Toasts, modals, and context menus** for connection CRUD, DDL forms, and the
   audit log.
@@ -71,6 +72,22 @@ verix-dbm replaces that with a governed front door:
   (add / modify column, rename table, create/drop table / index).
 - Non-admin users are blocked from `LOAD DATA INFILE`, `LOAD_FILE()`, and
   `INTO OUTFILE/DUMPFILE` as a backstop on top of the connection's DB role.
+
+### SQLite
+- Same workbench as Postgres/MySQL over an on-disk database file (pure-Go driver).
+- Introspection from `sqlite_master` / PRAGMA functions; a single `main` schema.
+- Read-only enforced per call with `PRAGMA query_only`; DDL is transactional.
+- **Security**: a SQLite connection opens a server-side file, so it is gated by
+  the `DBM_SQLITE_DIR` allowlist (paths must resolve under it; `..`/symlink
+  escapes are rejected) and disabled entirely when the var is unset.
+
+### MongoDB
+- Explorer tree of databases → collections.
+- Document browser with JSON filter / sort / projection and skip-based paging
+  (30s timeout, 1000-document cap), plus per-collection index listing.
+- Command console that runs a JSON command document, with a read-only allowlist
+  and an admin + confirmation gate for destructive commands (`drop`,
+  `dropDatabase`, ...).
 
 ### Redis / Valkey
 - `SCAN`-based keyspace browser with `MATCH` (prefix-friendly).
@@ -104,8 +121,9 @@ verix-dbm replaces that with a governed front door:
 - [go-sql-driver/mysql](https://github.com/go-sql-driver/mysql) MySQL/MariaDB
   driver (via `database/sql`)
 - [go-redis v9](https://github.com/redis/go-redis) Redis/Valkey client
+- [mongo-driver](https://github.com/mongodb/mongo-go-driver) MongoDB client
 - [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) **pure-Go**
-  SQLite (no cgo → fully static binary) for connection + audit metadata
+  SQLite (no cgo → fully static binary) for the SQLite engine + connection/audit metadata
 - [go-oidc](https://github.com/coreos/go-oidc) + `golang.org/x/oauth2` Keycloak
   OIDC
 - `crypto/aes` (GCM) credential encryption
@@ -203,10 +221,12 @@ internal/config     env config
 internal/crypto     AES-GCM credential encryption (versioned, rotatable keys)
 internal/store      metadata store: SQLite (default) or Postgres (HA)
 internal/conn       pooled connection registry (idle-close)
-internal/dbsql      engine-neutral SQL interface shared by postgres + mysql
+internal/dbsql      engine-neutral SQL interface shared by postgres + mysql + sqlite
 internal/postgres   pgx introspection / query / DDL / generators
 internal/mysql      MySQL/MariaDB introspection / query / DDL
+internal/sqlite     SQLite (file) introspection / query / DDL (pure-Go driver)
 internal/redisdb    go-redis scan / value / command
+internal/mongodb    MongoDB databases / collections / find / command console
 internal/auth       OIDC + sessions (memory|redis) + RBAC + per-conn grants + CSRF
 internal/web        chi router, JSON API (api.go) + legacy html/template pages,
                     DDL / export / workbench handlers, rate limiter
