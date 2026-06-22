@@ -104,6 +104,7 @@ export default function TableDesigner({ params, onClose, onApplied }: {
   const apply = () => {
     setErr('')
     if (mode === 'create' && !m.name.trim()) { setErr('Table name is required'); setSel({ kind: 'table' }); return }
+    if (mode === 'create' && !m.cols.some(c => c.name.trim())) { setErr('Add at least one column'); return }
     if (!statements.length) { setErr('No changes to apply'); return }
     setBusy(true)
     api.applyTable(connId, mode === 'create' ? 'sql_ddl_create_table' : 'sql_ddl_modify_table', statements)
