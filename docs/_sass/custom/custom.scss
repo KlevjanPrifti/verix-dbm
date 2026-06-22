@@ -28,11 +28,12 @@ body {
 }
 
 // Just the Docs caps the content column at 800px, which makes the wide
-// reference tables (API reference, data model) overflow and scroll. Give the
-// content room on larger screens; mobile stays full width below this breakpoint.
+// reference tables (capability matrix, API reference, data model) overflow and
+// scroll. With the left-aligned rail below freeing up the right side, give the
+// content plenty of room; mobile stays full width below this breakpoint.
 @media (min-width: 50rem) {
   .main {
-    max-width: 1140px;
+    max-width: 1500px;
   }
 }
 
