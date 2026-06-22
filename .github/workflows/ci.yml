@@ -7,8 +7,8 @@ name: ci
 #  - Run workflow:     release on demand (optionally type an exact version).
 #
 # The bump defaults to a patch; put "#minor" / "#major" in the head commit to bump
-# those, or "#norelease" to skip the release for that push. The image + binaries
-# only build after CI passes, and never on a pull request.
+# those, or "#norelease" to skip the release for that push. The binaries only build
+# after CI passes, and never on a pull request.
 #
 # IMPORTANT: for the bot to push the tag, the repo must allow it:
 #   Settings -> Actions -> General -> Workflow permissions -> "Read and write".
@@ -27,7 +27,6 @@ on:
 
 permissions:
   contents: write # create the tag + GitHub Release and upload binaries
-  packages: write # push the image to GHCR
 
 jobs:
   # CI: build the SPA, vet, test, and scan. Runs for every trigger and gates the
@@ -147,48 +146,6 @@ jobs:
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git tag -a "${VERSION}" -m "${VERSION}"
           git push origin "${VERSION}"
-
-  # Build and push the multi-arch container image to GHCR (the primary deploy
-  # artifact: the Dockerfile already produces a static, distroless image).
-  image:
-    needs: tag
-    if: needs.tag.outputs.release == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.tag.outputs.version }}
-
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-
-      - name: log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: image metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}},value=${{ needs.tag.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.tag.outputs.version }}
-            type=raw,value=latest,enable=${{ !contains(needs.tag.outputs.version, '-') }}
-
-      - name: build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
   # Cross-compile standalone static binaries and attach them to the GitHub Release.
   # The binary is pure-Go (CGO_ENABLED=0), so every target cross-compiles natively
