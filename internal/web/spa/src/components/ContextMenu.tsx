@@ -22,7 +22,7 @@ interface MenuItem {
 const SEP: MenuItem = { sep: true }
 const MW = 240, MH = 320
 
-// ContextMenu builds a DataGrip-style menu model from a tree node and the user's
+// ContextMenu builds a menu model from a tree node and the user's
 // caps, then renders it with a single level of fly-out submenus. Ported from the
 // old Alpine buildMenu(); every item carries a Lucide icon (see icons.tsx).
 export default function ContextMenu({ x, y, payload, onClose }: {

@@ -183,7 +183,7 @@ type Column struct {
 }
 
 // TypeText is the display type shown in the tree: shortened type name, with an
-// "(auto increment)" / "not null" suffix the way DataGrip renders it.
+// "(auto increment)" / "not null" suffix.
 func (c Column) TypeText() string {
 	t := c.Type
 	t = strings.ReplaceAll(t, "character varying", "varchar")

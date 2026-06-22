@@ -71,7 +71,7 @@ export default function Tabs({ tabs, active, onSelect, onClose, onCloseOthers, o
 
 const MW = 230, MH = 240
 
-// TabMenu is the DataGrip-style right-click menu on a workspace tab: close
+// TabMenu is the right-click menu on a workspace tab: close
 // actions plus copy helpers. Reuses the tree menu's .ctx-menu styling.
 function TabMenu({ x, y, tab, tabs, onClose, onCloseTab, onCloseOthers, onCloseAll, onCloseRight }: {
   x: number; y: number; tab: TabDef; tabs: TabDef[]

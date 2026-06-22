@@ -1,4 +1,4 @@
-// Data model + DDL generation for the DataGrip-style table designer.
+// Data model + DDL generation for the table designer.
 //
 // The designer edits a TableModel in React state; this module turns that model
 // into the SQL that the preview shows and the server runs. "create" emits one

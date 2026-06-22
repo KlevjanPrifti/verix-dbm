@@ -34,7 +34,7 @@ verix-dbm replaces that with a governed front door:
 
 ## What it can do
 
-### DataGrip-style workbench (React SPA, served at `/app`)
+### IDE-style workbench (React SPA, served at `/app`)
 - **Database Explorer** a lazy-loaded tree of connections → schemas → tables →
   columns / keys / indexes, with right-click + kebab (`⋯`) context menus on every
   node.

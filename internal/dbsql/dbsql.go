@@ -41,7 +41,7 @@ type Column struct {
 }
 
 // TypeText is the display type shown in the tree: a shortened type name with an
-// "(auto increment)" suffix the way DataGrip renders it. The string replacements
+// "(auto increment)" suffix. The string replacements
 // are Postgres-isms that no-op on MySQL's already-short type names; AutoInc is set
 // by the engine (never re-derived from the type string here).
 func (c Column) TypeText() string {

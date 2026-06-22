@@ -43,7 +43,7 @@ export interface DDLParams {
   role?: Role // alter-user: the role being edited, used to prefill the form
 }
 
-// Full DataGrip-style table editor "create" builds a new table, "modify" loads
+// Full table editor "create" builds a new table, "modify" loads
 // an existing one and emits a diff of ALTERs. Distinct from DDLParams (the small
 // single-field forms) because it drives a much larger, structured dialog.
 export interface TableDesignerParams {

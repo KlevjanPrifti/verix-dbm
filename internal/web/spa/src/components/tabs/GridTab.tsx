@@ -29,19 +29,19 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const [where, setWhere] = useState('')
   const [order, setOrder] = useState('')
   const [page, setPage] = useState(0)
-  // Client-selectable page size (DataGrip-style), persisted as the default.
+  // Client-selectable page size, persisted as the default.
   const [size, setSize] = useState(loadPageSize)
   const [data, setData] = useState<GridResponse | null>(null)
   const [loading, setLoading] = useState(false)
   // Right-click menu (cell or table-level) and the modals it can open.
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
-  // Cell inspector: a docked right-side panel (DataGrip-style) with Record /
+  // Cell inspector: a docked right-side panel with Record /
   // Value / Aggregates tabs. `sel` is the cell it follows (set on single click);
   // `panel` is the open tab, or null when the inspector is hidden.
   const [sel, setSel] = useState<{ r: number; c: number } | null>(null)
   const [panel, setPanel] = useState<PanelTab | null>(null)
   const openPanel = (tab: PanelTab, r: number, c: number) => { setSel({ r, c }); setPanel(tab) }
-  // Inline "add row" draft (DataGrip-style). `draft` maps a column index to the
+  // Inline "add row" draft. `draft` maps a column index to the
   // value typed for it; columns absent from the map stay unset and render their
   // <default>/<null> placeholder. `editing` is the column index currently shown
   // as a text input. colMeta (notNull/default/autoInc, keyed by name) drives the
@@ -64,7 +64,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const [pendingDeletes, setPendingDeletes] = useState<Set<number>>(new Set())
   const [pendingInserts, setPendingInserts] = useState<Record<number, string>[]>([])
   const [committing, setCommitting] = useState(false)
-  // Row selection (DataGrip-style): drag over the row-number column to range-
+  // Row selection: drag over the row-number column to range-
   // select, Ctrl/Cmd-click to toggle a single row, Shift-click to extend from the
   // anchor, and click the "#" header to (de)select all. Copy emits the selected
   // rows through the active "data extractor" (clipboard format).
@@ -280,7 +280,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
     cols.map((c, i) => rows[r][i] === '' ? `${qq(c)} IS NULL` : `${qq(c)} = ${lit(rows[r][i])}`).join('\n  AND ')
   const openSql = (key: string, title: string, sql: string) =>
     app.openTab({ key, title, icon: 'console', view: { type: 'console', connId, sql } })
-  // Add row → inline draft (DataGrip-style), not a seeded console. The draft row
+  // Add row → inline draft, not a seeded console. The draft row
   // renders at the top of the grid; the user fills cells and submits.
   const insertRow = () => { if (!draft) { setDraft({}); setEditing(null) } }
   // Placeholder shown for an unset cell: columns with a default (or auto-increment)
@@ -458,12 +458,12 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
     setFilter('(' + cols.map(like).join(' OR ') + ')')
   }
 
-  // Unified right-click menu mirrors the DataGrip data-editor menu. One menu
+  // Unified right-click data-editor menu. One menu
   // serves both cell and table-area clicks: the cell-specific block only appears
   // when there's a row under the cursor (rows[r] exists); otherwise it collapses
   // to the table-level actions with a schema.table header. Write actions are
   // enabled only when the connection is writable (`!readOnly`); on a read-only
-  // connection they stay greyed, exactly like DataGrip.
+  // connection they stay greyed.
   function menuItems(r: number, c: number): MenuItem[] {
     // r < 0 is the sentinel for a table-area click (header / blank space) where
     // there's no cell under the cursor guard on that rather than rows[r], since
@@ -697,7 +697,7 @@ const loadPageSize = (): number => {
 const savePageSize = (n: number) => { try { localStorage.setItem(PAGE_SIZE_KEY, String(n)) } catch { /* ignore */ } }
 
 // Data extractors: the clipboard format Copy uses (toolbar button, Ctrl+C, and
-// the grid menu). Mirrors DataGrip's extractor picker; the choice persists.
+// the grid menu). The extractor choice persists.
 const EXTRACTORS = [
   { id: 'sql-inserts', label: 'SQL Inserts', group: 'SQL' },
   { id: 'sql-insert-multirow', label: 'SQL Insert (multirow)', group: 'SQL' },
@@ -790,7 +790,7 @@ function PageSizeMenu({ size, onPick }: { size: number; onPick: (n: number) => v
 
 // Right-click menu for grid cells / table area reuses the tree menu's styling
 // and supports one level of fly-out submenus, keyboard-shortcut hints and
-// disabled items (mirrors the DataGrip data-editor menu).
+// disabled items.
 function CellMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuItem[]; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const [openSub, setOpenSub] = useState<number | null>(null)
@@ -906,7 +906,7 @@ function CellEditor({ initial, onCommit, onCancel }: {
   )
 }
 
-// InspectorPanel is the docked right-side cell inspector (DataGrip-style),
+// InspectorPanel is the docked right-side cell inspector,
 // replacing the old Record / Value / Aggregate modals. It follows the selected
 // cell and switches between three tabs without leaving the grid.
 function InspectorPanel({ tab, onTab, onClose, connId, cols, row, col, value, aggSql }: {
@@ -969,7 +969,7 @@ function RecordPanel({ cols, row }: { cols: string[]; row: string[] }) {
 }
 
 // Value tab: the full cell value. When it parses as JSON it is pretty-printed
-// and syntax-highlighted (DataGrip-style); a toggle falls back to the raw text.
+// and syntax-highlighted; a toggle falls back to the raw text.
 function ValuePanel({ col, value }: { col: string; value: string }) {
   const app = useApp()
   const pretty = useMemo(() => tryFormatJson(value), [value])

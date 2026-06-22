@@ -199,7 +199,7 @@ table.data tbody tr:hover td { color: var(--hud); }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Workbench DataGrip-style IDE shell (Explorer + tabbed workspace + grid),
+   Workbench IDE shell (Explorer + tabbed workspace + grid),
    themed entirely with the existing HUD tokens.
    ════════════════════════════════════════════════════════════════════════════ */
 [x-cloak] { display: none !important; }
@@ -504,7 +504,7 @@ table.data tbody tr.row-sel td.rownum { background: rgba(var(--accent-rgb),0.32)
 .th-sort:hover { color: var(--cta); text-decoration: none; }
 td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; background: var(--panel-raised); position: sticky; left: 0; z-index: 2; font-size: .7rem; width: 1%; white-space: nowrap; }
 
-/* inline "add row" draft (DataGrip-style new record) */
+/* inline "add row" draft (new record) */
 .tb-ico.ok { color: #7bd88f; }
 .tb-ico.ok:hover:not(:disabled) { background: rgba(123,216,143,0.15); }
 .draft-row td { background: rgba(123,216,143,0.06); }
@@ -599,7 +599,7 @@ td.rownum, th.rownum { color: rgba(var(--accent-rgb),0.5); text-align: right; ba
 .record-view .rv-key { white-space: nowrap; width: 1%; padding-right: 1.2rem; vertical-align: top; color: rgba(var(--accent-rgb),0.85); }
 .record-view .rv-val { word-break: break-word; color: var(--hud); }
 
-/* Table designer (DataGrip-style Create / Modify table) */
+/* Table designer (Create / Modify table) */
 .modal-wide { width: min(1040px, 95vw); height: min(720px, 92vh); display: flex; flex-direction: column; }
 .modal-wide .modal-body { flex: 1; min-height: 0; padding: 0; gap: 0; }
 /* HUD confirm/prompt dialog narrower than the form modals; body text keeps

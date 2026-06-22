@@ -16,7 +16,7 @@ interface Sel { kind: Kind; uid?: string }
 
 const ON_DELETE = ['', 'CASCADE', 'SET NULL', 'SET DEFAULT', 'RESTRICT', 'NO ACTION']
 
-// DataGrip-style table designer: a tree of columns/keys/foreign keys/indexes/
+// Table designer: a tree of columns/keys/foreign keys/indexes/
 // checks on the left, a property editor for the selected node on the right, and a
 // live SQL preview below. "create" emits one CREATE TABLE; "modify" loads the
 // live table and diffs the edits into ALTERs (see tableModel.ts).
