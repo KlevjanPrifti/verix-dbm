@@ -69,6 +69,21 @@ func TestResolveSQLitePathRejectsSymlinkEscape(t *testing.T) {
 	}
 }
 
+// A symlink planted on an intermediate directory must be caught even when the
+// final target file does not exist yet (SQLite would create it on first open).
+func TestResolveSQLitePathRejectsIntermediateSymlinkEscape(t *testing.T) {
+	dir := t.TempDir()
+	outside := t.TempDir()
+	link := filepath.Join(dir, "link") // dir/link -> /some/outside/dir
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+	// dir/link/new.db does not exist; it would resolve to outside/new.db.
+	if _, err := ResolveSQLitePath(dir, filepath.Join(link, "new.db")); err == nil {
+		t.Error("non-existent path through an escaping intermediate symlink must be rejected")
+	}
+}
+
 func TestSQLiteDSN(t *testing.T) {
 	dsn := SQLiteDSN("/data/app.db")
 	if !strings.HasPrefix(dsn, "/data/app.db?") || !strings.Contains(dsn, "foreign_keys(1)") {

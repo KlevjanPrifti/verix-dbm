@@ -14,6 +14,12 @@ func TestAuditDetailRedactsSecrets(t *testing.T) {
 		{`CREATE USER x IDENTIFIED BY 'topsecret'`, "topsecret", "'***'"},
 		{`config set requirepass s3cr3t`, "s3cr3t", "***"},
 		{`AUTH myredispass`, "myredispass", "***"},
+		// Postgres dollar-quoted password literal.
+		{`ALTER ROLE app WITH PASSWORD $$hunter2$$`, "hunter2", "'***'"},
+		{`CREATE ROLE app PASSWORD $tag$s3cret$tag$`, "s3cret", "'***'"},
+		// Mongo createUser with a JSON pwd/password field.
+		{`admin: db.createUser({user:"x", pwd:"sup3rsecret"})`, "sup3rsecret", `"***"`},
+		{`{"createUser":"x","password":"leaky"}`, "leaky", `"***"`},
 		// A column literally named password must NOT trigger over-redaction.
 		{`SELECT password FROM users WHERE id = 1`, "", "FROM users"},
 	}

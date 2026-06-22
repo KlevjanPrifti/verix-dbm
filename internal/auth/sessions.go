@@ -112,11 +112,13 @@ type redisSessionStore struct {
 // sessionWire is the JSON shape persisted in Redis (the session struct's fields
 // are unexported, so it can't be marshalled directly).
 type sessionWire struct {
-	User       User      `json:"user"`
-	Expires    time.Time `json:"expires"`
-	CSRF       string    `json:"csrf"`
-	IDToken    string    `json:"idToken"`
-	OAuthState string    `json:"oauthState"`
+	User         User      `json:"user"`
+	Expires      time.Time `json:"expires"`
+	CSRF         string    `json:"csrf"`
+	IDToken      string    `json:"idToken"`
+	OAuthState   string    `json:"oauthState"`
+	Nonce        string    `json:"nonce"`
+	PKCEVerifier string    `json:"pkceVerifier"`
 }
 
 func (r *redisSessionStore) Get(key string) (*session, bool) {
@@ -133,7 +135,7 @@ func (r *redisSessionStore) Get(key string) (*session, bool) {
 	if time.Now().After(w.Expires) {
 		return nil, false
 	}
-	return &session{user: w.User, expires: w.Expires, csrf: w.CSRF, idToken: w.IDToken, oauthState: w.OAuthState}, true
+	return &session{user: w.User, expires: w.Expires, csrf: w.CSRF, idToken: w.IDToken, oauthState: w.OAuthState, nonce: w.Nonce, pkceVerifier: w.PKCEVerifier}, true
 }
 
 func (r *redisSessionStore) Put(key string, s *session, ttl time.Duration) {
@@ -141,6 +143,7 @@ func (r *redisSessionStore) Put(key string, s *session, ttl time.Duration) {
 	defer cancel()
 	b, err := json.Marshal(sessionWire{
 		User: s.user, Expires: s.expires, CSRF: s.csrf, IDToken: s.idToken, OAuthState: s.oauthState,
+		Nonce: s.nonce, PKCEVerifier: s.pkceVerifier,
 	})
 	if err != nil {
 		return

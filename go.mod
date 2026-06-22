@@ -2,6 +2,8 @@ module verix-dbm
 
 go 1.26
 
+toolchain go1.26.4
+
 require (
 	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/go-chi/chi/v5 v5.3.0

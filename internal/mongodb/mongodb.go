@@ -170,13 +170,60 @@ var readAllow = map[string]bool{
 	"buildinfo": true, "serverstatus": true,
 }
 
-// dangerous commands can drop data or take over the server: they are admin-only
-// AND confirm-gated, matching the Redis console's NeedsConfirm policy.
+// dangerous commands can drop data, run server-side JavaScript, or take over the
+// server: they are admin-only AND confirm-gated, matching the Redis console's
+// NeedsConfirm policy. mapreduce/eval run arbitrary JS, so they belong here too.
 var dangerous = map[string]bool{
 	"drop": true, "dropdatabase": true, "dropindexes": true, "dropconnections": true,
 	"shutdown": true, "fsync": true, "killallsessions": true, "killallsessionsbypattern": true,
 	"killop": true, "killcursors": true, "setparameter": true, "setfeaturecompatibilityversion": true,
 	"replsetreconfig": true, "replsetstepdown": true, "logrotate": true, "flushrouterconfig": true,
+	"mapreduce": true, "eval": true,
+}
+
+// serverJSKeys are query operators that execute server-side JavaScript. They run
+// arbitrary JS and force full-collection scans, so they are a DoS and a way to
+// read fields a projection would hide. Non-admins are blocked from using them in
+// a find filter (the command console already gates mapreduce/eval via dangerous).
+var serverJSKeys = map[string]bool{"$where": true, "$function": true, "$accumulator": true}
+
+// UsesServerJS reports whether any of the supplied relaxed-extended-JSON
+// documents (filter/sort/projection) contain a server-side JavaScript operator
+// ($where/$function/$accumulator) at any depth. Relaxed extended JSON is still
+// valid JSON, so a plain structural walk suffices to spot the operator keys; an
+// unparseable document is treated as JS-free so Find can surface the real error.
+func UsesServerJS(docs ...string) bool {
+	for _, d := range docs {
+		if strings.TrimSpace(d) == "" {
+			continue
+		}
+		var v any
+		if json.Unmarshal([]byte(d), &v) != nil {
+			continue
+		}
+		if walkServerJS(v) {
+			return true
+		}
+	}
+	return false
+}
+
+func walkServerJS(v any) bool {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, sub := range t {
+			if serverJSKeys[strings.ToLower(k)] || walkServerJS(sub) {
+				return true
+			}
+		}
+	case []any:
+		for _, sub := range t {
+			if walkServerJS(sub) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // CommandName parses a relaxed-extended-JSON command document and returns its

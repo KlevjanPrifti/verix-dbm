@@ -144,7 +144,11 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	if err := s.st.Ping(ctx); err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "unavailable", "store": err.Error()})
+		// /readyz is unauthenticated, so don't echo the raw store error (it can
+		// disclose DSN fragments / the metadata host). Log the detail server-side
+		// and return a generic status to the caller.
+		s.log.Warn("readyz_store_unavailable", "error", err.Error())
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "unavailable"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})

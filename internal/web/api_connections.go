@@ -106,6 +106,10 @@ func (s *Server) apiCreateConnection(w http.ResponseWriter, r *http.Request) {
 		DBName: in.DBName, Username: in.Username, Options: in.Options,
 		ReadOnly: in.ReadOnly, CreatedBy: u.Email,
 	}
+	if err := s.guardConnEgress(r.Context(), c); err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if in.Password != "" {
 		enc, err := s.box.Encrypt(in.Password)
 		if err != nil {
@@ -146,6 +150,10 @@ func (s *Server) apiUpdateConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	c.Name, c.Kind, c.Host, c.Port = in.Name, in.Kind, in.Host, in.Port
 	c.DBName, c.Username, c.Options, c.ReadOnly = in.DBName, in.Username, in.Options, in.ReadOnly
+	if err := s.guardConnEgress(r.Context(), c); err != nil {
+		apiErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	updatePw := false
 	if in.Password != "" {
 		enc, err := s.box.Encrypt(in.Password)
@@ -260,6 +268,16 @@ func (s *Server) apiDeleteGrant(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// guardConnEgress blocks SSRF-prone targets for a candidate connection before the
+// server dials it. SQLite is a local file (no network host), fenced by the
+// DBM_SQLITE_DIR allowlist instead, so it is exempt.
+func (s *Server) guardConnEgress(ctx context.Context, c store.Connection) error {
+	if c.Engine() == dbsql.FamilySQLite {
+		return nil
+	}
+	return guardEgressHost(ctx, c.Host, s.cfg.AllowLocalTargets || s.cfg.DevMode)
+}
+
 func (s *Server) apiTestConnection(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.apiRequireAdmin(w, r); !ok {
 		return
@@ -272,6 +290,10 @@ func (s *Server) apiTestConnection(w http.ResponseWriter, r *http.Request) {
 	c := store.Connection{Kind: in.Kind, Host: in.Host, Port: in.Port, DBName: in.DBName, Username: in.Username, Options: in.Options}
 	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
 	defer cancel()
+	if err := s.guardConnEgress(ctx, c); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
 	var err error
 	switch c.Engine() {
 	case dbsql.FamilyRedis:

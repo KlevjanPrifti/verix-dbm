@@ -54,6 +54,12 @@ type session struct {
 	idToken string
 	// oauthState is the expected callback state for an in-flight login.
 	oauthState string
+	// nonce is the OIDC nonce bound to an in-flight login; the returned ID token
+	// must echo it back, defeating token replay/injection.
+	nonce string
+	// pkceVerifier is the PKCE code_verifier for an in-flight login; sent on the
+	// token exchange so a stolen authorization code cannot be redeemed without it.
+	pkceVerifier string
 }
 
 type Authenticator struct {
@@ -161,21 +167,38 @@ func (a *Authenticator) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state := token()
-	// Stash the expected state in a short-lived cookie-less session entry.
-	a.sessions.Put("state:"+state, &session{expires: time.Now().Add(10 * time.Minute), oauthState: state}, 10*time.Minute)
+	nonce := token()
+	verifier := oauth2.GenerateVerifier()
+	// Stash the expected state, nonce, and PKCE verifier server-side; this entry,
+	// not the cookie, is the authoritative check in Callback. The cookie is only a
+	// secondary binding to the browser.
+	a.sessions.Put("state:"+state, &session{expires: time.Now().Add(10 * time.Minute), oauthState: state, nonce: nonce, pkceVerifier: verifier}, 10*time.Minute)
 	http.SetCookie(w, &http.Cookie{Name: "dbm_state", Value: state, Path: "/", HttpOnly: true, Secure: secure(a.cfg), SameSite: http.SameSiteLaxMode, MaxAge: 600})
-	http.Redirect(w, r, a.oauth.AuthCodeURL(state), http.StatusFound)
+	http.Redirect(w, r, a.oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier)), http.StatusFound)
 }
 
 // Callback completes the OIDC code flow.
 func (a *Authenticator) Callback(w http.ResponseWriter, r *http.Request) {
+	qState := r.URL.Query().Get("state")
 	stateCookie, err := r.Cookie("dbm_state")
-	if err != nil || r.URL.Query().Get("state") != stateCookie.Value {
+	if err != nil || qState == "" || subtle.ConstantTimeCompare([]byte(qState), []byte(stateCookie.Value)) != 1 {
 		a.audit(r.Context(), "auth_login_failed", "invalid state", false)
 		http.Error(w, "invalid state", http.StatusBadRequest)
 		return
 	}
-	oauth2Token, err := a.oauth.Exchange(r.Context(), r.URL.Query().Get("code"))
+	// Authoritative check: the state must match a server-side entry we minted in
+	// Login. A forged/attacker-set cookie alone is not enough. Consume it so a
+	// callback can only be replayed once.
+	st, ok := a.sessions.Get("state:" + qState)
+	if !ok || subtle.ConstantTimeCompare([]byte(st.oauthState), []byte(qState)) != 1 {
+		a.audit(r.Context(), "auth_login_failed", "unknown or expired state", false)
+		http.Error(w, "invalid state", http.StatusBadRequest)
+		return
+	}
+	a.sessions.Delete("state:" + qState)
+	http.SetCookie(w, &http.Cookie{Name: "dbm_state", Value: "", Path: "/", MaxAge: -1})
+
+	oauth2Token, err := a.oauth.Exchange(r.Context(), r.URL.Query().Get("code"), oauth2.VerifierOption(st.pkceVerifier))
 	if err != nil {
 		a.audit(r.Context(), "auth_login_failed", "token exchange failed", false)
 		http.Error(w, "token exchange failed", http.StatusBadGateway)
@@ -191,6 +214,14 @@ func (a *Authenticator) Callback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.audit(r.Context(), "auth_login_failed", "id_token verify failed", false)
 		http.Error(w, "id_token verify failed", http.StatusUnauthorized)
+		return
+	}
+	// Bind the ID token to this login transaction. Without a matching nonce the
+	// token isn't tied to the state/PKCE pair we issued, so a replayed or injected
+	// token for this client would otherwise verify.
+	if subtle.ConstantTimeCompare([]byte(idToken.Nonce), []byte(st.nonce)) != 1 {
+		a.audit(r.Context(), "auth_login_failed", "nonce mismatch", false)
+		http.Error(w, "invalid nonce", http.StatusUnauthorized)
 		return
 	}
 	var claims struct {

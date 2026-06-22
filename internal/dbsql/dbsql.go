@@ -221,17 +221,30 @@ var (
 	reDestructive = regexp.MustCompile(`(?is)^\s*(drop|truncate)\b`)
 	reDelUpd      = regexp.MustCompile(`(?is)^\s*(delete|update)\b`)
 	reHasWhere    = regexp.MustCompile(`(?is)\bwhere\b`)
+	reBlockCmt    = regexp.MustCompile(`(?s)/\*.*?\*/`)
+	reLineCmt     = regexp.MustCompile(`--[^\n]*`)
 )
 
 // NeedsConfirm reports whether a statement is destructive enough to require an
 // explicit confirmation: DROP/TRUNCATE, or a DELETE/UPDATE with no WHERE clause.
 // Dialect-neutral, so it lives here and is shared by every SQL engine.
+//
+// This is a best-effort UX guard (a "are you sure?" prompt for write-capable
+// users), NOT an authorization control: a write user can always confirm. To keep
+// it from being trivially defeated, comments are stripped and EVERY ;-separated
+// statement is examined, so a leading comment ("/*x*/ DROP ...") or a destructive
+// statement hidden after a harmless one ("SELECT 1; DROP TABLE t") still trips it.
+// Splitting on ";" is naive (it ignores semicolons inside string literals), but
+// that only ever over-prompts, which is the safe direction for a confirmation.
 func NeedsConfirm(sql string) bool {
-	if reDestructive.MatchString(sql) {
-		return true
-	}
-	if reDelUpd.MatchString(sql) && !reHasWhere.MatchString(sql) {
-		return true
+	stripped := reLineCmt.ReplaceAllString(reBlockCmt.ReplaceAllString(sql, " "), "")
+	for _, stmt := range strings.Split(stripped, ";") {
+		if reDestructive.MatchString(stmt) {
+			return true
+		}
+		if reDelUpd.MatchString(stmt) && !reHasWhere.MatchString(stmt) {
+			return true
+		}
 	}
 	return false
 }
@@ -248,15 +261,15 @@ const (
 
 var kindFamily = map[string]string{
 	// PostgreSQL-wire kinds all share the Postgres engine.
-	"postgres": FamilyPostgres, 
-	"cockroach": FamilyPostgres, 
+	"postgres":  FamilyPostgres,
+	"cockroach": FamilyPostgres,
 	"greenplum": FamilyPostgres,
-	"redshift": FamilyPostgres, 
-	"yugabyte": FamilyPostgres, 
+	"redshift":  FamilyPostgres,
+	"yugabyte":  FamilyPostgres,
 	"timescale": FamilyPostgres,
-	"aurorapg": FamilyPostgres,
+	"aurorapg":  FamilyPostgres,
 	// MySQL-wire kinds share the MySQL engine.
-	"mysql": FamilyMySQL, 
+	"mysql":   FamilyMySQL,
 	"mariadb": FamilyMySQL,
 	// Embedded file engine.
 	"sqlite": FamilySQLite,

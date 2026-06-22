@@ -38,6 +38,14 @@ func (s *Server) apiMongoDocs(w http.ResponseWriter, r *http.Request) {
 	if pageNum < 0 {
 		pageNum = 0
 	}
+	// $where/$function/$accumulator run server-side JavaScript: a non-admin could
+	// use them to DoS the server or read fields a projection hides. The command
+	// console already gates this kind of access; mirror it on the browse filter.
+	u, _ := auth.FromContext(r.Context())
+	if !u.Admin && mongodb.UsesServerJS(q.Get("filter"), q.Get("sort"), q.Get("projection")) {
+		apiErr(w, http.StatusForbidden, "server-side JavaScript ($where/$function/$accumulator) requires admin")
+		return
+	}
 	client, err := s.reg.Mongo(r.Context(), c)
 	if err != nil {
 		apiErr(w, http.StatusBadGateway, "connect: "+err.Error())

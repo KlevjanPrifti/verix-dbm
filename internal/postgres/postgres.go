@@ -356,24 +356,6 @@ func constraintType(c string) string {
 	}
 }
 
-var (
-	reDestructive = regexp.MustCompile(`(?is)^\s*(drop|truncate)\b`)
-	reDelUpd      = regexp.MustCompile(`(?is)^\s*(delete|update)\b`)
-	reHasWhere    = regexp.MustCompile(`(?is)\bwhere\b`)
-)
-
-// NeedsConfirm reports whether a statement is destructive enough to require an
-// explicit confirmation: DROP/TRUNCATE, or a DELETE/UPDATE with no WHERE clause.
-func NeedsConfirm(sql string) bool {
-	if reDestructive.MatchString(sql) {
-		return true
-	}
-	if reDelUpd.MatchString(sql) && !reHasWhere.MatchString(sql) {
-		return true
-	}
-	return false
-}
-
 // Query runs arbitrary SQL. readOnly wraps it in a read-only transaction. When
 // schema is non-empty the search_path is scoped to it (plus public) so a console
 // opened on a schema resolves unqualified names against that schema.
@@ -418,6 +400,15 @@ func Query(ctx context.Context, pool *pgxpool.Pool, sql string, readOnly bool, s
 		// before anything runs, so it is safe to re-run the whole script through the
 		// simple query protocol, which PostgreSQL does allow to be multi-statement.
 		if isMultiCommand(err) {
+			if readOnly {
+				// The simple protocol runs the whole batch on the session, where a
+				// crafted script ("COMMIT; SET default_transaction_read_only=off;
+				// DELETE ...") could step outside the read-only transaction we opened
+				// and escalate to a write. A single statement, by contrast, always
+				// executes under the session read-only GUC set above and cannot
+				// escalate, so refuse multi-statement scripts on the read-only path.
+				return nil, errors.New("multi-statement scripts are not allowed in read-only mode; run one statement at a time")
+			}
 			return querySimple(ctx, conn.Conn().PgConn(), sql, start)
 		}
 		return nil, err

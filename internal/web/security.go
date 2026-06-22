@@ -51,6 +51,13 @@ func sessionKey(r *http.Request) string {
 var (
 	// SQL: PASSWORD '…' / IDENTIFIED BY '…' (handles doubled-quote escaping).
 	reSQLPassword = regexp.MustCompile(`(?i)\b(password|identified by)(\s+)'(?:[^']|'')*'`)
+	// SQL dollar-quoted: PASSWORD $$…$$ or $tag$…$tag$. RE2 has no backreferences,
+	// so the closing tag is matched loosely; that only ever over-redacts, which is
+	// the safe direction for an audit line.
+	reSQLPasswordDollar = regexp.MustCompile(`(?i)\b(password|identified by)(\s+)\$[A-Za-z0-9_]*\$[\s\S]*?\$[A-Za-z0-9_]*\$`)
+	// Mongo / JSON: "pwd": "…" or "password": "…" in a command document
+	// (e.g. db.createUser({user:…, pwd:"secret"})).
+	reJSONPassword = regexp.MustCompile(`(?i)("?(?:pwd|password)"?\s*:\s*)"(?:[^"\\]|\\.)*"`)
 	// Redis: requirepass <val>, and AUTH <val> at the start of a command line.
 	reRedisRequirepass = regexp.MustCompile(`(?i)\b(requirepass)(\s+)\S+`)
 	reRedisAuth        = regexp.MustCompile(`(?im)^(\s*auth)(\s+)\S+`)
@@ -61,9 +68,11 @@ var (
 // and Redis AUTH/CONFIG SET requirepass would otherwise store cleartext secrets
 // in SQLite (and any backup of it).
 func auditDetail(s string) string {
-	s = reSQLPassword.ReplaceAllString(s, `$1$2'***'`)
-	s = reRedisRequirepass.ReplaceAllString(s, `$1$2***`)
-	s = reRedisAuth.ReplaceAllString(s, `$1$2***`)
+	s = reSQLPassword.ReplaceAllString(s, `${1}${2}'***'`)
+	s = reSQLPasswordDollar.ReplaceAllString(s, `${1}${2}'***'`)
+	s = reJSONPassword.ReplaceAllString(s, `${1}"***"`)
+	s = reRedisRequirepass.ReplaceAllString(s, `${1}${2}***`)
+	s = reRedisAuth.ReplaceAllString(s, `${1}${2}***`)
 	return truncate(s, 500)
 }
 
@@ -71,11 +80,10 @@ func auditDetail(s string) string {
 
 // securityHeaders sets response headers that harden the app against clickjacking,
 // MIME sniffing, referrer leakage, and (when served over TLS) downgrade attacks,
-// plus a CSP. The CSP keeps 'unsafe-eval' (the legacy Alpine.js workbench needs
-// it) and 'unsafe-inline' for styles (inline style attributes + the Google Fonts
-// @import); scripts and everything else are locked to same-origin, and framing is
-// denied outright. Tightening script/style-src further is gated on dropping
-// Alpine and self-hosting fonts.
+// plus a CSP. script-src is locked to same-origin (the Vite-built React SPA needs
+// no eval); style-src keeps 'unsafe-inline' for inline style attributes + the
+// Google Fonts @import. Everything else is same-origin and framing is denied
+// outright. Tightening style-src further is gated on self-hosting fonts.
 // originOf returns the scheme://host of a URL, or "" if it can't be parsed into
 // an absolute origin. Used to whitelist the IdP in the CSP form-action directive.
 func originOf(rawURL string) string {
@@ -98,7 +106,9 @@ func securityHeaders(cfg *config.Config) func(http.Handler) http.Handler {
 	}
 	csp := strings.Join([]string{
 		"default-src 'self'",
-		"script-src 'self' 'unsafe-eval'",
+		// The Vite-built React SPA ships no eval/new Function, so script-src stays
+		// strict: 'self' only, no 'unsafe-eval'.
+		"script-src 'self'",
 		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 		"font-src 'self' https://fonts.gstatic.com",
 		"img-src 'self' data:",

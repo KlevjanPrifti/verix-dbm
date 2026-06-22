@@ -580,16 +580,40 @@ func ResolveSQLitePath(allowDir, p string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Resolve symlinks on the target when it exists so a symlink inside the
-	// allow-dir can't point outside it. A not-yet-created file falls back to its
-	// cleaned absolute path.
-	if r, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = r
-	}
+	// Resolve symlinks so a symlinked component can't point outside the allow-dir.
+	// EvalSymlinks fails on a not-yet-created file (SQLite creates the file on first
+	// open), and resolving only the final component would miss a symlink planted
+	// among the *intermediate* directories of a non-existent path. So resolve the
+	// deepest existing ancestor and re-append the remaining components.
+	abs = resolveExistingPrefix(abs)
 	abs = filepath.Clean(abs)
 	rel, err := filepath.Rel(root, abs)
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("sqlite path %q is outside the allowed directory (DBM_SQLITE_DIR)", p)
 	}
 	return abs, nil
+}
+
+// resolveExistingPrefix returns p with its longest existing path prefix symlink-
+// resolved and the remaining (not-yet-created) components cleaned and re-appended.
+// This lets containment checks see through a symlink planted on an intermediate
+// directory even when the final file does not exist yet.
+func resolveExistingPrefix(p string) string {
+	rest := ""
+	cur := p
+	for {
+		if r, err := filepath.EvalSymlinks(cur); err == nil {
+			if rest == "" {
+				return r
+			}
+			return filepath.Join(r, rest)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			// Reached the filesystem root without finding an existing component.
+			return p
+		}
+		rest = filepath.Join(filepath.Base(cur), rest)
+		cur = parent
+	}
 }

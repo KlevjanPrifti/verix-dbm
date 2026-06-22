@@ -77,9 +77,12 @@ func (s *Server) apiAuditExport(w http.ResponseWriter, r *http.Request) {
 		cw := csv.NewWriter(w)
 		_ = cw.Write([]string{"ts", "user", "conn_id", "action", "detail", "success"})
 		_ = s.st.IterAudit(r.Context(), func(a store.Audit) error {
+			// user/action/detail are attacker-influenced (emails, SQL text, grant
+			// subjects, connection names), so neutralize spreadsheet formula injection
+			// before they reach a CSV a forensic analyst may open in Excel/Sheets.
 			return cw.Write([]string{
-				a.TS.Format(time.RFC3339), a.User, strconv.FormatInt(a.ConnID, 10),
-				a.Action, a.Detail, strconv.FormatBool(a.Success),
+				a.TS.Format(time.RFC3339), csvSafe(a.User), strconv.FormatInt(a.ConnID, 10),
+				csvSafe(a.Action), csvSafe(a.Detail), strconv.FormatBool(a.Success),
 			})
 		})
 		cw.Flush()

@@ -12,6 +12,12 @@ import (
 // pruning of expired windows. It guards the auth endpoints against brute-force
 // and redirect spam not a substitute for an edge WAF on a hostile-internet
 // deployment, but a sensible floor.
+// maxRateKeys caps the number of tracked windows so a client rotating its key
+// (e.g. spoofing a fresh X-Forwarded-For per request behind a misconfigured
+// proxy) cannot grow the map without bound. Generous for an admin tool's real
+// client count, small enough that the worst case is bounded memory.
+const maxRateKeys = 50_000
+
 type rateLimiter struct {
 	mu     sync.Mutex
 	hits   map[string]*window
@@ -51,14 +57,27 @@ func (rl *rateLimiter) allow(key string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	w, ok := rl.hits[key]
-	if !ok || now.After(w.reset) {
-		rl.hits[key] = &window{count: 1, reset: now.Add(rl.period)}
+	if ok && !now.After(w.reset) {
+		if w.count >= rl.max {
+			return false
+		}
+		w.count++
 		return true
 	}
-	if w.count >= rl.max {
-		return false
+	// New or expired window. Before adding a brand-new key, keep the table bounded:
+	// if it is full, sweep expired entries inline and, if still full, refuse rather
+	// than grow without bound (a fail-closed backstop against key-rotation flooding).
+	if !ok && len(rl.hits) >= maxRateKeys {
+		for k, w := range rl.hits {
+			if now.After(w.reset) {
+				delete(rl.hits, k)
+			}
+		}
+		if len(rl.hits) >= maxRateKeys {
+			return false
+		}
 	}
-	w.count++
+	rl.hits[key] = &window{count: 1, reset: now.Add(rl.period)}
 	return true
 }
 

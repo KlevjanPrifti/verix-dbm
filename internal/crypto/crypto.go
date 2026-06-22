@@ -215,26 +215,19 @@ func open(aead cipher.AEAD, payload string) (string, error) {
 	return string(pt), nil
 }
 
-// decodeKey accepts a 32-byte key as 64-char hex or base64.
+// decodeKey accepts a 32-byte key as 64-char hex or base64. Decoding is by
+// content, not length: a 64-char string is no longer assumed to be hex (some
+// 64-char base64 strings are also valid hex and would silently decode to the
+// wrong 32 bytes). We try hex first, then base64, and accept the first that
+// yields exactly 32 bytes.
 func decodeKey(key string) ([]byte, error) {
-	var raw []byte
-	if len(key) == 64 {
-		b, err := hex.DecodeString(key)
-		if err != nil {
-			return nil, fmt.Errorf("hex decode: %w", err)
-		}
-		raw = b
-	} else {
-		b, err := base64.StdEncoding.DecodeString(key)
-		if err != nil {
-			return nil, fmt.Errorf("must be 64-char hex or base64 of 32 bytes: %w", err)
-		}
-		raw = b
+	if b, err := hex.DecodeString(key); err == nil && len(b) == 32 {
+		return b, nil
 	}
-	if len(raw) != 32 {
-		return nil, errors.New("must decode to exactly 32 bytes")
+	if b, err := base64.StdEncoding.DecodeString(key); err == nil && len(b) == 32 {
+		return b, nil
 	}
-	return raw, nil
+	return nil, errors.New("encryption key must be 64-char hex or base64 of exactly 32 bytes")
 }
 
 // parseMultiKeys parses "id:key,id:key,..." into specs (preserving order) and

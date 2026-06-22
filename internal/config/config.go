@@ -16,7 +16,7 @@ type Config struct {
 	// filesystem, so this allowlist fences which files are reachable. Empty
 	// disables the SQLite engine entirely (fail closed): SQLite is opt-in.
 	SQLiteDir string
-	EncKey     string // hex/base64 32-byte key for credential encryption ("" => ephemeral)
+	EncKey    string // hex/base64 32-byte key for credential encryption ("" => ephemeral)
 	// EncKeys is the multi-key form for rotation: "id:key,id:key,..." with the
 	// first entry the primary (new writes) and the rest retained for decryption.
 	// When set it supersedes EncKey. See DBM_ENC_KEYS.
@@ -49,6 +49,13 @@ type Config struct {
 	// Only safe behind a reverse proxy that overwrites those headers; off by
 	// default so untrusted clients can't spoof their address.
 	TrustProxy bool
+
+	// AllowLocalTargets disables the server-side egress guard that blocks database
+	// connections from resolving to loopback, link-local, or cloud-metadata
+	// (169.254.169.254) addresses. Off by default to prevent SSRF; turn it on only
+	// when a target legitimately lives on localhost (e.g. a sidecar). Dev mode
+	// implies it so local databases work out of the box.
+	AllowLocalTargets bool
 
 	// High availability.
 	// SessionBackend selects where sessions live: "memory" (default, single-node)
@@ -101,6 +108,7 @@ func Load() (*Config, error) {
 		OpenRead:           os.Getenv("DBM_OPEN_READ") == "true",
 		ScopedAccess:       os.Getenv("DBM_SCOPED_ACCESS") == "true",
 		TrustProxy:         os.Getenv("DBM_TRUST_PROXY") == "true",
+		AllowLocalTargets:  os.Getenv("DBM_ALLOW_LOCAL_TARGETS") == "true",
 		DevMode:            os.Getenv("DBM_DEV_MODE") == "true",
 		LogLevel:           env("DBM_LOG_LEVEL", "info"),
 		LogFormat:          env("DBM_LOG_FORMAT", "json"),
@@ -125,6 +133,14 @@ func Load() (*Config, error) {
 	if c.OIDCIssuer == "" || c.OIDCClientID == "" {
 		return nil, fmt.Errorf("authentication is not configured: set OIDC_ISSUER and OIDC_CLIENT_ID, " +
 			"or set DBM_DEV_MODE=true for local development. Refusing to start with auth disabled")
+	}
+	// A persistent encryption key is mandatory in production. Without it the crypto
+	// layer would mint a random ephemeral key, so every saved credential becomes
+	// undecryptable after a restart and HA replicas can't read each other's writes.
+	// Fail closed rather than boot on a throwaway key.
+	if c.EncKey == "" && c.EncKeys == "" {
+		return nil, fmt.Errorf("encryption key is not configured: set DBM_ENC_KEY (64 hex chars) or DBM_ENC_KEYS, " +
+			"or set DBM_DEV_MODE=true for local development. Refusing to start without a persistent credential key")
 	}
 	if c.OpenRead {
 		log.Println("config: DBM_OPEN_READ=true every authenticated realm user is granted READ access to all connections.")
