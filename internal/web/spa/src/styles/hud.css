@@ -239,7 +239,8 @@ summary.tree-row::-webkit-details-marker { display: none; }
 .tree-row.active .tree-name { color: var(--hud); font-weight: 600; }
 /* Disclosure caret is a real chevron icon (see Explorer's <Caret/>), rotated on
    open. Leaves carry no caret, so they pad left to align with parent rows. */
-.tree-caret { flex: none; color: rgba(var(--accent-rgb),0.6); transition: transform .12s; }
+.tree-caret { flex: none; color: rgba(var(--accent-rgb),0.6); transition: transform .12s; cursor: pointer; padding: 2px; margin: -2px; border-radius: 3px; }
+.tree-caret:hover { color: rgb(var(--accent-rgb)); background: rgba(var(--accent-rgb),0.12); }
 details[open] > summary > .tree-caret { transform: rotate(90deg); }
 .tree-row.leaf { padding-left: 1.6rem; }
 .tree-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }

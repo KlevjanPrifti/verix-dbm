@@ -89,9 +89,17 @@ export default function ContextMenu({ x, y, payload, onClose }: {
     const c = payload
     const m: MenuItem[] = []
     if (c.type === 'conn') {
+      // Schema / user creation is SQL DDL (CREATE SCHEMA / CREATE USER), supported
+      // only by Postgres and MySQL/MariaDB. SQLite is a single namespace with no
+      // user accounts, and Mongo/Redis aren't SQL at all, so offering these would
+      // POST to the SQL DDL endpoint (/pg/ddl/run) and fail. The connection-level
+      // query console exists for every engine except Mongo, whose console is
+      // per-collection (opened from a collection node).
+      const ddl = engine === 'postgres' || engine === 'mysql'
+      const hasConsole = engine !== 'mongodb'
       m.push({ head: c.name })
-      m.push({ label: 'Query console', Icon: Terminal, key: 'Ctrl+⏎', run: tab.console })
-      if (w) {
+      if (hasConsole) m.push({ label: 'Query console', Icon: Terminal, key: 'Ctrl+⏎', run: tab.console })
+      if (w && ddl) {
         const newKids: MenuItem[] = [
           { label: 'Query console', Icon: Terminal, run: tab.console },
           { label: 'Schema…', Icon: Box, run: () => form('new-schema') },

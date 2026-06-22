@@ -3,7 +3,7 @@ import { api } from '../api'
 import { useApp, type NodePayload, type TabView } from '../appctx'
 import type { Column, Connection, Index, Key, MongoDatabase, Role, Schema } from '../types'
 import { Ico, nameColor, Plus, Terminal, Trash2, MoreHorizontal, ChevronRight } from '../icons'
-import { DB_KINDS } from '../dbkinds'
+import { DB_KINDS, kindEngine } from '../dbkinds'
 
 // Database Explorer: a lazy-loaded tree of connections → schemas → tables →
 // columns/keys/indexes. Disclosure uses native <details>; each row wires the
@@ -75,6 +75,9 @@ function ConnNode({ conn }: { conn: Connection }) {
   }, [hasActive, av])
 
   const payload: NodePayload = { type: 'conn', connId: conn.id, name: conn.name, kind: conn.kind }
+  // Mongo has no connection-level console (its command console is per-collection,
+  // opened from a collection node), so hide the conn console affordance for it.
+  const hasConsole = kindEngine(conn.kind) !== 'mongodb'
   const openConsole = () => app.openTab({
     key: `console:${conn.id}`, title: `console [${conn.name}]`, icon: 'console',
     view: { type: 'console', connId: conn.id },
@@ -92,8 +95,10 @@ function ConnNode({ conn }: { conn: Connection }) {
         <span className="badge">{conn.kind}</span>
         {conn.readOnly && <span className="ro-dot" title="read-only" />}
         <span className="row-acts">
-          <button type="button" className="row-act" title="open console"
-            onClick={e => { e.stopPropagation(); e.preventDefault(); openConsole() }}><Terminal size={14} /></button>
+          {hasConsole && (
+            <button type="button" className="row-act" title="open console"
+              onClick={e => { e.stopPropagation(); e.preventDefault(); openConsole() }}><Terminal size={14} /></button>
+          )}
           {app.caps.admin && (
             <button type="button" className="row-act danger" title="delete"
               onClick={async e => {
@@ -191,15 +196,23 @@ function TableNode({ connId, schema, table, kind }: { connId: number; schema: st
   const app = useApp()
   const payload: NodePayload = { type: 'table', connId, schema, table, name: table }
   const active = tableActive(app.activeView, connId, schema, table)
+  const ref = useRef<HTMLDetailsElement>(null)
   const openGrid = () => app.openTab({
     key: `grid:${connId}:${schema}.${table}`, title: `${schema}.${table}`, icon: 'grid',
     view: { type: 'grid', connId, schema, table },
   })
+  // Only the caret toggles the disclosure: the summary suppresses the native
+  // row-click toggle so clicking the name just opens the grid.
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation(); e.preventDefault()
+    if (ref.current) ref.current.open = !ref.current.open
+  }
   return (
-    <details className="tree-node">
+    <details ref={ref} className="tree-node">
       <summary className={`tree-row table-row${active ? ' active' : ''}`}
+        onClick={e => e.preventDefault()}
         onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
-        <Caret /><Ico name={kind} />
+        <Caret onClick={toggle} /><Ico name={kind} />
         <span className="tree-name table-name" title="click name to open"
           onClick={e => { e.preventDefault(); openGrid() }}>{table}</span>
         <Kebab payload={payload} />
@@ -343,9 +356,10 @@ function tableActive(av: TabView | null, connId: number, schema: string, table: 
 }
 
 // Caret is the disclosure chevron for an expandable tree row; CSS rotates it
-// 90° when its parent <details> is open.
-function Caret() {
-  return <ChevronRight size={15} className="tree-caret" aria-hidden />
+// 90° when its parent <details> is open. Pass onClick to make the chevron the
+// sole toggle (the row's <summary> then suppresses the native toggle).
+function Caret({ onClick }: { onClick?: (e: React.MouseEvent) => void }) {
+  return <ChevronRight size={15} className="tree-caret" aria-hidden onClick={onClick} />
 }
 
 // Kebab opens the same context menu as right-click the touch-friendly path.
