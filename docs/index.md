@@ -43,6 +43,6 @@ verix-dbm is a governed front door to your databases: a single static Go binary 
 ## Repo root references
 
 - [README.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/README.md): project overview and quickstart.
-- [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md): the authoritative security model and threat notes.
+- [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md): the security policy and how to report a vulnerability (the security model is [here](security.md)).
 - [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example): a commented template of every configuration variable.
 - [Makefile](https://github.com/KlevjanPrifti/verix-dbm/blob/main/Makefile): build, test, vet, and vulnerability-scan targets.

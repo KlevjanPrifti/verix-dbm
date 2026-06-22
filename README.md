@@ -28,7 +28,7 @@ verix-dbm replaces that with a governed front door:
   are logged, redacted of secrets, and exportable to your SIEM.
 - **Least privilege by design.** Saved passwords are AES-256-GCM encrypted at rest
   and never sent to the browser; the database role you connect as stays the real
-  security boundary (see [SECURITY.md](SECURITY.md)).
+  security boundary (see the [security model](docs/security.md)).
 
 ---
 
@@ -102,7 +102,7 @@ verix-dbm replaces that with a governed front door:
 
 ### Auth, security & operations
 - **Keycloak OIDC** login; realm roles map to **admin / write / read**, and
-  access is **deny-by-default** (no role → 403). See [SECURITY.md](SECURITY.md).
+  access is **deny-by-default** (no role → 403). See the [security model](docs/security.md).
 - **DEV mode** (auto-login as a local admin) for local hacking opt-in only via
   `DBM_DEV_MODE=true`. In production the app **refuses to start** without OIDC
   **and** without an encryption key, rather than fall back to an open or
@@ -170,7 +170,7 @@ network; the databases themselves expose nothing. See
 annotated topology.
 
 > DEV mode disables auth and is for local evaluation only. For a real deployment
-> use OIDC + TLS - see [Deploy](#deploy-dokploy) and **[SECURITY.md](SECURITY.md)**.
+> use OIDC + TLS - see [Deploy](#deploy-dokploy) and the **[security model](docs/security.md)**.
 
 ## Run from source (DEV mode, no Keycloak)
 
@@ -208,7 +208,7 @@ vars: the role names (`OIDC_ADMIN_ROLE` / `OIDC_WRITE_ROLE` / `OIDC_READ_ROLE`),
 `DBM_SCOPED_ACCESS` (per-connection grants), `DBM_SQLITE_DIR` (enable the SQLite
 engine), `DBM_ALLOW_LOCAL_TARGETS` (relax the SSRF guard for localhost targets),
 and the HA set (`DBM_STORE_DRIVER` / `DBM_SESSION_BACKEND`). For local development
-without Keycloak set `DBM_DEV_MODE=true`. **Read [SECURITY.md](SECURITY.md)
+without Keycloak set `DBM_DEV_MODE=true`. **Read the [security model](docs/security.md)
 before deploying** - least-privilege DB roles and the deny-by-default model
 matter for safe operation.
 

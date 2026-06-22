@@ -5,7 +5,7 @@ nav_order: 5
 
 # Security model (deep dive)
 
-This is the engineering deep-dive into how verix-dbm enforces authentication, authorization, credential protection, and request hardening. The operator-facing policy summary lives in [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md); read that first for the short version, then come here for the exact mechanisms, source locations, and fail-closed behaviors.
+This is the engineering deep-dive into how verix-dbm enforces authentication, authorization, credential protection, and request hardening: the exact mechanisms, source locations, and fail-closed behaviors. To report a vulnerability, see [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md).
 
 Source files referenced throughout: `internal/auth/auth.go`, `internal/auth/sessions.go`, `internal/web/access.go`, `internal/crypto/crypto.go`, `internal/web/security.go`, `internal/web/ratelimit.go`, `internal/web/egress.go`, `internal/web/server.go`, `internal/web/api.go`, `cmd/server/main.go`, `internal/config/config.go`.
 
@@ -248,4 +248,4 @@ These are application-layer backstops, not authorization; the authoritative cont
 - [Configuration](configuration.md): full environment variable reference and defaults, including every security-relevant flag.
 - [Data model](data-model.md): the metadata store (connections, grants, audit log) and what is and is not persisted.
 - [Deployment](deployment.md): TLS termination, network isolation, HA topology, and the demo/Dokploy compose files.
-- Repo root: [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md) (operator policy summary), [README.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/README.md), [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example).
+- Repo root: [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md) (vulnerability reporting policy), [README.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/README.md), [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example).
