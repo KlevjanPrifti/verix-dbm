@@ -1,11 +1,15 @@
 ---
 title: Home
 nav_order: 1
+image: /verix-dbm/screenshots/mysql_table_viewer.png
+description: Put your databases behind SSO and an audit log without exposing their ports.
 ---
 
 # verix-dbm documentation
 
-This folder is the home for verix-dbm's reference documentation. Start here to find the page you need, then follow the cross-links between pages.
+![verix-dbm workbench](screenshots/mysql_table_viewer.png)
+
+This is the home for verix-dbm's reference documentation. Start here to find the page you need, then follow the cross-links between pages.
 
 ## What verix-dbm is
 

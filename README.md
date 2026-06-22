@@ -2,6 +2,8 @@
 
 **Put your databases behind SSO and an audit log without exposing their ports.**
 
+![verix-dbm workbench](screenshots/mysql_table_viewer.png)
+
 verix-dbm is a self-hosted web database manager for **PostgreSQL**,
 **MySQL / MariaDB**, **SQLite**, **MongoDB**, and **Redis / Valkey**. Drop one container onto the same
 private network as your database and reach it by hostname (`postgres:5432`) - the
@@ -33,6 +35,16 @@ verix-dbm replaces that with a governed front door:
 ---
 
 ## What it can do
+
+**One workbench, every engine.** SQL, document, and key-value stores all browse
+through the same Explorer tree, tabs, and console:
+
+| | |
+|---|---|
+| ![Multi-engine explorer](screenshots/main_explorer.png) | ![Add a data source](screenshots/add_data_sources.png) |
+| Postgres, MySQL/MariaDB, MongoDB and Redis side by side in one tree. | Paste a URL or fill the form; test before saving. Passwords are encrypted at rest. |
+| ![Redis keyspace browser](screenshots/redis_view.png) | ![MongoDB document viewer](screenshots/mongodb_new_doc_table_viewer.png) |
+| Redis/Valkey keyspace browser + read-only command console. | MongoDB document browser with JSON filter / sort / projection. |
 
 ### IDE-style workbench (React SPA, served at `/app`)
 - **Database Explorer** a lazy-loaded tree of connections → schemas → tables →

@@ -27,6 +27,15 @@ body {
   font-family: var(--vx-sans);
 }
 
+// Just the Docs caps the content column at 800px, which makes the wide
+// reference tables (API reference, data model) overflow and scroll. Give the
+// content room on larger screens; mobile stays full width below this breakpoint.
+@media (min-width: 50rem) {
+  .main {
+    max-width: 1140px;
+  }
+}
+
 // A faint HUD grid behind the page content.
 .main {
   background-color: var(--vx-ink);
@@ -116,12 +125,17 @@ body {
 }
 
 // ---- Code -----------------------------------------------------------------
+// Inline code defaults to ~0.75em, which reads small (especially the orange
+// identifiers inside the dense reference tables). Nudge it up and give it a
+// touch more padding so it stays legible without dwarfing the body text.
 .main-content code {
   font-family: var(--vx-mono);
   color: var(--vx-cta-hi);
   background-color: rgba(0, 220, 255, 0.07);
   border: 1px solid rgba(0, 220, 255, 0.15);
   border-radius: 2px;
+  font-size: 0.85em;
+  padding: 0.12em 0.4em;
 }
 
 .main-content pre.highlight,
@@ -132,10 +146,13 @@ figure.highlight {
   border-radius: 2px;
 }
 
-.main-content pre.highlight code {
+.main-content pre.highlight code,
+.main-content pre code {
   color: var(--vx-text);
   background: transparent;
   border: 0;
+  font-size: inherit; // keep code blocks at the pre's size, not the inline bump
+  padding: 0;
 }
 
 // ---- Tables ---------------------------------------------------------------
