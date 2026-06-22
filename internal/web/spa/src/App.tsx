@@ -4,7 +4,7 @@ import { kindEngine } from './dbkinds'
 import type { Connection, Me } from './types'
 import {
   AppContext, type AppActions, type ConfirmSpec, type DDLParams, type DialogRequest,
-  type NodePayload, type PromptSpec, type TabDef, type TableDesignerParams,
+  type NodePayload, type PromptSpec, type TabDef, type TableDesignerParams, type TabView,
 } from './appctx'
 import Explorer from './components/Explorer'
 import Tabs from './components/Tabs'
@@ -88,6 +88,17 @@ export default function App() {
     })
   }, [])
 
+  // Close every tab whose view matches pred. Used when the object a tab is bound
+  // to is dropped/removed, so stale tabs don't linger pointing at something gone.
+  const closeTabsFor = useCallback((pred: (v: TabView) => boolean) => {
+    setTabs(prev => {
+      const next = prev.filter(t => !pred(t.view))
+      if (next.length === prev.length) return prev
+      setActive(cur => (cur && next.some(t => t.key === cur)) ? cur : (next[next.length - 1]?.key ?? null))
+      return next
+    })
+  }, [])
+
   const closeOthers = useCallback((key: string) => {
     setTabs(prev => prev.filter(t => t.key === key))
     setActive(key)
@@ -123,6 +134,7 @@ export default function App() {
     connById,
     openTab,
     closeTab,
+    closeTabsFor,
     copy,
     notify,
     confirm,
@@ -135,7 +147,7 @@ export default function App() {
     openDDL: (p) => setDDL(p),
     openTableDesigner: (p) => setDesigner(p),
     reloadConns,
-  }), [me, conns, activeView, connById, openTab, closeTab, copy, notify, confirm, prompt, refreshConn, refreshTokens, reloadConns])
+  }), [me, conns, activeView, connById, openTab, closeTab, closeTabsFor, copy, notify, confirm, prompt, refreshConn, refreshTokens, reloadConns])
 
   // Tint the HUD to match the active tab's connection engine
   // (cyan pg / amber mysql / violet sqlite / emerald redis+mongo).

@@ -75,6 +75,7 @@ export interface AppActions {
   connById: (id: number) => Connection | undefined
   openTab: (t: TabDef) => void
   closeTab: (key: string) => void
+  closeTabsFor: (pred: (v: TabView) => boolean) => void
   copy: (text: string) => void
   notify: (msg: string, kind?: 'ok' | 'error') => void
   confirm: (spec: ConfirmSpec) => Promise<string | null>

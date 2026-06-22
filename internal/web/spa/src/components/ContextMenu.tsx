@@ -111,6 +111,17 @@ export default function ContextMenu({ x, y, payload, onClose }: {
     if (await runMongo(database, { create: coll })) app.notify(`Created ${database}.${coll}`, 'ok')
   }
 
+  // When an object is dropped, also close any open tabs bound to it so they don't
+  // linger pointing at something that no longer exists.
+  const closeTableTabs = (schema: string, table: string) =>
+    app.closeTabsFor(v => (v.type === 'grid' || v.type === 'doc' || v.type === 'usages') && v.connId === id && v.schema === schema && v.table === table)
+  const closeSchemaTabs = (schema: string) =>
+    app.closeTabsFor(v => (v.type === 'grid' || v.type === 'doc' || v.type === 'usages') && v.connId === id && v.schema === schema)
+  const closeMongoCollTabs = (db: string, coll: string) =>
+    app.closeTabsFor(v => v.type === 'mongo' && v.connId === id && v.db === db && v.coll === coll)
+  const closeMongoDbTabs = (db: string) =>
+    app.closeTabsFor(v => v.type === 'mongo' && v.connId === id && v.db === db)
+
   const items = buildMenu()
   function buildMenu(): MenuItem[] {
     const w = app.caps.write, a = app.caps.admin
@@ -145,7 +156,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
         m.push({ label: 'Properties', Icon: Settings, key: 'F4', run: () => app.openEditModal(id) })
         m.push({ label: 'Duplicate…', Icon: Copy, run: () => app.openEditModal(id) })
         m.push(SEP)
-        m.push({ label: 'Remove data source', Icon: Trash2, key: 'Del', danger: true, run: () => confirmRun(`Remove data source “${c.name}”?`, () => api.deleteConnection(id).then(app.reloadConns)) })
+        m.push({ label: 'Remove data source', Icon: Trash2, key: 'Del', danger: true, run: () => confirmRun(`Remove data source “${c.name}”?`, () => api.deleteConnection(id).then(() => { app.closeTabsFor(v => v.connId === id); return app.reloadConns() })) })
       }
     } else if (c.type === 'schema') {
       m.push({ head: c.schema! })
@@ -171,7 +182,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
       m.push({ label: 'Copy name', Icon: Copy, run: () => app.copy(c.name) })
       if (a) {
         m.push(SEP)
-        m.push({ label: 'Drop database…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop database “${c.name}”? This deletes ALL its collections and documents.`, () => runMongo(c.name, { dropDatabase: 1 }, true)) })
+        m.push({ label: 'Drop database…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop database “${c.name}”? This deletes ALL its collections and documents.`, async () => { if (await runMongo(c.name, { dropDatabase: 1 }, true)) closeMongoDbTabs(c.name) }) })
       }
     } else if (c.type === 'mongo-coll') {
       m.push({ head: `${c.schema}.${c.table}` })
@@ -181,7 +192,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
       m.push({ label: 'Copy qualified name', Icon: Copy, run: () => app.copy(`${c.schema}.${c.table}`) })
       if (a) {
         m.push(SEP)
-        m.push({ label: 'Drop collection…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop collection “${c.schema}.${c.table}”? This cannot be undone.`, () => runMongo(c.schema!, { drop: c.table }, true)) })
+        m.push({ label: 'Drop collection…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop collection “${c.schema}.${c.table}”? This cannot be undone.`, async () => { if (await runMongo(c.schema!, { drop: c.table }, true)) closeMongoCollTabs(c.schema!, c.table!) }) })
       }
     } else if (c.type === 'roles') {
       m.push({ head: 'roles' })
@@ -226,7 +237,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
         m.push({ label: 'Rename…', Icon: Pencil, run: () => form('rename-table') })
         m.push({ label: 'Truncate…', Icon: Eraser, danger: true, run: () => confirmRun(`Truncate ${c.schema}.${c.table}? This deletes ALL rows.`, () => api.truncate(id, c.schema!, c.table!)) })
       }
-      if (a) m.push({ label: 'Drop table…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop table ${c.schema}.${c.table}? This cannot be undone.`, () => api.dropTable(id, c.schema!, c.table!), true) })
+      if (a) m.push({ label: 'Drop table…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop table ${c.schema}.${c.table}? This cannot be undone.`, () => api.dropTable(id, c.schema!, c.table!).then(() => closeTableTabs(c.schema!, c.table!)), true) })
       m.push(SEP)
       m.push({ label: 'Refresh', Icon: RotateCw, run: () => { close(); app.refreshConn(id) } })
     } else if (c.type === 'col') {
@@ -268,7 +279,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
       ],
     })
     if (!choice) return
-    api.dropSchema(id, schema, choice === 'cascade').then(() => app.refreshConn(id)).catch(e => app.notify(String(e.message || e), 'error'))
+    api.dropSchema(id, schema, choice === 'cascade').then(() => { app.refreshConn(id); closeSchemaTabs(schema) }).catch(e => app.notify(String(e.message || e), 'error'))
   }
 
   const onItem = (it: MenuItem, i: number) => {

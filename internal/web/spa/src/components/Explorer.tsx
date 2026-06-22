@@ -105,7 +105,7 @@ function ConnNode({ conn }: { conn: Connection }) {
                 e.stopPropagation(); e.preventDefault()
                 const ok = await app.confirm({ title: 'Delete connection', body: `Delete connection “${conn.name}”?`, buttons: [{ label: 'Delete', value: 'ok', variant: 'danger' }] })
                 if (ok)
-                  api.deleteConnection(conn.id).then(app.reloadConns).catch(err => app.notify(String(err.message || err), 'error'))
+                  api.deleteConnection(conn.id).then(() => { app.closeTabsFor(v => v.connId === conn.id); return app.reloadConns() }).catch(err => app.notify(String(err.message || err), 'error'))
               }}><Trash2 size={14} /></button>
           )}
         </span>
