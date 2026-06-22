@@ -137,10 +137,13 @@ function MongoTree({ connId, databases }: { connId: number; databases?: MongoDat
 }
 
 function MongoDbNode({ connId, db, defaultOpen }: { connId: number; db: MongoDatabase; defaultOpen: boolean }) {
+  const app = useApp()
   const colls = db.Collections || []
+  const payload: NodePayload = { type: 'mongo-db', connId, name: db.Name, schema: db.Name }
   return (
     <details className="tree-node" open={defaultOpen}>
-      <summary className="tree-row schema-row">
+      <summary className="tree-row schema-row"
+        onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
         <Caret /><Ico name="schema" /><span className="tree-name">{db.Name}</span>
         <span className="count">{colls.length}</span>
       </summary>
@@ -156,12 +159,14 @@ function MongoCollNode({ connId, db, coll }: { connId: number; db: string; coll:
   const app = useApp()
   const av = app.activeView
   const active = !!av && av.type === 'mongo' && av.connId === connId && av.db === db && av.coll === coll
+  const payload: NodePayload = { type: 'mongo-coll', connId, schema: db, table: coll, name: coll }
   const open = () => app.openTab({
     key: `mongo:${connId}:${db}.${coll}`, title: `${db}.${coll}`, icon: 'grid',
     view: { type: 'mongo', connId, db, coll },
   })
   return (
-    <div className={`tree-row leaf table-row${active ? ' active' : ''}`}>
+    <div className={`tree-row leaf table-row${active ? ' active' : ''}`}
+      onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
       <Ico name="table" />
       <span className="tree-name table-name" title="click to browse documents" onClick={open}>{coll}</span>
     </div>

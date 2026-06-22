@@ -68,6 +68,7 @@ export default function ContextMenu({ x, y, payload, onClose }: {
     grid: () => app.openTab({ key: `grid:${id}:${payload.schema}.${payload.table}`, title: `${payload.schema}.${payload.table}`, icon: 'grid', view: { type: 'grid', connId: id, schema: payload.schema!, table: payload.table! } }),
     doc: () => app.openTab({ key: `doc:${id}:${payload.schema}.${payload.table}`, title: `doc [${payload.table}]`, icon: 'grid', view: { type: 'doc', connId: id, schema: payload.schema!, table: payload.table! } }),
     usages: () => app.openTab({ key: `usages:${id}:${payload.schema}.${payload.table}`, title: `usages [${payload.table}]`, icon: 'grid', view: { type: 'usages', connId: id, schema: payload.schema!, table: payload.table! } }),
+    mongoColl: () => app.openTab({ key: `mongo:${id}:${payload.schema}.${payload.table}`, title: `${payload.schema}.${payload.table}`, icon: 'grid', view: { type: 'mongo', connId: id, db: payload.schema!, coll: payload.table! } }),
   }
   const generate = (kind: string) =>
     api.generate(id, kind, payload.schema!, payload.table!).then(r => app.copy(r.sql)).catch(e => app.notify(String(e.message || e), 'error'))
@@ -81,6 +82,33 @@ export default function ContextMenu({ x, y, payload, onClose }: {
     } catch (e) {
       app.notify(String((e as Error).message || e), 'error')
     }
+  }
+
+  // ── MongoDB helpers ── MongoDB has no DDL; databases and collections are
+  // created with a `create` command and materialise on first write, so these run
+  // through the same /mongo/cmd endpoint as the command console.
+  const runMongo = async (db: string, cmd: object, confirm = false): Promise<boolean> => {
+    try {
+      const resp = await api.mongoCmd(id, db, JSON.stringify(cmd), confirm)
+      if (resp.error) { app.notify(resp.error, 'error'); return false }
+      app.refreshConn(id)
+      return true
+    } catch (e) {
+      app.notify(String((e as Error).message || e), 'error')
+      return false
+    }
+  }
+  // Create a collection. When db is omitted (connection level) also prompt for the
+  // database name, since MongoDB makes the database and its first collection together.
+  const newMongoCollection = async (db?: string) => {
+    let database = db
+    if (!database) {
+      database = (await app.prompt({ title: 'New database', body: 'MongoDB creates the database together with its first collection.', placeholder: 'database name', submitLabel: 'Next' }))?.trim()
+      if (!database) return
+    }
+    const coll = (await app.prompt({ title: `New collection in “${database}”`, placeholder: 'collection name', submitLabel: 'Create' }))?.trim()
+    if (!coll) return
+    if (await runMongo(database, { create: coll })) app.notify(`Created ${database}.${coll}`, 'ok')
   }
 
   const items = buildMenu()
@@ -107,6 +135,9 @@ export default function ContextMenu({ x, y, payload, onClose }: {
         if (a) newKids.push({ label: 'User / role…', Icon: UserPlus, run: () => form('create-user') })
         m.push({ label: 'New…', Icon: Plus, children: newKids })
       }
+      // Mongo has no SQL DDL: offer a direct "create a database + collection" that
+      // bootstraps even an empty instance (no database node to right-click yet).
+      if (w && engine === 'mongodb') m.push({ label: 'New collection…', Icon: Plus, run: () => newMongoCollection() })
       m.push({ label: 'Refresh', Icon: RotateCw, key: 'Ctrl+F5', run: () => { close(); app.refreshConn(id) } })
       m.push(SEP)
       m.push({ label: 'Copy name', Icon: Copy, run: () => app.copy(c.name) })
@@ -131,6 +162,26 @@ export default function ContextMenu({ x, y, payload, onClose }: {
       if (a) {
         m.push(SEP)
         m.push({ label: 'Drop schema…', Icon: Trash2, danger: true, run: () => dropSchema(c.schema!) })
+      }
+    } else if (c.type === 'mongo-db') {
+      m.push({ head: c.name })
+      if (w) m.push({ label: 'New collection…', Icon: Plus, run: () => newMongoCollection(c.name) })
+      m.push({ label: 'Refresh', Icon: RotateCw, key: 'Ctrl+F5', run: () => { close(); app.refreshConn(id) } })
+      m.push(SEP)
+      m.push({ label: 'Copy name', Icon: Copy, run: () => app.copy(c.name) })
+      if (a) {
+        m.push(SEP)
+        m.push({ label: 'Drop database…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop database “${c.name}”? This deletes ALL its collections and documents.`, () => runMongo(c.name, { dropDatabase: 1 }, true)) })
+      }
+    } else if (c.type === 'mongo-coll') {
+      m.push({ head: `${c.schema}.${c.table}` })
+      m.push({ label: 'Browse documents', Icon: Table2, run: tab.mongoColl })
+      m.push(SEP)
+      m.push({ label: 'Copy name', Icon: Copy, run: () => app.copy(c.table!) })
+      m.push({ label: 'Copy qualified name', Icon: Copy, run: () => app.copy(`${c.schema}.${c.table}`) })
+      if (a) {
+        m.push(SEP)
+        m.push({ label: 'Drop collection…', Icon: Trash2, danger: true, run: () => confirmRun(`Drop collection “${c.schema}.${c.table}”? This cannot be undone.`, () => runMongo(c.schema!, { drop: c.table }, true)) })
       }
     } else if (c.type === 'roles') {
       m.push({ head: 'roles' })
