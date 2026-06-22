@@ -131,7 +131,7 @@ and a Redis on a private network, with **no database ports published** - only th
 verix-dbm UI is reachable from your host:
 
 ```bash
-docker compose up --build
+docker compose -f docker/docker-compose-demo.yml up --build
 # then open http://localhost:8080  (DEV mode: auto-logged-in as a local admin)
 ```
 
@@ -139,7 +139,8 @@ Add a connection from the UI to see the value prop work: a Postgres at host
 `postgres` port `5432` (db/user/pass `demo`), or a Redis at host `redis` port
 `6379` (user `default`). verix-dbm reaches them by hostname over the internal
 network; the databases themselves expose nothing. See
-[docker-compose.yml](docker-compose.yml) for the annotated topology.
+[docker/docker-compose-demo.yml](docker/docker-compose-demo.yml) for the
+annotated topology.
 
 > DEV mode disables auth and is for local evaluation only. For a real deployment
 > use OIDC + TLS - see [Deploy](#deploy-dokploy) and **[SECURITY.md](SECURITY.md)**.

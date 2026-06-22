@@ -1,7 +1,7 @@
 # verix-dbm quickstart / demo.
 #
-# `docker compose up` brings up verix-dbm next to a Postgres and a Redis on one
-# private network. Notice what is and isn't published:
+# Brings up verix-dbm next to a Postgres and a Redis on one private network.
+# Notice what is and isn't published:
 #
 #   - verix-dbm  -> 8080:8080   (the ONLY port reachable from your host)
 #   - postgres   -> no ports    (closed to the host and the internet)
@@ -14,9 +14,10 @@
 #
 # This file runs in DEV mode (no Keycloak: you are auto-logged-in as a local
 # admin) so you can try it in one command. DO NOT deploy it as-is. For a real
-# deployment use OIDC + TLS; see docker/docker-compose-dokploy.yml and SECURITY.md.
+# deployment use OIDC + TLS; see docker-compose-dokploy.yml and ../SECURITY.md.
 #
-#   1. docker compose up --build
+# Run from the repo root:
+#   1. docker compose -f docker/docker-compose-demo.yml up --build
 #   2. open http://localhost:8080
 #   3. add a connection ->  Postgres  host: postgres  port: 5432
 #                           db: demo   user: demo      password: demo
@@ -25,7 +26,9 @@
 services:
   dbm:
     build:
-      context: .
+      # Context is the repo root (one level up) so the root Dockerfile and the
+      # SPA/Go sources it needs are in scope.
+      context: ..
       dockerfile: Dockerfile
     environment:
       DBM_ADDR: ":8080"
