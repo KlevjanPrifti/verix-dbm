@@ -47,7 +47,25 @@ The root `/` serves the React SPA; the SPA lives in `internal/web/spa` and is th
 - [internal/postgres](internal/postgres) - pgx v5 introspection, query execution, DDL, and code generators. `Query(..., readOnly)` sets `default_transaction_read_only` per call; DDL runs via `ExecScript` as one atomic transaction.
 - [internal/redisdb](internal/redisdb) - go-redis SCAN browse, value viewers, command console with a read-only allowlist.
 
-Adding an engine = new package + its API/UI tabs, without touching auth, crypto, or the workbench shell.
+Adding an engine = new package + its API/UI tabs, without touching auth, crypto, or the workbench shell. `internal/web` stays a single flat package (handlers are methods on the unexported `*Server`, grouped by file: `api_*.go` for the JSON surface, `handlers_*.go` for shared helpers); a new engine adds one `api_<engine>.go`, not a subpackage.
+
+There are two recipes depending on whether the engine speaks SQL:
+
+*SQL-family engine* (fits `dbsql.Engine`; mirror [internal/mysql](internal/mysql) or [internal/sqlite](internal/sqlite)). It then reuses the grid/console/doc/usages tabs for free:
+1. `internal/<engine>/` implementing `dbsql.Engine` (+ a compile-time `var _ dbsql.Engine = (*Engine)(nil)`).
+2. [internal/dbsql/dbsql.go](internal/dbsql/dbsql.go): add `Family<X>` and its `kindFamily` entries.
+3. [internal/conn/registry.go](internal/conn/registry.go): add a pool entry/map + getter, the idle-close in `janitor`/`Forget`, and a dispatch arm in `Engine()`.
+4. [internal/store/store.go](internal/store/store.go): a `DSN...` builder if the connection shape differs.
+5. [internal/web/api.go](internal/web/api.go) `apiTestConnection` switch + a `ping<X>` in [handlers_workbench.go](internal/web/handlers_workbench.go).
+6. SPA [dbkinds.ts](internal/web/spa/src/dbkinds.ts) row (+ brand icon). No new tab needed.
+
+*Non-SQL vertical* (its own data model; mirror [internal/redisdb](internal/redisdb) or [internal/mongodb](internal/mongodb)). It does NOT touch `Engine()`:
+1. `internal/<engine>/` browse/query/command helpers (not a `dbsql.Engine`).
+2. [internal/dbsql/dbsql.go](internal/dbsql/dbsql.go): add `Family<X>` + kind mapping (the family constant lives here even for non-SQL engines).
+3. [internal/conn/registry.go](internal/conn/registry.go): a client getter + idle-close + `Forget`.
+4. [internal/store/store.go](internal/store/store.go): a `DSN...` builder.
+5. `internal/web/api_<engine>.go`: handlers, registered in `mountAPI`, plus an `apiExplorer` branch and a `ping<X>`.
+6. SPA: `dbkinds.ts` row, a new `TabView` variant + tab component, an Explorer branch, a `Tabs.tsx` route, icon + accent.
 
 **Auth & security model** ([internal/auth](internal/auth), [SECURITY.md](SECURITY.md)):
 - Keycloak OIDC login; realm roles map to **admin / write / read** with **deny-by-default** (no role -> 403).
