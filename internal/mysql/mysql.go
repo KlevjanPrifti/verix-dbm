@@ -12,9 +12,12 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	mysqldriver "github.com/go-sql-driver/mysql"
 
 	"verix-dbm/internal/dbsql"
 )
@@ -458,6 +461,13 @@ func (e *Engine) Roles(ctx context.Context) ([]dbsql.Role, error) {
 	defer cancel()
 	rows, err := e.db.QueryContext(ctx, q)
 	if err != nil {
+		// Many app accounts can't read mysql.user (1142 table-level / 1227 global
+		// privilege denial). That's expected, not a failure: report no visible roles
+		// so the explorer shows an empty list instead of a red error.
+		var myErr *mysqldriver.MySQLError
+		if errors.As(err, &myErr) && (myErr.Number == 1142 || myErr.Number == 1227) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	defer rows.Close()
