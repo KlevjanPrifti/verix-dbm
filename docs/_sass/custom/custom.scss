@@ -220,3 +220,118 @@ table,
 .btn {
   border-radius: 2px;
 }
+
+// ---- Top header bar (search + GitHub aux nav) ----------------------------
+// Unify the whole header strip onto one panel surface so the default gray
+// block behind the top-right links disappears.
+.main-header,
+#main-header {
+  background-color: var(--vx-panel) !important;
+  border-bottom: 1px solid rgba(0, 220, 255, 0.18);
+}
+
+.search,
+.aux-nav {
+  background-color: transparent !important;
+}
+
+.search-input,
+#search-input {
+  background-color: var(--vx-panel-raised) !important;
+  color: var(--vx-text);
+  font-family: var(--vx-sans);
+}
+.search-input::placeholder,
+#search-input::placeholder {
+  color: rgba(0, 220, 255, 0.40);
+}
+
+.aux-nav-list-item a {
+  font-family: var(--vx-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+}
+
+// Search dropdown surface + results.
+.search-overlay {
+  background-color: rgba(1, 11, 20, 0.55);
+}
+.search-result-doc .search-result-doc-title {
+  color: var(--vx-text);
+}
+.search-result-rel-url {
+  color: rgba(0, 220, 255, 0.55);
+}
+
+// ---- Footer ---------------------------------------------------------------
+.site-footer {
+  color: var(--vx-text-dim);
+  border-top: 1px solid rgba(0, 220, 255, 0.12);
+  font-size: 0.72rem;
+}
+.site-footer a {
+  color: var(--vx-accent);
+}
+
+// ---- HUD scrollbars -------------------------------------------------------
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 220, 255, 0.25) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 220, 255, 0.22);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 220, 255, 0.40);
+}
+
+// ---- Text selection -------------------------------------------------------
+::selection {
+  background: rgba(0, 220, 255, 0.30);
+  color: #ffffff;
+}
+
+// ---- Sidebar depth --------------------------------------------------------
+.side-bar {
+  box-shadow: inset -1px 0 26px rgba(0, 28, 48, 0.45);
+}
+
+// ---- HUD corner brackets on code blocks (echoes .hud-panel) ---------------
+.main-content div.highlighter-rouge,
+.main-content figure.highlight {
+  position: relative;
+}
+.main-content div.highlighter-rouge::before,
+.main-content div.highlighter-rouge::after,
+.main-content figure.highlight::before,
+.main-content figure.highlight::after {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  pointer-events: none;
+  z-index: 1;
+}
+.main-content div.highlighter-rouge::before,
+.main-content figure.highlight::before {
+  top: 0;
+  left: 0;
+  border-top: 2px solid rgba(0, 220, 255, 0.55);
+  border-left: 2px solid rgba(0, 220, 255, 0.55);
+}
+.main-content div.highlighter-rouge::after,
+.main-content figure.highlight::after {
+  bottom: 0;
+  right: 0;
+  border-bottom: 2px solid rgba(0, 220, 255, 0.55);
+  border-right: 2px solid rgba(0, 220, 255, 0.55);
+}
