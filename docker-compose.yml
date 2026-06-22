@@ -1,0 +1,89 @@
+# verix-dbm quickstart / demo.
+#
+# `docker compose up` brings up verix-dbm next to a Postgres and a Redis on one
+# private network. Notice what is and isn't published:
+#
+#   - verix-dbm  -> 8080:8080   (the ONLY port reachable from your host)
+#   - postgres   -> no ports    (closed to the host and the internet)
+#   - redis      -> no ports    (closed to the host and the internet)
+#
+# That is the whole point: the databases never expose a port. verix-dbm reaches
+# them over the internal Docker network by service name (`postgres:5432`,
+# `redis:6379`), and you reach the databases only through verix-dbm's governed,
+# audited UI.
+#
+# This file runs in DEV mode (no Keycloak: you are auto-logged-in as a local
+# admin) so you can try it in one command. DO NOT deploy it as-is. For a real
+# deployment use OIDC + TLS; see docker/docker-compose-dokploy.yml and SECURITY.md.
+#
+#   1. docker compose up --build
+#   2. open http://localhost:8080
+#   3. add a connection ->  Postgres  host: postgres  port: 5432
+#                           db: demo   user: demo      password: demo
+#      and/or              Redis     host: redis     port: 6379  user: default
+
+services:
+  dbm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DBM_ADDR: ":8080"
+      DBM_BASE_URL: http://localhost:8080
+      DBM_LOG_FORMAT: text            # friendlier than JSON for a local demo
+      # DEV MODE: auth is DISABLED and every request is a local admin. Local
+      # demo only. In production leave this unset and configure OIDC instead.
+      DBM_DEV_MODE: "true"
+      # Demo encryption key for saved-connection passwords. 64 hex chars.
+      # DEMO VALUE: generate your own with `openssl rand -hex 32` for any real use.
+      DBM_ENC_KEY: "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+      DBM_SQLITE_PATH: /data/verix-dbm.db
+    ports:
+      - "8080:8080"                   # the only thing exposed to your host
+    volumes:
+      - dbm_data:/data
+    networks:
+      - verix
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    # NO `ports:` block: this DB is unreachable from your host. Only services on
+    # the `verix` network (i.e. verix-dbm) can connect to it.
+    networks:
+      - verix
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # NO `ports:` block here either: reachable only as `redis:6379` on the
+    # private network.
+    networks:
+      - verix
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+networks:
+  verix:
+    driver: bridge
+
+volumes:
+  dbm_data:
