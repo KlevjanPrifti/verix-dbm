@@ -1,3 +1,8 @@
+---
+title: Data model
+nav_order: 11
+---
+
 # Metadata store and data model
 
 This page describes exactly what verix-dbm persists: a small metadata store that holds saved connections, per-connection grants, and an audit log, and nothing from the databases users connect to. It covers the pluggable backend (SQLite or Postgres), the schema, the audit lifecycle, and the per-engine DSN builders. The implementation lives in `internal/store/store.go`.
@@ -10,7 +15,7 @@ The metadata store is the only place verix-dbm writes durable state of its own. 
 2. **Per-connection grants** (`connection_grants` table): which Keycloak group or realm role gets `read`/`write` on a given connection.
 3. **The audit log** (`audit` table): a row per mutating action (and login outcomes, credential decrypts, etc.).
 
-It never holds **data from the connected databases**. Rows, tables, schemas, Redis keys, and Mongo documents are read live from the target over a pooled connection ([internal/conn/registry.go](../internal/conn/registry.go)) and streamed to the browser; none of it is cached or copied into the metadata store. The store is small, slow-changing, and safe to back up on its own.
+It never holds **data from the connected databases**. Rows, tables, schemas, Redis keys, and Mongo documents are read live from the target over a pooled connection ([internal/conn/registry.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/conn/registry.go)) and streamed to the browser; none of it is cached or copied into the metadata store. The store is small, slow-changing, and safe to back up on its own.
 
 A few consequences of that boundary:
 
@@ -206,7 +211,7 @@ See [Configuration](configuration.md) for the full env var reference.
 
 ## 5. DSN builder functions per engine
 
-The store also owns the functions that turn a saved `Connection` plus a decrypted password into an engine-specific DSN. These are consumed by the connection registry ([internal/conn/registry.go](../internal/conn/registry.go)) when it opens a target pool. They are methods on `Connection` (except `SQLiteDSN`, a package function).
+The store also owns the functions that turn a saved `Connection` plus a decrypted password into an engine-specific DSN. These are consumed by the connection registry ([internal/conn/registry.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/conn/registry.go)) when it opens a target pool. They are methods on `Connection` (except `SQLiteDSN`, a package function).
 
 | Builder | Output format | Key details / gotchas |
 |---|---|---|
@@ -233,8 +238,8 @@ See [Database engines](database-engines.md) for how the registry consumes these 
 
 ## 6. See also
 
-- [Security](security.md) and [../SECURITY.md](../SECURITY.md): credential encryption (AES-256-GCM keyring, rotation, `cred_access`), RBAC, per-connection grants, CSRF, audit redaction.
-- [Configuration](configuration.md) and [../.env.example](../.env.example): `DBM_STORE_DRIVER`, `DBM_STORE_DSN`, `DBM_SQLITE_PATH`, `DBM_SQLITE_DIR`, `DBM_SCOPED_ACCESS`, `DBM_AUDIT_RETENTION_DAYS`, and the rest of the env var reference.
+- [Security](security.md) and [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md): credential encryption (AES-256-GCM keyring, rotation, `cred_access`), RBAC, per-connection grants, CSRF, audit redaction.
+- [Configuration](configuration.md) and [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example): `DBM_STORE_DRIVER`, `DBM_STORE_DSN`, `DBM_SQLITE_PATH`, `DBM_SQLITE_DIR`, `DBM_SCOPED_ACCESS`, `DBM_AUDIT_RETENTION_DAYS`, and the rest of the env var reference.
 - [Observability](observability.md): how audit events are mirrored to the structured log (`OnAudit` -> the `audit` log line) and the auth-outcome metric, plus the `/readyz` probe that calls `Store.Ping`.
 - [Database engines](database-engines.md): the connection registry, engine families, and per-engine pool/DSN handling.
-- Source: [internal/store/store.go](../internal/store/store.go), [internal/conn/registry.go](../internal/conn/registry.go), [internal/crypto](../internal/crypto), [internal/web/security.go](../internal/web/security.go), [cmd/server/main.go](../cmd/server/main.go).
+- Source: [internal/store/store.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/store/store.go), [internal/conn/registry.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/conn/registry.go), [internal/crypto](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/crypto), [internal/web/security.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/security.go), [cmd/server/main.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/cmd/server/main.go).

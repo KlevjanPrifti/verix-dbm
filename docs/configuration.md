@@ -1,3 +1,8 @@
+---
+title: Configuration
+nav_order: 3
+---
+
 # Configuration reference
 
 verix-dbm is configured entirely through environment variables. There is no config file: every knob is an env var read once at startup by `Load()` in `internal/config/config.go`. On a misconfiguration the process **fails closed**: `Load()` returns an error and `cmd/server/main.go` logs it to stderr and exits with status 1 before the server ever binds a port. This page documents every variable, its default, whether it is required, and the exact start-up behavior.
@@ -200,10 +205,10 @@ DBM_DEV_MODE=true go run ./cmd/server               # backend on :8080, auto-log
 cd internal/web/spa && npm install && npm run dev    # Vite dev server, proxies /api + /c to :8080
 ```
 
-See [../.env.example](../.env.example) for a copy-ready template of all variables.
+See [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example) for a copy-ready template of all variables.
 
 ## Related docs
 
-- [Security model](security.md) and [../SECURITY.md](../SECURITY.md): RBAC and deny-by-default roles, per-connection grants (`DBM_SCOPED_ACCESS` / `DBM_OPEN_READ`), credential encryption and zero-downtime key rotation (`DBM_ENC_KEY` / `DBM_ENC_KEYS`), CSRF, security headers, and the SSRF egress guard (`DBM_ALLOW_LOCAL_TARGETS`).
+- [Security model](security.md) and [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md): RBAC and deny-by-default roles, per-connection grants (`DBM_SCOPED_ACCESS` / `DBM_OPEN_READ`), credential encryption and zero-downtime key rotation (`DBM_ENC_KEY` / `DBM_ENC_KEYS`), CSRF, security headers, and the SSRF egress guard (`DBM_ALLOW_LOCAL_TARGETS`).
 - [Deployment](deployment.md): Docker image, compose topologies, and the high-availability setup (`DBM_STORE_DRIVER` / `DBM_STORE_DSN`, `DBM_SESSION_BACKEND` / `DBM_SESSION_REDIS_URL`, `DBM_PG_POOL_MAX_CONNS`).
 - [Observability](observability.md): structured logging (`DBM_LOG_LEVEL` / `DBM_LOG_FORMAT`), Prometheus metrics and the `/metrics` Bearer gate (`DBM_METRICS_TOKEN`), `/healthz` + `/readyz` probes, and audit retention (`DBM_AUDIT_RETENTION_DAYS`).

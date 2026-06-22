@@ -1,3 +1,8 @@
+---
+title: Architecture
+nav_order: 4
+---
+
 # Architecture
 
 verix-dbm is a single static Go binary that serves a JSON API and an embedded React workbench, fronting many database engines through one pooled connection registry. This page explains how those parts fit together and how a request flows through them.
@@ -119,7 +124,7 @@ After the global stack, routes split into three tiers:
 
 CSRF is not a global middleware. It is enforced per handler on every mutating request via `s.auth.CheckCSRF(r)`, which compares the `X-CSRF-Token` header (or the `csrf` form field) against the session's token using a constant-time compare. The SPA fetches its token from `GET /api/me`.
 
-For the full security model (OIDC flow, RBAC, CSRF, crypto, headers, SSRF guard, rate limiting), see [Security](security.md) and [../SECURITY.md](../SECURITY.md).
+For the full security model (OIDC flow, RBAC, CSRF, crypto, headers, SSRF guard, rate limiting), see [Security](security.md) and [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md).
 
 ## The connection registry
 
@@ -164,9 +169,9 @@ This traces a SQL console query (`POST /api/c/{id}/pg/query`) from browser to re
 
 ## Cross-links
 
-- [Security](security.md) and [../SECURITY.md](../SECURITY.md) - OIDC, RBAC, per-connection grants, CSRF, credential encryption, headers, SSRF guard, rate limiting.
+- [Security](security.md) and [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md) - OIDC, RBAC, per-connection grants, CSRF, credential encryption, headers, SSRF guard, rate limiting.
 - [Database engines](database-engines.md) - the engine plug-in recipe, per-engine specifics, and the shared guardrails in detail.
 - [Data model](data-model.md) - the metadata store schema (connections, grants, audit), DSN builders, and the SQLite path allowlist.
 - [API reference](api-reference.md) - the full route table, request/response shapes, and capability gates.
 - [Configuration](configuration.md) - every env var, default, and gated subsystem.
-- Repo root: [../README.md](../README.md), [../.env.example](../.env.example), [../Makefile](../Makefile).
+- Repo root: [README.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/README.md), [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example), [Makefile](https://github.com/KlevjanPrifti/verix-dbm/blob/main/Makefile).

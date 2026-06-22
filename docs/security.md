@@ -1,6 +1,11 @@
+---
+title: Security
+nav_order: 5
+---
+
 # Security model (deep dive)
 
-This is the engineering deep-dive into how verix-dbm enforces authentication, authorization, credential protection, and request hardening. The operator-facing policy summary lives in [../SECURITY.md](../SECURITY.md); read that first for the short version, then come here for the exact mechanisms, source locations, and fail-closed behaviors.
+This is the engineering deep-dive into how verix-dbm enforces authentication, authorization, credential protection, and request hardening. The operator-facing policy summary lives in [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md); read that first for the short version, then come here for the exact mechanisms, source locations, and fail-closed behaviors.
 
 Source files referenced throughout: `internal/auth/auth.go`, `internal/auth/sessions.go`, `internal/web/access.go`, `internal/crypto/crypto.go`, `internal/web/security.go`, `internal/web/ratelimit.go`, `internal/web/egress.go`, `internal/web/server.go`, `internal/web/api.go`, `cmd/server/main.go`, `internal/config/config.go`.
 
@@ -98,7 +103,7 @@ Access is **deny-by-default**. `auth.Middleware` rejects an authenticated user w
 
 ### Scoped per-connection grants (`DBM_SCOPED_ACCESS`)
 
-By default a user's global role applies to every saved connection. When `DBM_SCOPED_ACCESS=true`, non-admins are instead authorized per connection through grants, managed by admins in the connection edit dialog ([GrantsPanel.tsx](../internal/web/spa/src/components/GrantsPanel.tsx)).
+By default a user's global role applies to every saved connection. When `DBM_SCOPED_ACCESS=true`, non-admins are instead authorized per connection through grants, managed by admins in the connection edit dialog ([GrantsPanel.tsx](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/spa/src/components/GrantsPanel.tsx)).
 
 A grant binds a **subject** (a Keycloak group path or a realm-role name) to a **level** (`read` or `write`) on one connection. A user's subjects are the union of their realm roles and groups (`User.Subjects()`). The store resolves the highest grant any of the user's subjects holds on a connection (write outranks read) via `GrantForSubjects`; `ResolveConnAccess(u, grant, scoped)` (`internal/web/access.go`, pure and unit-tested) then computes effective access:
 
@@ -243,4 +248,4 @@ These are application-layer backstops, not authorization; the authoritative cont
 - [Configuration](configuration.md): full environment variable reference and defaults, including every security-relevant flag.
 - [Data model](data-model.md): the metadata store (connections, grants, audit log) and what is and is not persisted.
 - [Deployment](deployment.md): TLS termination, network isolation, HA topology, and the demo/Dokploy compose files.
-- Repo root: [../SECURITY.md](../SECURITY.md) (operator policy summary), [../README.md](../README.md), [../.env.example](../.env.example).
+- Repo root: [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md) (operator policy summary), [README.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/README.md), [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example).

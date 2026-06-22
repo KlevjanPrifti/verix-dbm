@@ -1,3 +1,8 @@
+---
+title: Deployment
+nav_order: 9
+---
+
 # Deployment and operations
 
 This page is for operators putting verix-dbm into production: how the image is built, how to run it behind a TLS-terminating reverse proxy with OIDC, how to scale it horizontally, and how to back it up, upgrade it, and probe its health.
@@ -38,7 +43,7 @@ Runtime image properties:
 
 Because the image is distroless there is no shell, `curl`, or `wget`, so a container-level `HEALTHCHECK` is not possible. The `/healthz` and `/readyz` endpoints exist and must be probed externally (for example by your reverse proxy or orchestrator). See [Health checks](#health-checks).
 
-For local non-Docker builds, the [Makefile](../Makefile) `build` target builds the SPA then runs `CGO_ENABLED=0 go build -o bin/verix-dbm` (note: it does not pass `-trimpath`/`-ldflags`, unlike the Dockerfile and CI). The build context for both compose files below is the repo root (`context: ..`) so the root `Dockerfile` and the Go/SPA sources are in scope.
+For local non-Docker builds, the [Makefile](https://github.com/KlevjanPrifti/verix-dbm/blob/main/Makefile) `build` target builds the SPA then runs `CGO_ENABLED=0 go build -o bin/verix-dbm` (note: it does not pass `-trimpath`/`-ldflags`, unlike the Dockerfile and CI). The build context for both compose files below is the repo root (`context: ..`) so the root `Dockerfile` and the Go/SPA sources are in scope.
 
 ## Demo topology (dev-only)
 
@@ -217,6 +222,6 @@ A third infra endpoint, `GET /metrics`, exposes Prometheus metrics and is open b
 ## See also
 
 - [Configuration](configuration.md): full environment-variable reference and defaults.
-- [Security](security.md) and [SECURITY.md](../SECURITY.md): OIDC, RBAC, per-connection grants, CSRF, credential encryption, headers, SSRF egress guard.
+- [Security](security.md) and [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md): OIDC, RBAC, per-connection grants, CSRF, credential encryption, headers, SSRF egress guard.
 - [Observability](observability.md): structured logging, Prometheus metrics, the `/metrics` token gate, and audit mirroring.
-- Repo root: [../README.md](../README.md), [../.env.example](../.env.example), [../Makefile](../Makefile).
+- Repo root: [README.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/README.md), [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example), [Makefile](https://github.com/KlevjanPrifti/verix-dbm/blob/main/Makefile).

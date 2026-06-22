@@ -1,3 +1,8 @@
+---
+title: Home
+nav_order: 1
+---
+
 # verix-dbm documentation
 
 This folder is the home for verix-dbm's reference documentation. Start here to find the page you need, then follow the cross-links between pages.
@@ -17,7 +22,7 @@ verix-dbm is a governed front door to your databases: a single static Go binary 
 | [Database engines](database-engines.md) | The engine families, the `dbsql.Engine` interface, shared guardrails (30s timeout, 1000-row cap, destructive-statement gate, read-only enforcement), and per-engine specifics. |
 | [API reference](api-reference.md) | Every JSON endpoint under `/api` (and `GET /c/{id}/export`): method, path, capability gate, CSRF requirement, and behavior (`internal/web/api_*.go`). |
 | [Frontend](frontend.md) | The React + TypeScript + Vite SPA under `internal/web/spa`: app shell, app context, API client, tab kinds, the Explorer tree, and components. |
-| [Deployment](deployment.md) | The multi-stage `Dockerfile`, [Makefile](../Makefile) targets, the demo and Dokploy compose files, and the CI/release workflow. |
+| [Deployment](deployment.md) | The multi-stage `Dockerfile`, [Makefile](https://github.com/KlevjanPrifti/verix-dbm/blob/main/Makefile) targets, the demo and Dokploy compose files, and the CI/release workflow. |
 | [Observability](observability.md) | Structured request logging, Prometheus metrics at `/metrics`, `/healthz` + `/readyz` probes, and audit mirroring to the structured log for SIEM. |
 | [Data model](data-model.md) | The metadata store (`internal/store`): schema for `connections`, `connection_grants`, and `audit`, plus the SQLite/Postgres backends and DSN builders. |
 | [Development](development.md) | Building, testing, and extending verix-dbm: the `make` targets, running a single test, and the recipes for adding a new engine. |
@@ -37,7 +42,7 @@ verix-dbm is a governed front door to your databases: a single static Go binary 
 
 ## Repo root references
 
-- [../README.md](../README.md): project overview and quickstart.
-- [../SECURITY.md](../SECURITY.md): the authoritative security model and threat notes.
-- [../.env.example](../.env.example): a commented template of every configuration variable.
-- [../Makefile](../Makefile): build, test, vet, and vulnerability-scan targets.
+- [README.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/README.md): project overview and quickstart.
+- [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md): the authoritative security model and threat notes.
+- [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example): a commented template of every configuration variable.
+- [Makefile](https://github.com/KlevjanPrifti/verix-dbm/blob/main/Makefile): build, test, vet, and vulnerability-scan targets.

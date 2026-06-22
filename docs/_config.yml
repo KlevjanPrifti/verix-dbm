@@ -1,0 +1,40 @@
+# GitHub Pages configuration for the verix-dbm docs site.
+#
+# Publishing: GitHub repo -> Settings -> Pages -> Build and deployment ->
+#   Source: "Deploy from a branch", Branch: main, Folder: /docs
+#
+# GitHub Pages builds this with Jekyll using its own supported plugins, so no
+# Gemfile or build step is required. The site lands at:
+#   https://klevjanprifti.github.io/verix-dbm/
+
+title: verix-dbm
+description: Put your databases behind SSO and an audit log without exposing their ports.
+
+# Project-page URL. baseurl is the repo name so theme assets and links resolve.
+url: https://klevjanprifti.github.io
+baseurl: /verix-dbm
+
+# Theme: Just the Docs, loaded as a remote theme (sidebar nav + client search).
+remote_theme: just-the-docs/just-the-docs
+color_scheme: dark
+search_enabled: true
+
+# Repo link shown top-right of every page.
+aux_links:
+  GitHub:
+    - https://github.com/KlevjanPrifti/verix-dbm
+aux_links_new_tab: true
+
+# "Back to top" link at the foot of long pages.
+back_to_top: true
+back_to_top_text: "Back to top"
+
+# Plugins supported by the GitHub Pages build.
+plugins:
+  - jekyll-remote-theme
+  - jekyll-relative-links
+  - jekyll-seo-tag
+
+# Keep build artifacts and tooling out of the generated site.
+exclude:
+  - vendor

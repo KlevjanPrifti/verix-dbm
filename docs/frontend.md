@@ -1,3 +1,8 @@
+---
+title: Frontend
+nav_order: 8
+---
+
 # Frontend / SPA
 
 verix-dbm ships a single React workbench baked into the Go binary: an IDE-style SPA that calls one JSON API and is served from the same process. This page is the working reference for engineers touching the React side under `internal/web/spa`.
@@ -22,11 +27,11 @@ Icons are centralized in `internal/web/spa/src/icons.tsx`: it re-exports Lucide 
 
 ## 2. The workbench layout
 
-The shell ([`src/App.tsx`](../internal/web/spa/src/App.tsx)) renders a `<header class="topbar">` (brand `VERIXDBM`, nav, userbox) above `<main class="container"><div class="ide">`, which holds two panes: the **Explorer** tree on the left and the **Tabs** workspace on the right.
+The shell ([`src/App.tsx`](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/spa/src/App.tsx)) renders a `<header class="topbar">` (brand `VERIXDBM`, nav, userbox) above `<main class="container"><div class="ide">`, which holds two panes: the **Explorer** tree on the left and the **Tabs** workspace on the right.
 
 - **Topbar nav**: `Connections` is always shown; `Audit` and `Re-encrypt` appear only when `me.user.admin`. The userbox shows `me.user.name` plus a role suffix (` · ADMIN` / ` · WRITE` / ` · READ`). Logout is a `<form method="post" action="/auth/logout">` with a hidden `csrf` field (POST + CSRF only, deliberately not a GET link).
 - **Boot guard**: while `me` is `null` the app renders only `loading…`; nothing else mounts until `GET /api/me` resolves.
-- **Tabs stay mounted.** This is the core UX invariant: in [`components/Tabs.tsx`](../internal/web/spa/src/components/Tabs.tsx) every tab is always rendered and inactive ones are hidden with inline `style={{ display: active ? 'flex' : 'none' }}`. Switching tabs never unmounts them, so console text, grid filters, sort state, queued edits, and scroll position all survive. Do not "optimize" this into conditional rendering: it would discard tab state.
+- **Tabs stay mounted.** This is the core UX invariant: in [`components/Tabs.tsx`](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/spa/src/components/Tabs.tsx) every tab is always rendered and inactive ones are hidden with inline `style={{ display: active ? 'flex' : 'none' }}`. Switching tabs never unmounts them, so console text, grid filters, sort state, queued edits, and scroll position all survive. Do not "optimize" this into conditional rendering: it would discard tab state.
 - **Engine accent tint**: a `useEffect` in `App.tsx` sets `document.documentElement.dataset.accent` from the active tab's connection engine: `redis`/`mongodb` -> `emerald`, `mysql` -> `amber`, `sqlite` -> `violet`, else (Postgres family) -> `cyan` (also the default when no connection is active).
 
 ### Mobile / off-canvas drawer
@@ -117,7 +122,7 @@ The DTO types the API returns are mirrored in `src/types.ts` (e.g. `Me`, `Connec
 
 ## 5. Tab kinds and routing
 
-[`components/Tabs.tsx`](../internal/web/spa/src/components/Tabs.tsx) owns the tab bar and the workspace. The tab bar renders the `drawer-toggle`, then one `.tab` per open tab (icon is `Terminal` when `t.icon === 'console'`, else `Table2`), each with a close `X`. When there are no tabs it shows a `.tab-hint` plus a `.welcome` box.
+[`components/Tabs.tsx`](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/spa/src/components/Tabs.tsx) owns the tab bar and the workspace. The tab bar renders the `drawer-toggle`, then one `.tab` per open tab (icon is `Terminal` when `t.icon === 'console'`, else `Table2`), each with a close `X`. When there are no tabs it shows a `.tab-hint` plus a `.welcome` box.
 
 `TabContent` maps a `TabView` to a component by `v.type`:
 
@@ -173,7 +178,7 @@ Notable details:
 
 ## 7. The `dbkinds.ts` registry
 
-[`src/dbkinds.ts`](../internal/web/spa/src/dbkinds.ts) is the single source of truth on the SPA side for the database kinds the UI offers. It mirrors the engine-family mapping in `internal/dbsql/dbsql.go` (see [Database Engines](database-engines.md)).
+[`src/dbkinds.ts`](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/spa/src/dbkinds.ts) is the single source of truth on the SPA side for the database kinds the UI offers. It mirrors the engine-family mapping in `internal/dbsql/dbsql.go` (see [Database Engines](database-engines.md)).
 
 `Engine = 'postgres' | 'mysql' | 'sqlite' | 'mongodb' | 'redis'`. Each row is a `DbKind`:
 
@@ -236,4 +241,4 @@ make build   # make spa, then CGO_ENABLED=0 go build -o bin/verix-dbm ./cmd/serv
 - [Architecture](architecture.md) - process bootstrap, the chi router and middleware stack, the embedded-SPA handler, and the connection registry.
 - [API Reference](api-reference.md) - the full JSON endpoint table the `api.ts` client targets, capability gates, and CSRF rules.
 - [Database Engines](database-engines.md) - the engine families behind the shared `/pg/` routes and the engine-adding recipes that `dbkinds.ts` participates in.
-- Repo root: [../README.md](../README.md), [../SECURITY.md](../SECURITY.md), [../.env.example](../.env.example), [../Makefile](../Makefile).
+- Repo root: [README.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/README.md), [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md), [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example), [Makefile](https://github.com/KlevjanPrifti/verix-dbm/blob/main/Makefile).

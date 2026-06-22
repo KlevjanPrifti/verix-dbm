@@ -1,3 +1,8 @@
+---
+title: Getting started
+nav_order: 2
+---
+
 # Getting started
 
 verix-dbm is a single static Go binary with a React workbench baked in: one process serves a JSON API and an embedded SPA so you can browse and query Postgres, MySQL/MariaDB, SQLite, Redis/Valkey, and MongoDB from one governed, audited UI. This page gets you from zero to a running instance, then points you at the docs you need before any real deployment.
@@ -72,7 +77,7 @@ Use the service names (`postgres`, `redis`) as the host, not `localhost`: verix-
 
 ### Why this is demo-only
 
-The demo compose file is marked "DO NOT deploy as-is". It sets `DBM_DEV_MODE: "true"` (auth disabled, every request is a local admin) and ships a placeholder encryption key `DBM_ENC_KEY` (64 hex chars). For anything real, configure OIDC and TLS instead. See [docker/docker-compose-dokploy.yml](../docker/docker-compose-dokploy.yml) and the deployment docs below.
+The demo compose file is marked "DO NOT deploy as-is". It sets `DBM_DEV_MODE: "true"` (auth disabled, every request is a local admin) and ships a placeholder encryption key `DBM_ENC_KEY` (64 hex chars). For anything real, configure OIDC and TLS instead. See [docker/docker-compose-dokploy.yml](https://github.com/KlevjanPrifti/verix-dbm/blob/main/docker/docker-compose-dokploy.yml) and the deployment docs below.
 
 ## Run from source in DEV mode
 
@@ -105,7 +110,7 @@ If you instead want the backend to serve the SPA itself (no Vite), build the SPA
 
 For a production-like local run (or to produce a deployable artifact), build the SPA first so it gets embedded, then build the Go binary.
 
-The simplest path uses the [Makefile](../Makefile):
+The simplest path uses the [Makefile](https://github.com/KlevjanPrifti/verix-dbm/blob/main/Makefile):
 
 ```bash
 make build      # builds the SPA (npm ci + vite build), then the static Go binary -> bin/verix-dbm
@@ -140,7 +145,7 @@ Run a single Go test directly:
 go test ./internal/web -run TestName -v
 ```
 
-The official Docker image (multi-stage, distroless nonroot) does all of this for you: a Node 20 stage builds the SPA, a `golang:1.26-alpine` stage compiles the static binary with `-trimpath -ldflags="-s -w"`, and the final image is just the binary plus a nonroot-owned `/data` volume for the SQLite metadata store. See the [Dockerfile](../Dockerfile).
+The official Docker image (multi-stage, distroless nonroot) does all of this for you: a Node 20 stage builds the SPA, a `golang:1.26-alpine` stage compiles the static binary with `-trimpath -ldflags="-s -w"`, and the final image is just the binary plus a nonroot-owned `/data` volume for the SQLite metadata store. See the [Dockerfile](https://github.com/KlevjanPrifti/verix-dbm/blob/main/Dockerfile).
 
 ## Registering your first connection
 
@@ -170,7 +175,7 @@ A few specifics worth knowing on first use:
 Dev mode is for local trials only. Before exposing verix-dbm to anyone else, read these:
 
 - [Configuration](configuration.md): the full environment-variable reference and defaults (auth, encryption keys, store backend, sessions, observability, access scoping). In production the app fails closed and refuses to start without OIDC (`OIDC_ISSUER` + `OIDC_CLIENT_ID`) and an encryption key (`DBM_ENC_KEY` or `DBM_ENC_KEYS`).
-- [Security](security.md) and the repo root [SECURITY.md](../SECURITY.md): the OIDC login flow, deny-by-default RBAC (admin/write/read), per-connection grants, CSRF, credential encryption and rotation, security headers, rate limiting, and the SSRF egress guard.
-- [Deployment](deployment.md): production topology, TLS, OIDC wiring, HA (shared Postgres metadata store + Redis sessions), and the [docker/docker-compose-dokploy.yml](../docker/docker-compose-dokploy.yml) example behind a TLS-terminating proxy.
+- [Security](security.md) and the repo root [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md): the OIDC login flow, deny-by-default RBAC (admin/write/read), per-connection grants, CSRF, credential encryption and rotation, security headers, rate limiting, and the SSRF egress guard.
+- [Deployment](deployment.md): production topology, TLS, OIDC wiring, HA (shared Postgres metadata store + Redis sessions), and the [docker/docker-compose-dokploy.yml](https://github.com/KlevjanPrifti/verix-dbm/blob/main/docker/docker-compose-dokploy.yml) example behind a TLS-terminating proxy.
 
-See also the annotated [.env.example](../.env.example) and the project [README.md](../README.md).
+See also the annotated [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example) and the project [README.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/README.md).

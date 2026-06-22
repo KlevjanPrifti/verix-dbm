@@ -1,10 +1,15 @@
+---
+title: Observability
+nav_order: 10
+---
+
 # Observability
 
-verix-dbm exposes a small, SRE-focused operational surface from a single file ([internal/web/observ.go](../internal/web/observ.go)): structured request logs, Prometheus metrics, liveness and readiness probes, and audit events mirrored to the log for SIEM forwarding. This page documents each, with exact env vars, route paths, metric names, and the gotchas you will hit in production.
+verix-dbm exposes a small, SRE-focused operational surface from a single file ([internal/web/observ.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/observ.go)): structured request logs, Prometheus metrics, liveness and readiness probes, and audit events mirrored to the log for SIEM forwarding. This page documents each, with exact env vars, route paths, metric names, and the gotchas you will hit in production.
 
 ## Structured request logging
 
-The process logger is built once at startup in `newLogger` ([cmd/server/main.go](../cmd/server/main.go)) and writes to **stderr** using the Go standard library `log/slog`. The logger is held on the server and used for request logs, audit mirroring, and a handful of lifecycle messages.
+The process logger is built once at startup in `newLogger` ([cmd/server/main.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/cmd/server/main.go)) and writes to **stderr** using the Go standard library `log/slog`. The logger is held on the server and used for request logs, audit mirroring, and a handful of lifecycle messages.
 
 ### Configuration
 
@@ -17,7 +22,7 @@ JSON is the default because it ships cleanly into a log aggregator or SIEM. Text
 
 ### The per-request log line
 
-Request logs are emitted by the `observe` middleware (`(*Server).observe`), wired globally in [internal/web/server.go](../internal/web/server.go) via `r.Use(s.observe)`. It runs after `RequestID` and `Recoverer` (and after `RealIP`, which is only enabled when `DBM_TRUST_PROXY=true`), and before `securityHeaders`. Each completed request produces one line with the message `http_request`.
+Request logs are emitted by the `observe` middleware (`(*Server).observe`), wired globally in [internal/web/server.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/server.go) via `r.Use(s.observe)`. It runs after `RequestID` and `Recoverer` (and after `RealIP`, which is only enabled when `DBM_TRUST_PROXY=true`), and before `securityHeaders`. Each completed request produces one line with the message `http_request`.
 
 The log severity is derived from the HTTP **status code**, not from the configured `DBM_LOG_LEVEL`:
 
@@ -76,7 +81,7 @@ Two standard collectors are registered, so the Go runtime and process families a
 
 ### App-level metrics (exact names)
 
-All app metrics use the namespace `verixdbm`, so every name is prefixed `verixdbm_`. Verified against [internal/web/observ.go](../internal/web/observ.go):
+All app metrics use the namespace `verixdbm`, so every name is prefixed `verixdbm_`. Verified against [internal/web/observ.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/observ.go):
 
 | Metric name | Type | Labels | Description |
 |---|---|---|---|
@@ -133,7 +138,7 @@ scrape_configs:
 
 ## Health and readiness probes
 
-Both probes are registered in [internal/web/server.go](../internal/web/server.go), are unauthenticated by design (outside the auth groups), and are infra paths (no request logging, no HTTP metrics).
+Both probes are registered in [internal/web/server.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/server.go), are unauthenticated by design (outside the auth groups), and are infra paths (no request logging, no HTTP metrics).
 
 ### `GET /healthz` (liveness)
 
@@ -150,7 +155,7 @@ Readiness check that reflects the ability to actually serve. `(*Server).readyz` 
 
 On failure, the raw store error is **not** returned to the caller (it could disclose DSN fragments or the metadata host on this unauthenticated endpoint). The detail is logged server-side at `warn` with the message `readyz_store_unavailable` and an `error` attribute.
 
-OIDC reachability is validated once at startup and is intentionally **not** re-probed by `/readyz`. The probe therefore covers the metadata store ([internal/store/store.go](../internal/store/store.go) `Ping`), not the user-registered target databases or the identity provider.
+OIDC reachability is validated once at startup and is intentionally **not** re-probed by `/readyz`. The probe therefore covers the metadata store ([internal/store/store.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/store/store.go) `Ping`), not the user-registered target databases or the identity provider.
 
 ### Container note
 
@@ -178,7 +183,7 @@ Notes:
 - These lines are `info`, so they are suppressed when `DBM_LOG_LEVEL` is `warn` or `error`. Keep `info` to forward audit events.
 - The same handler also feeds `verixdbm_auth_logins_total` for the `auth_login` / `auth_login_failed` actions; all other actions are logged but touch no metric.
 
-For the full audit record shape (the `Audit` type, the complete list of action strings, and where rows are stored) see [Data model](data-model.md). Detail redaction (SQL passwords, JSON `password`/`pwd`, Redis `requirepass`/`AUTH`, then truncation to 500 chars) happens at the call sites before the row is written, so the mirrored log line and any export are already redacted; see [Security](security.md) and [../SECURITY.md](../SECURITY.md).
+For the full audit record shape (the `Audit` type, the complete list of action strings, and where rows are stored) see [Data model](data-model.md). Detail redaction (SQL passwords, JSON `password`/`pwd`, Redis `requirepass`/`AUTH`, then truncation to 500 chars) happens at the call sites before the row is written, so the mirrored log line and any export are already redacted; see [Security](security.md) and [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md).
 
 ## Environment variable summary
 
@@ -193,6 +198,6 @@ For the full audit record shape (the `Audit` type, the complete list of action s
 
 - [Configuration](configuration.md) - the full env var reference and defaults.
 - [Deployment](deployment.md) - container, compose, and CI/release topology, plus how the probes fit behind a proxy.
-- [Security](security.md) and [../SECURITY.md](../SECURITY.md) - auth, RBAC, audit detail redaction, and the security header stack.
+- [Security](security.md) and [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md) - auth, RBAC, audit detail redaction, and the security header stack.
 - [Data model](data-model.md) - the audit record shape and action strings.
-- Repo root: [../README.md](../README.md), [../.env.example](../.env.example).
+- Repo root: [README.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/README.md), [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example).

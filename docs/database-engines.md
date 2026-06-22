@@ -1,3 +1,8 @@
+---
+title: Database engines
+nav_order: 6
+---
+
 # Database engines
 
 verix-dbm connects to five engine families behind one workbench: PostgreSQL, MySQL/MariaDB, SQLite, MongoDB, and Redis/Valkey. The three SQL families share a single engine-neutral interface (`internal/dbsql`) so they reuse the grid/console/doc/usages tabs; MongoDB and Redis are non-SQL verticals with their own tabs and `/api/c/{id}/{mongo,redis}/*` endpoints. This page is the reference for what each engine can do, the guardrails they all enforce, how each enforces read-only, and the exact recipe to add a new one.
@@ -85,7 +90,7 @@ For both verticals the handler treats a confirm-needing command as **admin-only 
 | MySQL | `LOAD DATA [LOCAL] INFILE`, `INTO OUTFILE`, `INTO DUMPFILE`, `LOAD_FILE(` |
 | SQLite | `ATTACH`, `load_extension(`, `VACUUM ... INTO`, `writefile(`, `readfile(` |
 
-The blocked message is `"blocked: server-side program execution / file access is restricted to admins see SECURITY.md"`. The documented real control is a least-privileged DB role on the target. See [../SECURITY.md](../SECURITY.md).
+The blocked message is `"blocked: server-side program execution / file access is restricted to admins see SECURITY.md"`. The documented real control is a least-privileged DB role on the target. See [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md).
 
 ## PostgreSQL (`internal/postgres`)
 
@@ -237,4 +242,4 @@ Has its own data model and does NOT touch `Engine()`. Mirror `internal/redisdb` 
 - [Architecture](architecture.md) - process bootstrap, router/middleware stack, request lifecycle, registry wiring.
 - [API reference](api-reference.md) - the JSON route table, capability gates, and the `/pg/` engine-neutral prefix.
 - [Frontend](frontend.md) - the SPA tab kinds, `dbkinds.ts` registry, and how engine accents/icons are wired.
-- Repo root: [../README.md](../README.md), [../SECURITY.md](../SECURITY.md), [../.env.example](../.env.example), [../Makefile](../Makefile).
+- Repo root: [README.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/README.md), [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md), [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example), [Makefile](https://github.com/KlevjanPrifti/verix-dbm/blob/main/Makefile).

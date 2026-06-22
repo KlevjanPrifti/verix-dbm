@@ -1,8 +1,13 @@
+---
+title: API reference
+nav_order: 7
+---
+
 # HTTP / JSON API reference
 
 This page documents the verix-dbm HTTP surface: the JSON API mounted at `/api`, the one file-streaming route at `/c/{id}/export`, and the conventions (auth, CSRF, capability gates, error shape, guardrails) that apply to all of them. It is the reference for anyone integrating with or debugging the API. The route table lives in `internal/web/api.go`; handlers are split by domain across `internal/web/api_connections.go`, `api_sql.go`, `api_redis.go`, `api_mongo.go`, `api_audit.go`, and `handlers_export.go`.
 
-For the auth model behind these routes (OIDC login, RBAC, CSRF, per-connection grants) see [Security](security.md) and [../SECURITY.md](../SECURITY.md). For what each engine does behind the SQL routes see [Database engines](database-engines.md).
+For the auth model behind these routes (OIDC login, RBAC, CSRF, per-connection grants) see [Security](security.md) and [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md). For what each engine does behind the SQL routes see [Database engines](database-engines.md).
 
 ## API conventions
 
@@ -230,7 +235,7 @@ The SPA shell: `GET /` redirects (302) to `/app`; `/app` and `/app/*` serve the 
 
 ## See also
 
-- [Security](security.md) and [../SECURITY.md](../SECURITY.md): the OIDC flow, RBAC, per-connection grants, CSRF, and the SSRF egress guard behind these routes.
+- [Security](security.md) and [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md): the OIDC flow, RBAC, per-connection grants, CSRF, and the SSRF egress guard behind these routes.
 - [Database engines](database-engines.md): the engine families behind the `pg/`, `redis/`, and `mongo/` sub-trees, the `dbsql.Engine` interface, and the shared guardrails.
 - [Architecture](architecture.md): the router, middleware stack, and the connection registry that opens pools per request.
-- [Configuration](configuration.md) and [../.env.example](../.env.example): every environment variable that gates the behaviors above.
+- [Configuration](configuration.md) and [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example): every environment variable that gates the behaviors above.

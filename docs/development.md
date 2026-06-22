@@ -1,3 +1,8 @@
+---
+title: Development
+nav_order: 12
+---
+
 # Development and contributing
 
 This page is the contributor's guide to verix-dbm: how the repository is laid out, how to run the app locally, the Make targets and tests, what CI does on pull requests and releases, the coding conventions enforced in this codebase, and how to add a new database engine.
@@ -8,20 +13,20 @@ verix-dbm is a single static Go binary with a React workbench baked in. One proc
 
 | Path | Responsibility |
 |------|----------------|
-| [cmd/server](../cmd/server) | Process entrypoint: config load, wiring, `http.Server`, graceful shutdown. |
-| [internal/config](../internal/config) | Env config (`Load()` -> `*Config`); fail-closed validation. |
-| [internal/crypto](../internal/crypto) | AES-256-GCM credential encryption, versioned keyring, rotation, `Provider` seam. |
-| [internal/store](../internal/store) | Metadata store (saved connections, per-connection grants, audit log) over SQLite or Postgres. |
-| [internal/conn](../internal/conn) | Pooled connection registry: lazy, idle-closing pools keyed by connection ID. |
-| [internal/dbsql](../internal/dbsql) | Engine-neutral SQL interface (`Dialect` + `Engine`) shared by the SQL engines. |
-| [internal/postgres](../internal/postgres) | pgx v5 introspection / query / DDL / code generators (`dbsql.Engine`). |
-| [internal/mysql](../internal/mysql) | go-sql-driver MySQL/MariaDB introspection / query / DDL (`dbsql.Engine`). |
-| [internal/sqlite](../internal/sqlite) | modernc.org/sqlite introspection / query / DDL over a file (`dbsql.Engine`). |
-| [internal/redisdb](../internal/redisdb) | go-redis SCAN browse, value viewers, read-only command console (non-SQL). |
-| [internal/mongodb](../internal/mongodb) | mongo-driver databases / collections / find / command console (non-SQL). |
-| [internal/auth](../internal/auth) | OIDC login, sessions (memory/redis), RBAC, per-connection grants, CSRF. |
-| [internal/web](../internal/web) | chi router, JSON API (`api_*.go`), security headers, SSRF egress guard, rate limit, observability. |
-| [internal/web/spa](../internal/web/spa) | React + TypeScript + Vite workbench, embedded via `go:embed`. |
+| [cmd/server](https://github.com/KlevjanPrifti/verix-dbm/tree/main/cmd/server) | Process entrypoint: config load, wiring, `http.Server`, graceful shutdown. |
+| [internal/config](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/config) | Env config (`Load()` -> `*Config`); fail-closed validation. |
+| [internal/crypto](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/crypto) | AES-256-GCM credential encryption, versioned keyring, rotation, `Provider` seam. |
+| [internal/store](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/store) | Metadata store (saved connections, per-connection grants, audit log) over SQLite or Postgres. |
+| [internal/conn](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/conn) | Pooled connection registry: lazy, idle-closing pools keyed by connection ID. |
+| [internal/dbsql](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/dbsql) | Engine-neutral SQL interface (`Dialect` + `Engine`) shared by the SQL engines. |
+| [internal/postgres](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/postgres) | pgx v5 introspection / query / DDL / code generators (`dbsql.Engine`). |
+| [internal/mysql](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/mysql) | go-sql-driver MySQL/MariaDB introspection / query / DDL (`dbsql.Engine`). |
+| [internal/sqlite](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/sqlite) | modernc.org/sqlite introspection / query / DDL over a file (`dbsql.Engine`). |
+| [internal/redisdb](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/redisdb) | go-redis SCAN browse, value viewers, read-only command console (non-SQL). |
+| [internal/mongodb](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/mongodb) | mongo-driver databases / collections / find / command console (non-SQL). |
+| [internal/auth](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/auth) | OIDC login, sessions (memory/redis), RBAC, per-connection grants, CSRF. |
+| [internal/web](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/web) | chi router, JSON API (`api_*.go`), security headers, SSRF egress guard, rate limit, observability. |
+| [internal/web/spa](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/web/spa) | React + TypeScript + Vite workbench, embedded via `go:embed`. |
 
 `internal/web` stays a single flat package: handlers are methods on the unexported `*Server`, grouped by file (`api_*.go` for the JSON surface, `handlers_*.go` for shared helpers). See [Architecture](architecture.md) for how these wire together at startup and per request.
 
@@ -43,13 +48,13 @@ cd internal/web/spa && npm install && npm run dev
 
 Key facts:
 
-- `DBM_DEV_MODE=true` bypasses OIDC and auto-logs every request in as a local admin (`User{Name:"Dev Admin", Email:"dev@localhost", Admin/Write/Read:true}`). It also relaxes the SSRF egress guard the same way `DBM_ALLOW_LOCAL_TARGETS=true` does (the guard's `allowLocal` is `cfg.AllowLocalTargets || cfg.DevMode` in [internal/web/api_connections.go](../internal/web/api_connections.go)), so you can connect to `localhost` databases. `Load()` returns early for dev mode, skipping the production OIDC and encryption-key checks, and an empty key makes the crypto layer mint an ephemeral random key, so saved credentials are not readable after a restart. Never set `DBM_DEV_MODE` on an internet-reachable deployment.
-- The Vite config ([internal/web/spa/vite.config.ts](../internal/web/spa/vite.config.ts)) proxies `/api -> http://localhost:8080` and `/c -> http://localhost:8080` (note `/c`, not `/api/c`: the table export download lives at `GET /c/{id}/export`).
+- `DBM_DEV_MODE=true` bypasses OIDC and auto-logs every request in as a local admin (`User{Name:"Dev Admin", Email:"dev@localhost", Admin/Write/Read:true}`). It also relaxes the SSRF egress guard the same way `DBM_ALLOW_LOCAL_TARGETS=true` does (the guard's `allowLocal` is `cfg.AllowLocalTargets || cfg.DevMode` in [internal/web/api_connections.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/api_connections.go)), so you can connect to `localhost` databases. `Load()` returns early for dev mode, skipping the production OIDC and encryption-key checks, and an empty key makes the crypto layer mint an ephemeral random key, so saved credentials are not readable after a restart. Never set `DBM_DEV_MODE` on an internet-reachable deployment.
+- The Vite config ([internal/web/spa/vite.config.ts](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/spa/vite.config.ts)) proxies `/api -> http://localhost:8080` and `/c -> http://localhost:8080` (note `/c`, not `/api/c`: the table export download lives at `GET /c/{id}/export`).
 - In production the app refuses to start without OIDC and a persistent encryption key. See [Configuration](configuration.md) for the full env reference and the fail-closed rules.
 
 ### Building the embedded binary
 
-The Go binary embeds the built SPA via `//go:embed all:spa/dist` in [internal/web/spa.go](../internal/web/spa.go). The SPA must be built before `go build` / `go run`, or the binary will refuse to boot (`log.Fatalf` if `spa/dist/index.html` is missing). The simplest path is the `build` target:
+The Go binary embeds the built SPA via `//go:embed all:spa/dist` in [internal/web/spa.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/web/spa.go). The SPA must be built before `go build` / `go run`, or the binary will refuse to boot (`log.Fatalf` if `spa/dist/index.html` is missing). The simplest path is the `build` target:
 
 ```bash
 make build          # npm ci + vite build, then the static Go binary -> bin/verix-dbm
@@ -62,7 +67,7 @@ If you only need to refresh the embedded frontend without a full backend build, 
 
 ## Make targets
 
-All targets live in the [Makefile](../Makefile).
+All targets live in the [Makefile](https://github.com/KlevjanPrifti/verix-dbm/blob/main/Makefile).
 
 | Target | Command | Notes |
 |--------|---------|-------|
@@ -97,7 +102,7 @@ The frontend is typechecked rather than unit-tested: `npm run build` runs `tsc -
 
 ## CI pipeline
 
-CI lives in [.github/workflows/ci.yml](../.github/workflows/ci.yml) (`name: ci`). It is one workflow covering both pull-request checks and releases, with three jobs that chain: `ci` -> `tag` -> `binaries`.
+CI lives in [.github/workflows/ci.yml](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.github/workflows/ci.yml) (`name: ci`). It is one workflow covering both pull-request checks and releases, with three jobs that chain: `ci` -> `tag` -> `binaries`.
 
 ### Triggers
 
@@ -150,7 +155,7 @@ The top-level workflow grants `permissions: contents: read`; only the `tag` and 
 
 ## Coding conventions
 
-These conventions come from [../CLAUDE.md](../CLAUDE.md) and the structure of the codebase. Please follow them in code, comments, docs, and commit messages.
+These conventions come from [CLAUDE.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/CLAUDE.md) and the structure of the codebase. Please follow them in code, comments, docs, and commit messages.
 
 ### No em dash
 
@@ -185,8 +190,8 @@ Each database engine is its own package behind the shared pooled connection regi
 
 There are two recipes depending on whether the engine speaks SQL:
 
-- A **SQL-family engine** (fits `dbsql.Engine`; mirror [internal/mysql](../internal/mysql) or [internal/sqlite](../internal/sqlite)) reuses the grid/console/doc/usages tabs. You add the engine package, a `Family<X>` + kind mapping in [internal/dbsql/dbsql.go](../internal/dbsql/dbsql.go), a pool entry plus a dispatch arm in `Engine()` in [internal/conn/registry.go](../internal/conn/registry.go), an `apiTestConnection` switch arm and a `ping<X>`, and a row in the SPA `dbkinds.ts`. No new tab is needed.
-- A **non-SQL vertical** (its own data model; mirror [internal/redisdb](../internal/redisdb) or [internal/mongodb](../internal/mongodb)) does NOT touch `Engine()`. You add the engine package, the family/kind mapping, a client getter plus idle-close in the registry, an `api_<engine>.go` with handlers and an `apiExplorer` branch, and the full SPA tab wiring (a new `TabView` variant, tab component, Explorer branch, and `Tabs.tsx` route).
+- A **SQL-family engine** (fits `dbsql.Engine`; mirror [internal/mysql](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/mysql) or [internal/sqlite](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/sqlite)) reuses the grid/console/doc/usages tabs. You add the engine package, a `Family<X>` + kind mapping in [internal/dbsql/dbsql.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/dbsql/dbsql.go), a pool entry plus a dispatch arm in `Engine()` in [internal/conn/registry.go](https://github.com/KlevjanPrifti/verix-dbm/blob/main/internal/conn/registry.go), an `apiTestConnection` switch arm and a `ping<X>`, and a row in the SPA `dbkinds.ts`. No new tab is needed.
+- A **non-SQL vertical** (its own data model; mirror [internal/redisdb](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/redisdb) or [internal/mongodb](https://github.com/KlevjanPrifti/verix-dbm/tree/main/internal/mongodb)) does NOT touch `Engine()`. You add the engine package, the family/kind mapping, a client getter plus idle-close in the registry, an `api_<engine>.go` with handlers and an `apiExplorer` branch, and the full SPA tab wiring (a new `TabView` variant, tab component, Explorer branch, and `Tabs.tsx` route).
 
 The full step-by-step recipe for both paths, including the exact files to edit and the gotchas (shared pool sizing, read-only enforcement per engine, the `pg/` URL prefix being engine-neutral), is in [Database engines](database-engines.md).
 
@@ -195,5 +200,5 @@ The full step-by-step recipe for both paths, including the exact files to edit a
 - [Architecture](architecture.md) - process bootstrap, router and middleware stack, the embedded SPA, and the connection registry lifecycle.
 - [Database engines](database-engines.md) - the engine interfaces, per-engine specifics, shared guardrails, and the add-an-engine recipe.
 - [Configuration](configuration.md) - the full env var reference and fail-closed validation rules.
-- [Security](security.md) and [../SECURITY.md](../SECURITY.md) - auth, RBAC, CSRF, crypto, headers, and the SSRF guard.
-- Repo root: [../README.md](../README.md), [../Makefile](../Makefile), [../.env.example](../.env.example).
+- [Security](security.md) and [SECURITY.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/SECURITY.md) - auth, RBAC, CSRF, crypto, headers, and the SSRF guard.
+- Repo root: [README.md](https://github.com/KlevjanPrifti/verix-dbm/blob/main/README.md), [Makefile](https://github.com/KlevjanPrifti/verix-dbm/blob/main/Makefile), [.env.example](https://github.com/KlevjanPrifti/verix-dbm/blob/main/.env.example).
