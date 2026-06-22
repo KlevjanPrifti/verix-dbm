@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../api'
 import { useApp } from '../../appctx'
 import type { MongoCmdResponse, MongoIndex } from '../../types'
-import { Ico, RotateCw, ChevronLeft, ChevronRight, Copy } from '../../icons'
+import { Ico, RotateCw, ChevronLeft, ChevronRight, Copy, Plus } from '../../icons'
 
 // MongoDB tab: a document browser for one collection (JSON filter / sort /
 // projection with skip-based paging) plus a read-only-aware command console with
@@ -27,6 +27,36 @@ export default function MongoTab({ connId, db, coll }: { connId: number; db: str
   const [indexes, setIndexes] = useState<MongoIndex[] | null>(null)
   const [cmd, setCmd] = useState(`{ "find": "${coll}", "limit": 5 }`)
   const [cmdResp, setCmdResp] = useState<MongoCmdResponse | null>(null)
+
+  // Inline "insert document" editor (the document-store analog of GridTab's add
+  // row). The body is sent verbatim inside an insert command so MongoDB extended
+  // JSON (ObjectId(...), { "$date": … }) is parsed server-side, not by JSON.parse.
+  const [insertOpen, setInsertOpen] = useState(false)
+  const [insertText, setInsertText] = useState('{\n  \n}')
+  const [insertErr, setInsertErr] = useState('')
+  const [inserting, setInserting] = useState(false)
+  const insertDoc = async () => {
+    const body = insertText.trim()
+    if (!body) return
+    setInserting(true)
+    setInsertErr('')
+    const command = `{ "insert": ${JSON.stringify(coll)}, "documents": [ ${body} ] }`
+    try {
+      const resp = await api.mongoCmd(connId, db, command)
+      if (resp.error) { setInsertErr(resp.error); return }
+      // A successful command can still report per-document writeErrors (e.g. a
+      // duplicate _id); surface those instead of claiming success.
+      if (resp.out && /writeErrors/.test(resp.out)) { setInsertErr(resp.out); return }
+      setInsertOpen(false)
+      setInsertText('{\n  \n}')
+      app.notify('document inserted')
+      load(page)
+    } catch (e) {
+      setInsertErr(String((e as Error).message || e))
+    } finally {
+      setInserting(false)
+    }
+  }
 
   const load = useCallback((p: number) => {
     setLoading(true)
@@ -54,6 +84,7 @@ export default function MongoTab({ connId, db, coll }: { connId: number; db: str
     <div className="grid-pane">
       <div className="grid-toolbar">
         <button className="tb-ico" title="refresh" onClick={() => load(page)}><RotateCw size={16} /></button>
+        {!readOnly && <button className="tb-ico" title="insert document" onClick={() => setInsertOpen(o => !o)}><Plus size={16} /></button>}
         <span className="tb-sep" />
         <span className="tb-chip hud-label">{db}.{coll}</span>
         {indexes && <span className="tb-chip hud-label dim" title={indexes.map(i => `${i.Name}: ${i.Keys}`).join('\n')}>{indexes.length} index{indexes.length === 1 ? '' : 'es'}</span>}
@@ -61,6 +92,19 @@ export default function MongoTab({ connId, db, coll }: { connId: number; db: str
         {readOnly && <span className="ro">READ-ONLY</span>}
         {conn && <span className="tb-chip conn-chip hud-label" title={`${conn.kind}@${conn.host}`}>{conn.kind}@{conn.host}</span>}
       </div>
+
+      {insertOpen && !readOnly && (
+        <div className="mongo-insert hud-panel stack">
+          <span className="hud-label dim">New document in <span className="code">{db}.{coll}</span> (JSON / extended JSON)</span>
+          <textarea className="hud-input code" rows={5} value={insertText} onChange={e => setInsertText(e.target.value)}
+            placeholder={`{ "name": "example", "createdAt": { "$date": "2025-01-01T00:00:00Z" } }`} />
+          {insertErr && <div className="alert error code">{insertErr}</div>}
+          <div className="row end">
+            <button className="hud-btn-accent sm" type="button" onClick={() => { setInsertOpen(false); setInsertErr('') }}>Cancel</button>
+            <button className="hud-btn-cta" type="button" disabled={inserting} onClick={insertDoc}>{inserting ? 'Inserting…' : 'Insert'}</button>
+          </div>
+        </div>
+      )}
 
       <form className="filter-bar" onSubmit={apply}>
         <span className="fb-key hud-label">FILTER</span>
