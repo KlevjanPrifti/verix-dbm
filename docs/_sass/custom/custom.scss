@@ -1,0 +1,222 @@
+// verix-dbm docs theme: a HUD reskin layered on Just the Docs' built-in "dark"
+// color scheme. Everything here is plain CSS (valid SCSS), so a wrong selector
+// just fails to apply, it can never break the GitHub Pages build.
+//
+// Palette mirrors the app's HUD theme in
+// internal/web/spa/src/styles/hud.css so the docs match the product.
+
+:root {
+  --vx-ink-deep: #010b14;
+  --vx-ink: #020c16;
+  --vx-panel: #010d18;
+  --vx-panel-raised: #02101f;
+  --vx-accent-rgb: 0, 220, 255; // cyan
+  --vx-accent: rgb(0, 220, 255);
+  --vx-cta: #ff8c00; // orange call-to-action
+  --vx-cta-hi: #ffa333;
+  --vx-text: #d4efff;
+  --vx-text-dim: #b8dff0;
+  --vx-mono: "Share Tech Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --vx-sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+// ---- Page surfaces --------------------------------------------------------
+body {
+  background-color: var(--vx-ink);
+  color: var(--vx-text);
+  font-family: var(--vx-sans);
+}
+
+// A faint HUD grid behind the page content.
+.main {
+  background-color: var(--vx-ink);
+  background-image:
+    linear-gradient(rgba(0, 220, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 220, 255, 0.03) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+
+// ---- Sidebar + brand ------------------------------------------------------
+.side-bar {
+  background-color: var(--vx-panel);
+  border-right: 1px solid rgba(0, 220, 255, 0.18);
+}
+
+.site-header {
+  border-bottom: 1px solid rgba(0, 220, 255, 0.18);
+}
+
+.site-title {
+  font-family: var(--vx-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-weight: 700;
+  color: var(--vx-accent) !important;
+}
+
+// ---- Navigation -----------------------------------------------------------
+.nav-list .nav-list-item .nav-list-link {
+  color: var(--vx-text-dim);
+}
+
+.nav-list .nav-list-item .nav-list-link:hover {
+  color: var(--vx-accent);
+  background-image: linear-gradient(90deg, rgba(0, 220, 255, 0.10), transparent);
+}
+
+.nav-list .nav-list-item .nav-list-link.active {
+  color: var(--vx-accent);
+  font-weight: 600;
+  border-left: 2px solid var(--vx-cta);
+  background-image: linear-gradient(90deg, rgba(0, 220, 255, 0.08), transparent);
+}
+
+// Top-right auxiliary nav (the GitHub link).
+.aux-nav-list-item a {
+  color: var(--vx-text-dim);
+}
+.aux-nav-list-item a:hover {
+  color: var(--vx-accent);
+}
+
+// ---- Headings + body ------------------------------------------------------
+.main-content {
+  color: var(--vx-text);
+}
+
+.main-content h1,
+.main-content h2 {
+  font-family: var(--vx-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  font-weight: 700;
+  color: var(--vx-accent);
+}
+
+.main-content h1 {
+  border-bottom: 1px solid rgba(0, 220, 255, 0.25);
+  padding-bottom: 0.3em;
+}
+
+.main-content h3,
+.main-content h4,
+.main-content h5,
+.main-content h6 {
+  font-family: var(--vx-sans);
+  font-weight: 600;
+  color: var(--vx-text);
+}
+
+.main-content a {
+  color: var(--vx-accent);
+}
+.main-content a:hover {
+  color: var(--vx-cta-hi);
+  text-decoration: underline;
+}
+
+// ---- Code -----------------------------------------------------------------
+.main-content code {
+  font-family: var(--vx-mono);
+  color: var(--vx-cta-hi);
+  background-color: rgba(0, 220, 255, 0.07);
+  border: 1px solid rgba(0, 220, 255, 0.15);
+  border-radius: 2px;
+}
+
+.main-content pre.highlight,
+.highlighter-rouge .highlight,
+figure.highlight {
+  background-color: var(--vx-panel-raised) !important;
+  border: 1px solid rgba(0, 220, 255, 0.18);
+  border-radius: 2px;
+}
+
+.main-content pre.highlight code {
+  color: var(--vx-text);
+  background: transparent;
+  border: 0;
+}
+
+// ---- Tables ---------------------------------------------------------------
+.main-content table {
+  border: 1px solid rgba(0, 220, 255, 0.15);
+  border-radius: 2px;
+}
+
+.main-content th {
+  font-family: var(--vx-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.72rem;
+  color: rgba(0, 220, 255, 0.85);
+  background-color: var(--vx-panel-raised);
+  border-bottom: 1px solid rgba(0, 220, 255, 0.30);
+}
+
+.main-content td {
+  border-bottom: 1px solid rgba(0, 220, 255, 0.08);
+  background-color: transparent;
+}
+
+.main-content tr:nth-child(2n) td {
+  background-color: rgba(0, 220, 255, 0.025);
+}
+
+// ---- Search ---------------------------------------------------------------
+.search-input {
+  background-color: var(--vx-panel-raised);
+  color: var(--vx-text);
+  border: 1px solid rgba(0, 220, 255, 0.20);
+  border-radius: 2px;
+}
+.search-input::placeholder {
+  color: rgba(0, 220, 255, 0.40);
+}
+.search-result-list {
+  background-color: var(--vx-panel);
+}
+.search-result:hover,
+.search-result.active {
+  background-color: rgba(0, 220, 255, 0.10);
+}
+
+// ---- Callouts / blockquotes ----------------------------------------------
+.main-content blockquote {
+  border-left: 3px solid var(--vx-cta);
+  background-color: rgba(0, 220, 255, 0.04);
+  color: var(--vx-text-dim);
+  border-radius: 0 2px 2px 0;
+}
+
+// ---- Buttons --------------------------------------------------------------
+.btn {
+  font-family: var(--vx-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: 2px;
+}
+
+.btn-primary {
+  background-color: rgba(0, 220, 255, 0.12);
+  color: var(--vx-accent);
+  border: 1px solid rgba(0, 220, 255, 0.50);
+}
+.btn-primary:hover {
+  background-color: rgba(0, 220, 255, 0.22);
+}
+
+// ---- Misc -----------------------------------------------------------------
+hr {
+  border-color: rgba(0, 220, 255, 0.15);
+}
+
+// Square the corners for the HUD feel.
+.side-bar,
+.main-content,
+.search-input,
+pre,
+table,
+.btn {
+  border-radius: 2px;
+}
