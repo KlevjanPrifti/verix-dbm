@@ -165,10 +165,11 @@ function MongoCollNode({ connId, db, coll }: { connId: number; db: string; coll:
     view: { type: 'mongo', connId, db, coll },
   })
   return (
-    <div className={`tree-row leaf table-row${active ? ' active' : ''}`}
+    <div className={`tree-row leaf table-row${active ? ' active' : ''}`} title="click to browse documents"
+      onClick={open}
       onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
       <Ico name="table" />
-      <span className="tree-name table-name" title="click to browse documents" onClick={open}>{coll}</span>
+      <span className="tree-name table-name">{coll}</span>
     </div>
   )
 }
@@ -206,20 +207,20 @@ function TableNode({ connId, schema, table, kind }: { connId: number; schema: st
     key: `grid:${connId}:${schema}.${table}`, title: `${schema}.${table}`, icon: 'grid',
     view: { type: 'grid', connId, schema, table },
   })
-  // Only the caret toggles the disclosure: the summary suppresses the native
-  // row-click toggle so clicking the name just opens the grid.
+  // Clicking anywhere on the row opens the grid; only the caret toggles the
+  // disclosure (it stops propagation), so the row-click suppresses the native
+  // <summary> toggle and opens the table instead.
   const toggle = (e: React.MouseEvent) => {
     e.stopPropagation(); e.preventDefault()
     if (ref.current) ref.current.open = !ref.current.open
   }
   return (
     <details ref={ref} className="tree-node">
-      <summary className={`tree-row table-row${active ? ' active' : ''}`}
-        onClick={e => e.preventDefault()}
+      <summary className={`tree-row table-row${active ? ' active' : ''}`} title="click to open"
+        onClick={e => { e.preventDefault(); openGrid() }}
         onContextMenu={e => { e.preventDefault(); app.openCtx(e.clientX, e.clientY, payload) }}>
         <Caret onClick={toggle} /><Ico name={kind} />
-        <span className="tree-name table-name" title="click name to open"
-          onClick={e => { e.preventDefault(); openGrid() }}>{table}</span>
+        <span className="tree-name table-name">{table}</span>
         <Kebab payload={payload} />
       </summary>
       <div className="node-children">

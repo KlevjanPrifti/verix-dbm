@@ -1,25 +1,76 @@
 name: release
 
-# Cut a release by pushing a semver tag, e.g.:
-#   git tag v1.2.0 && git push origin v1.2.0
-# A tag containing a hyphen (v1.2.0-rc1) is treated as a pre-release: it gets the
-# version image tags but not `latest`, and the GitHub Release is marked prerelease.
+# Two ways to cut a release:
+#   1. Push a semver tag:   git tag v1.2.0 && git push origin v1.2.0
+#   2. Actions tab -> release -> Run workflow -> type v1.2.0
+#      (the workflow creates and pushes the tag for you, then builds it).
+# A version with a hyphen (v1.2.0-rc1) is a pre-release: it gets the version image
+# tags but not `latest`, and the GitHub Release is marked prerelease.
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to create, e.g. v1.2.0'
+        required: true
 
 permissions:
-  contents: write # create the GitHub Release and upload binaries
+  contents: write # create the tag + GitHub Release and upload binaries
   packages: write # push the image to GHCR
 
 jobs:
+  # Resolve the version (from the pushed tag or the manual input) and, when run
+  # manually, create and push the tag so the rest of the run builds from it.
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: resolve version
+        id: v
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME}"
+          fi
+          if ! printf '%s' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::version '$version' must look like v1.2.3 or v1.2.3-rc1"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: create and push tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" >/dev/null 2>&1; then
+            echo "::error::tag ${VERSION} already exists"
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git tag -a "${VERSION}" -m "${VERSION}"
+          git push origin "${VERSION}"
+
   # Build and push the multi-arch container image to GHCR (the primary deploy
   # artifact: the Dockerfile already produces a static, distroless image).
   image:
+    needs: tag
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag.outputs.version }}
 
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
@@ -37,9 +88,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+            type=semver,pattern={{version}},value=${{ needs.tag.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.tag.outputs.version }}
+            type=raw,value=latest,enable=${{ !contains(needs.tag.outputs.version, '-') }}
 
       - name: build and push
         uses: docker/build-push-action@v6
@@ -56,9 +107,12 @@ jobs:
   # The binary is pure-Go (CGO_ENABLED=0), so every target cross-compiles natively
   # on the runner; the SPA is built once and baked in via go:embed.
   binaries:
+    needs: tag
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag.outputs.version }}
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
@@ -75,13 +129,13 @@ jobs:
       - name: build release binaries
         env:
           CGO_ENABLED: '0'
+          VERSION: ${{ needs.tag.outputs.version }}
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME}"
           mkdir -p dist
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
             os="${target%/*}"; arch="${target#*/}"
-            name="verix-dbm_${version}_${os}_${arch}"
+            name="verix-dbm_${VERSION}_${os}_${arch}"
             echo "::group::build ${name}"
             GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "dist/verix-dbm" ./cmd/server
             tar -C dist -czf "dist/${name}.tar.gz" verix-dbm
@@ -94,6 +148,7 @@ jobs:
       - name: create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.tag.outputs.version }}
           files: dist/*
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(needs.tag.outputs.version, '-') }}
