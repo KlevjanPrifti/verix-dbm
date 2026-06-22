@@ -256,7 +256,9 @@ func CreateTableDDL(ctx context.Context, pool *pgxpool.Pool, schema, table strin
 		if keyNames[ix.Name] || ix.Primary {
 			continue
 		}
-		b.WriteString("\n\n" + ix.Def + ";")
+		b.WriteString("\n\n")
+		b.WriteString(ix.Def)
+		b.WriteString(";")
 	}
 	return b.String(), nil
 }
