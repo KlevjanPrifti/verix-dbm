@@ -36,6 +36,22 @@ body {
   }
 }
 
+// On large screens (theme lg breakpoint = $content-width + $nav-width = 66.5rem)
+// Just the Docs widens the sidebar to half the page and right-aligns the nav so
+// it hugs an 800px-centered content column. With our wider content that math
+// desyncs and the menu floats with a big empty gap on its left. Pin a plain
+// left rail instead: a fixed nav-width sidebar flush to the edge, content
+// immediately to its right.
+@media (min-width: 66.5rem) {
+  .side-bar {
+    width: 16.5rem; // = $nav-width
+    align-items: flex-start;
+  }
+  .side-bar + .main {
+    margin-left: 16.5rem; // clear the fixed sidebar
+  }
+}
+
 // A faint HUD grid behind the page content.
 .main {
   background-color: var(--vx-ink);
@@ -181,6 +197,9 @@ figure.highlight {
 }
 
 // ---- Search ---------------------------------------------------------------
+// Just the Docs renders the results dropdown as `.search-results` wrapping a
+// `.search-results-list` (plural). Style those, not the singular variants, or
+// the dropdown panel keeps the theme's default light surface.
 .search-input {
   background-color: var(--vx-panel-raised);
   color: var(--vx-text);
@@ -190,8 +209,20 @@ figure.highlight {
 .search-input::placeholder {
   color: rgba(0, 220, 255, 0.40);
 }
-.search-result-list {
+
+.search-results {
   background-color: var(--vx-panel);
+  border: 1px solid rgba(0, 220, 255, 0.22);
+  border-top: 0;
+  border-radius: 0 0 2px 2px;
+  box-shadow: 0 18px 40px rgba(0, 8, 16, 0.55);
+}
+.search-results-list {
+  background-color: var(--vx-panel);
+  color: var(--vx-text);
+}
+.search-result {
+  color: var(--vx-text);
 }
 .search-result:hover,
 .search-result.active {
@@ -277,8 +308,19 @@ table,
 .search-result-doc .search-result-doc-title {
   color: var(--vx-text);
 }
+.search-result-doc.search-result-doc-parent .search-result-doc-title {
+  color: var(--vx-text-dim);
+}
 .search-result-rel-url {
   color: rgba(0, 220, 255, 0.55);
+}
+.search-result-previews {
+  color: var(--vx-text-dim);
+  border-left: 1px solid rgba(0, 220, 255, 0.18);
+}
+.search-result-preview .search-result-highlight {
+  color: var(--vx-cta-hi);
+  font-weight: 600;
 }
 
 // ---- Footer ---------------------------------------------------------------
