@@ -403,24 +403,37 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       .catch(e => app.notify(String(e.message || e), 'error'))
       .finally(() => setSavingCell(false))
   }
-  const deleteRow = async (r: number) => {
-    // Manual mode: mark the row for deletion and drop any pending edits on it
+  // Delete one or more rows by index (the right-click row, or the current row
+  // selection). Manual mode stages them; auto-commit confirms then runs a single
+  // engine-aware DELETE that ORs each row's identity together.
+  const deleteRows = async (idx: number[]) => {
+    if (idx.length === 0) return
+    // Manual mode: mark the rows for deletion and drop any pending edits on them
     // (an UPDATE then DELETE of the same row in one tx would mis-target, since
     // the DELETE's WHERE matches the row's original, now-updated, contents).
     if (txMode === 'manual') {
-      setPendingDeletes(p => new Set(p).add(r))
-      setPendingEdits(p => { const next = { ...p }; delete next[r]; return next })
+      setPendingDeletes(p => { const next = new Set(p); idx.forEach(r => next.add(r)); return next })
+      setPendingEdits(p => { const next = { ...p }; idx.forEach(r => delete next[r]); return next })
       return
     }
     // Auto-commit: confirm, then run the engine-aware DELETE in place (no console).
+    const many = idx.length > 1
     const ok = await app.confirm({
-      title: 'Delete row',
-      body: `Permanently delete this row from ${schema}.${table}? This commits immediately and cannot be undone.`,
-      buttons: [{ label: 'Delete row', value: 'ok', variant: 'danger' }],
+      title: many ? 'Delete rows' : 'Delete row',
+      body: `Permanently delete ${many ? `these ${idx.length} rows` : 'this row'} from ${schema}.${table}? This commits immediately and cannot be undone.`,
+      buttons: [{ label: many ? `Delete ${idx.length} rows` : 'Delete row', value: 'ok', variant: 'danger' }],
     })
     if (ok !== 'ok') return
-    execDelete(`DELETE FROM ${qual}\nWHERE ${rowWhere(r)};`, 'row deleted')
+    const where = idx.map(r => `(${rowWhere(r)})`).join('\n  OR ')
+    execDelete(`DELETE FROM ${qual}\nWHERE ${where};`, many ? 'rows deleted' : 'row deleted')
   }
+  // The right-click "Delete row(s)" target: the whole selection when the clicked
+  // row is part of it, otherwise just the clicked row.
+  const deleteRowOrSel = (r: number) =>
+    deleteRows(selRows.has(r) && selRows.size > 1 ? selectedIdx() : [r])
+  // Toolbar "remove" button: delete the selected rows; with no selection, fall
+  // back to the filter-scoped delete (which seeds a console to author a WHERE).
+  const removeRows = () => selRows.size ? deleteRows(selectedIdx()) : deleteFiltered()
   const deleteFiltered = async () => {
     // No active filter: there's no row set to target, so seed a console where the
     // user authors the WHERE (a guarded `false` placeholder prevents a full wipe).
@@ -566,7 +579,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       ] as MenuItem[] : []),
       // ── row / pagination actions: cell-agnostic, so shown in both contexts ──
       { label: 'Add row', Icon: Plus, key: 'Alt+Ins', disabled: readOnly, run: insertRow },
-      { label: cell ? 'Delete row' : 'Delete rows', Icon: Trash2, key: 'Ctrl+Y', disabled: readOnly, run: () => cell ? deleteRow(r) : deleteFiltered() },
+      { label: (cell ? (selRows.has(r) && selRows.size > 1) : selRows.size > 0) ? `Delete ${selRows.size} rows` : (cell ? 'Delete row' : 'Delete rows'), Icon: Trash2, key: 'Ctrl+Y', disabled: readOnly, run: () => cell ? deleteRowOrSel(r) : removeRows() },
       { sep: true },
       { label: 'Go to', Icon: ArrowRight, children: [
         { label: 'First page', disabled: page === 0, run: () => setPage(0) },
@@ -594,7 +607,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
         <button className="tb-ico" title="refresh" onClick={() => load(page, where, order)}><RotateCw size={16} /></button>
         <span className="tb-sep" />
         <button className="tb-ico" title={readOnly ? 'add row (read-only)' : 'add row'} disabled={readOnly || !!draft} onClick={insertRow}><Plus size={16} /></button>
-        <button className="tb-ico" title={readOnly ? 'remove rows (read-only)' : 'remove rows'} disabled={readOnly} onClick={deleteFiltered}><Minus size={16} /></button>
+        <button className="tb-ico" title={readOnly ? 'remove rows (read-only)' : selRows.size ? `remove ${selRows.size} selected row${selRows.size === 1 ? '' : 's'}` : 'remove rows'} disabled={readOnly} onClick={removeRows}><Minus size={16} /></button>
         {draft && <>
           <span className="tb-sep" />
           <button className="tb-ico ok" title="submit new row" disabled={saving} onClick={submitDraft}><ArrowUp size={16} /></button>
