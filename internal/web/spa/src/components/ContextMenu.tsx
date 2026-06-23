@@ -53,7 +53,10 @@ export default function ContextMenu({ x, y, payload, onClose }: {
   }, [onClose])
 
   const close = onClose
-  const qq = (s: string) => '"' + s.replace(/"/g, '""') + '"'
+  // Engine-aware identifier quoting for the seeded SELECT: MySQL uses backticks,
+  // the others ANSI double quotes (double-quoting on MySQL reads as a string
+  // literal, so the generated query would select a constant, not the table).
+  const qq = (s: string) => engine === 'mysql' ? '`' + s.replace(/`/g, '``') + '`' : '"' + s.replace(/"/g, '""') + '"'
   const tab = {
     console: () => app.openTab({
       key: payload.schema ? `console:${id}:${payload.schema}` : `console:${id}`,

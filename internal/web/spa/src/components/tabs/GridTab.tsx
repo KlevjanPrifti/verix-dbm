@@ -16,6 +16,11 @@ import {
 // commits them as one atomic transaction (server-side postgres.ExecScript).
 type TxMode = 'auto' | 'manual'
 
+// The SQL engines render a SQL NULL as this glyph in the string row payload (see
+// each engine's row formatting), distinct from an empty-string cell. The grid
+// keys NULL handling (IS NULL clauses, "null" display) off it.
+const NULL_GLYPH = '∅'
+
 interface MenuItem {
   label?: string; Icon?: LucideIcon; sep?: boolean; head?: string
   danger?: boolean; disabled?: boolean; key?: string; run?: () => void; children?: MenuItem[]
@@ -26,6 +31,11 @@ interface MenuItem {
 export default function GridTab({ connId, schema, table }: { connId: number; schema: string; table: string }) {
   const app = useApp()
   const conn = app.connById(connId)
+  // Engine drives the dialect of all SQL the grid generates (quoting, casts,
+  // null/insert syntax). mysql/sqlite gate the spots that differ from Postgres.
+  const engine = kindEngine(conn?.kind || 'postgres')
+  const mysql = engine === 'mysql'
+  const sqlite = engine === 'sqlite'
   const [where, setWhere] = useState('')
   const [order, setOrder] = useState('')
   const [page, setPage] = useState(0)
@@ -103,7 +113,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   }, [])
 
   const apply = (e: React.FormEvent) => { e.preventDefault(); setPage(0); load(0, where, order) }
-  const sort = (col: string, dir: 'asc' | 'desc') => { const o = `"${col}" ${dir}`; setOrder(o); setPage(0); load(0, where, o) }
+  const sort = (col: string, dir: 'asc' | 'desc') => { const o = `${qq(col)} ${dir}`; setOrder(o); setPage(0); load(0, where, o) }
   // Switching page size resets to the first page (the load effect reruns because
   // `size` is a `load` dependency) and remembers the choice as the new default.
   const changeSize = (n: number) => { savePageSize(n); setPage(0); setSize(n) }
@@ -128,6 +138,13 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const colList: Column[] = useMemo(
     () => colMeta ? Object.values(colMeta) : cols.map(name => ({ name, type: '' } as Column)),
     [colMeta, cols])
+  // Indices of the primary-key columns among the result columns. Inline edits and
+  // deletes target a row by its PK when one exists (precise and robust against
+  // float/json/blob columns that don't round-trip as string literals), falling
+  // back to "every column = its value" only when the table has no primary key.
+  const pkIdx = useMemo(
+    () => cols.map((_, i) => i).filter(i => colMeta?.[cols[i]]?.pk),
+    [cols, colMeta])
   // ORDER BY just needs the bare column name.
   const orderColSuggest = useMemo<Suggestion[]>(
     () => colList.map(c => ({ label: c.name, insert: qIdent(c.name), kind: 'col', detail: c.type || undefined })),
@@ -144,20 +161,21 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   }), [colList])
   const whereCandidates = useMemo<Suggestion[]>(() => [
     ...whereColSuggest,
-    ...['AND', 'OR', 'NOT', 'IS NULL', 'IS NOT NULL', 'LIKE', 'ILIKE', 'IN', 'BETWEEN', 'true', 'false', 'null']
+    // ILIKE is Postgres-only; MySQL/SQLite LIKE is already case-insensitive.
+    ...['AND', 'OR', 'NOT', 'IS NULL', 'IS NOT NULL', 'LIKE', ...(mysql || sqlite ? [] : ['ILIKE']), 'IN', 'BETWEEN', 'true', 'false', 'null']
       .map(k => ({ label: k, kind: 'kw' })),
-  ], [whereColSuggest])
+  ], [whereColSuggest, mysql, sqlite])
   const orderCandidates = useMemo<Suggestion[]>(() => [
     ...orderColSuggest,
-    ...['ASC', 'DESC', 'NULLS FIRST', 'NULLS LAST'].map(k => ({ label: k, kind: 'kw' })),
-  ], [orderColSuggest])
+    // NULLS FIRST/LAST is Postgres + SQLite syntax; MySQL rejects it.
+    ...['ASC', 'DESC', ...(mysql ? [] : ['NULLS FIRST', 'NULLS LAST'])].map(k => ({ label: k, kind: 'kw' })),
+  ], [orderColSuggest, mysql])
 
   // helpers shared by the menus. Quoting is engine-aware so the generated SQL
   // (inline edits, deletes, and the data extractors) matches the target dialect:
   // MySQL/MariaDB quote identifiers with backticks and treat backslash as an
   // escape inside string literals; Postgres & friends use ANSI double quotes and
   // (with standard_conforming_strings) take backslashes literally.
-  const mysql = kindEngine(conn?.kind || 'postgres') === 'mysql'
   const qq = (s: string) => mysql ? '`' + s.replace(/`/g, '``') + '`' : '"' + s.replace(/"/g, '""') + '"'
   const lit = (s: string) => mysql
     ? "'" + s.replace(/\\/g, '\\\\').replace(/'/g, "''") + "'"
@@ -172,14 +190,14 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
 
   // Row → various clipboard formats (the "data extractors").
   const sqlInsert = (r: number) =>
-    `INSERT INTO ${qual} (${cols.map(qq).join(', ')}) VALUES (${rows[r].map(v => v === '' ? 'NULL' : lit(v)).join(', ')});`
+    `INSERT INTO ${qual} (${cols.map(qq).join(', ')}) VALUES (${rows[r].map(cellLit).join(', ')});`
   const jsonRow = (r: number) => JSON.stringify(Object.fromEntries(cols.map((c, i) => [c, rows[r][i]])))
   const tableTsv = () => [cols.join('\t'), ...rows.map(r => r.join('\t'))].join('\n')
   // ── data extractors (clipboard formats) ──
   // One INSERT statement carrying every selected row as its own VALUES tuple.
   const sqlInsertMulti = (idx: number[]) =>
     `INSERT INTO ${qual} (${cols.map(qq).join(', ')}) VALUES\n` +
-    idx.map(r => '  (' + rows[r].map(v => v === '' ? 'NULL' : lit(v)).join(', ') + ')').join(',\n') + ';'
+    idx.map(r => '  (' + rows[r].map(cellLit).join(', ') + ')').join(',\n') + ';'
   // One UPDATE per row, setting every column, targeting the row by its full
   // current contents (the grid tracks no primary key, same as the edit/delete path).
   const sqlUpdate = (r: number) =>
@@ -273,11 +291,23 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   // The grid is a browser, not an inline editor, so write actions seed a query
   // console with a runnable statement the user reviews and runs reusing the
   // console's confirm gate + audit trail (same pattern as "query table").
-  const cellLit = (v: string) => (v === '' ? 'NULL' : lit(v))
-  // Best-effort row identifier: AND of every column = its value. The grid doesn't
-  // track the primary key, so this targets the clicked row by its full contents.
-  const rowWhere = (r: number) =>
-    cols.map((c, i) => rows[r][i] === '' ? `${qq(c)} IS NULL` : `${qq(c)} = ${lit(rows[r][i])}`).join('\n  AND ')
+  // The engines render a SQL NULL as this glyph in the string row data, so a cell
+  // holding it (or a cleared input) is written back as NULL, not the literal text.
+  const cellLit = (v: string) => (v === '' || v === NULL_GLYPH ? 'NULL' : lit(v))
+  // Row identifier for inline edits/deletes: the primary key when the table has
+  // one, else every column = its value as a best-effort match. A NULL cell (the
+  // glyph) must compare with IS NULL, since `= '∅'` would match no real row and
+  // the UPDATE/DELETE would silently affect zero rows.
+  const rowWhere = (r: number) => {
+    const idx = pkIdx.length ? pkIdx : cols.map((_, i) => i)
+    return idx.map(i => rows[r][i] === NULL_GLYPH
+      ? `${qq(cols[i])} IS NULL`
+      : `${qq(cols[i])} = ${lit(rows[r][i])}`).join('\n  AND ')
+  }
+  // An all-defaults row insert. Postgres and SQLite spell it `DEFAULT VALUES`;
+  // MySQL has no such form and uses an empty column/value list instead.
+  const allDefaultsInsert = () =>
+    mysql ? `INSERT INTO ${qual} () VALUES ();` : `INSERT INTO ${qual} DEFAULT VALUES;`
   const openSql = (key: string, title: string, sql: string) =>
     app.openTab({ key, title, icon: 'console', view: { type: 'console', connId, sql } })
   // Add row → inline draft, not a seeded console. The draft row
@@ -320,7 +350,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
     // Only the cells the user touched go into the INSERT; the rest are omitted so
     // Postgres applies each column's default (or NULL) matching the placeholders.
     const sql = set.length === 0
-      ? `INSERT INTO ${qual} DEFAULT VALUES;`
+      ? allDefaultsInsert()
       : `INSERT INTO ${qual} (${set.map(i => qq(cols[i])).join(', ')}) VALUES (${set.map(i => lit(draft[i])).join(', ')});`
     setSaving(true)
     api.query(connId, sql, true)
@@ -400,7 +430,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
     for (const d of pendingInserts) {
       const set = Object.keys(d).map(Number).sort((a, b) => a - b)
       out.push(set.length === 0
-        ? `INSERT INTO ${qual} DEFAULT VALUES;`
+        ? allDefaultsInsert()
         : `INSERT INTO ${qual} (${set.map(i => qq(cols[i])).join(', ')}) VALUES (${set.map(i => lit(d[i])).join(', ')});`)
     }
     return out
@@ -450,11 +480,15 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
   const fullTextSearch = async () => {
     const term = await app.prompt({ title: 'Full-text search', body: 'Matches any column (cast to text).', placeholder: 'search term', submitLabel: 'Search' })
     if (!term) return
-    // ILIKE / ::text are Postgres-only; MySQL casts with CAST(... AS CHAR) and its
-    // LIKE is already case-insensitive on the common collations.
+    // ILIKE / ::text are Postgres-only. MySQL casts with CAST(... AS CHAR) and its
+    // LIKE is already case-insensitive on the common collations; SQLite casts with
+    // CAST(... AS TEXT) and its LIKE is case-insensitive for ASCII. Only Postgres
+    // gets the ::text cast + ILIKE.
     const like = (c: string) => mysql
       ? `CAST(${qq(c)} AS CHAR) LIKE ${lit('%' + term + '%')}`
-      : `${qq(c)}::text ILIKE ${lit('%' + term + '%')}`
+      : sqlite
+        ? `CAST(${qq(c)} AS TEXT) LIKE ${lit('%' + term + '%')}`
+        : `${qq(c)}::text ILIKE ${lit('%' + term + '%')}`
     setFilter('(' + cols.map(like).join(' OR ') + ')')
   }
 
@@ -471,8 +505,8 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
     const cell = r >= 0 && rows[r] !== undefined
     const col = cols[c] ?? ''
     const val = rows[r]?.[c] ?? ''
-    const eq = val === '' ? `${qq(col)} IS NULL` : `${qq(col)} = ${lit(val)}`
-    const neq = val === '' ? `${qq(col)} IS NOT NULL` : `${qq(col)} <> ${lit(val)}`
+    const eq = val === NULL_GLYPH ? `${qq(col)} IS NULL` : `${qq(col)} = ${lit(val)}`
+    const neq = val === NULL_GLYPH ? `${qq(col)} IS NOT NULL` : `${qq(col)} <> ${lit(val)}`
     return [
       { head: cell ? col : `${schema}.${table}` },
       // ── cell-specific actions: need a row + column under the cursor ──
@@ -672,7 +706,7 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
           tab={panel} onTab={setPanel} onClose={() => setPanel(null)}
           connId={connId} cols={cols} row={rows[sel.r] || []}
           col={cols[sel.c] ?? ''} value={rows[sel.r]?.[sel.c] ?? ''}
-          aggSql={`SELECT count(*) AS "rows", count(${qq(cols[sel.c] ?? '')}) AS "non null", count(DISTINCT ${qq(cols[sel.c] ?? '')}) AS "distinct", min(${qq(cols[sel.c] ?? '')}) AS "min", max(${qq(cols[sel.c] ?? '')}) AS "max" FROM ${qual}${whereSuffix}`}
+          aggSql={`SELECT count(*) AS ${qq('rows')}, count(${qq(cols[sel.c] ?? '')}) AS ${qq('non null')}, count(DISTINCT ${qq(cols[sel.c] ?? '')}) AS ${qq('distinct')}, min(${qq(cols[sel.c] ?? '')}) AS ${qq('min')}, max(${qq(cols[sel.c] ?? '')}) AS ${qq('max')} FROM ${qual}${whereSuffix}`}
         />
       )}
       </div>{/* grid-split */}
@@ -953,7 +987,7 @@ function RecordPanel({ cols, row }: { cols: string[]; row: string[] }) {
               <tr key={i}>
                 <td className="rv-key hud-label">{c}</td>
                 <td className="code rv-val" onClick={() => app.copy(row[i] ?? '')} title="click to copy">
-                  {row[i] === '' ? <span className="dim">null</span> : row[i]}
+                  {row[i] === NULL_GLYPH ? <span className="dim">null</span> : row[i]}
                 </td>
               </tr>
             ))}
@@ -988,7 +1022,8 @@ function ValuePanel({ col, value }: { col: string; value: string }) {
         )}
       </div>
       <div className="side-scroll">
-        {value === '' ? <pre className="code value-viewer dim">(empty / null)</pre>
+        {value === NULL_GLYPH ? <pre className="code value-viewer dim">(null)</pre>
+          : value === '' ? <pre className="code value-viewer dim">(empty)</pre>
           : showJson
             ? <pre className="code value-viewer json-view" dangerouslySetInnerHTML={{ __html: highlightJson(pretty!) }} />
             : <pre className="code value-viewer">{value}</pre>}

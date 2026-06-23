@@ -73,6 +73,7 @@ export const emptyModel = (): TableModel => ({
 // the structural choices so generateCreate/generateModify read the same.
 interface Dx {
   mysql: boolean
+  sqlite: boolean
   qi: (s: string) => string
   ql: (s: string) => string
   qual: (schema: string, t: string) => string
@@ -80,6 +81,7 @@ interface Dx {
 }
 const mkDx = (engine: Engine): Dx => {
   const mysql = engine === 'mysql'
+  const sqlite = engine === 'sqlite'
   const q = mysql ? '`' : '"'
   const qi = (s: string) => q + String(s).replace(new RegExp(q, 'g'), q + q) + q
   const ql = (s: string) => {
@@ -89,7 +91,7 @@ const mkDx = (engine: Engine): Dx => {
   }
   const qual = (schema: string, t: string) => qi(schema) + '.' + qi(t)
   const idList = (s: string) => s.split(',').map(x => x.trim()).filter(Boolean).map(qi).join(', ')
-  return { mysql, qi, ql, qual, idList }
+  return { mysql, sqlite, qi, ql, qual, idList }
 }
 
 // Postgres-flavoured quoting helpers kept for any non-designer caller.
@@ -129,7 +131,8 @@ export function generateCreate(schema: string, m: TableModel, engine: Engine = '
   const stmts = [`CREATE TABLE ${t} ${body}`]
   for (const i of m.indexes) if (i.cols.trim())
     stmts.push(`CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX ${dx.qi(i.name)} ON ${t} (${i.cols.trim()})`)
-  if (m.comment.trim()) stmts.push(tableCommentSQL(dx, t, m.comment.trim()))
+  // SQLite has no table-comment facility, so the comment is simply dropped there.
+  if (m.comment.trim() && !dx.sqlite) stmts.push(tableCommentSQL(dx, t, m.comment.trim()))
   return stmts
 }
 
@@ -158,7 +161,9 @@ export function generateModify(schema: string, m: TableModel, engine: Engine = '
         if (c.def.trim()) body += ' DEFAULT ' + c.def.trim()
         alter(body)
       }
-    } else {
+    } else if (!dx.sqlite) {
+      // SQLite cannot ALTER a column's type / NOT NULL / DEFAULT in place (only a
+      // full table rebuild can); those edits are reported via sqliteUnsupported().
       if (c.type.trim() !== o.type.trim()) alter(`ALTER COLUMN ${dx.qi(c.name)} TYPE ${c.type.trim()}`)
       if (c.notNull !== o.notNull) alter(`ALTER COLUMN ${dx.qi(c.name)} ${c.notNull ? 'SET' : 'DROP'} NOT NULL`)
       if (c.def.trim() !== o.def.trim())
@@ -179,14 +184,18 @@ export function generateModify(schema: string, m: TableModel, engine: Engine = '
 
   const pkCols = m.cols.filter(c => c.pk && c.name.trim()).map(c => c.name)
   const pkChanged = pkColsChanged(m)
-  if (pkChanged && snap.pkName) alter(dx.mysql ? 'DROP PRIMARY KEY' : `DROP CONSTRAINT ${dx.qi(snap.pkName)}`)
-
-  for (const name of snap.uniqueNames) if (!liveUniq.has(name)) dropUnique(name)
-  for (const u of m.uniques) if (u.orig && uniqChanged(u)) dropUnique(u.orig.name)
-  for (const name of snap.fkNames) if (!liveFk.has(name)) dropFk(name)
-  for (const f of m.fks) if (f.orig && fkChanged(f)) dropFk(f.orig.name)
-  for (const name of snap.checkNames) if (!liveChk.has(name)) dropChk(name)
-  for (const c of m.checks) if (c.orig && chkChanged(c)) dropChk(c.orig.name)
+  // SQLite cannot add/drop a PK or table constraints via ALTER (constraints are
+  // fixed at CREATE), so those drops are skipped here and flagged separately.
+  // Standalone indexes are dropped/created by name, which SQLite does support.
+  if (!dx.sqlite) {
+    if (pkChanged && snap.pkName) alter(dx.mysql ? 'DROP PRIMARY KEY' : `DROP CONSTRAINT ${dx.qi(snap.pkName)}`)
+    for (const name of snap.uniqueNames) if (!liveUniq.has(name)) dropUnique(name)
+    for (const u of m.uniques) if (u.orig && uniqChanged(u)) dropUnique(u.orig.name)
+    for (const name of snap.fkNames) if (!liveFk.has(name)) dropFk(name)
+    for (const f of m.fks) if (f.orig && fkChanged(f)) dropFk(f.orig.name)
+    for (const name of snap.checkNames) if (!liveChk.has(name)) dropChk(name)
+    for (const c of m.checks) if (c.orig && chkChanged(c)) dropChk(c.orig.name)
+  }
   for (const name of snap.indexNames) if (!liveIdx.has(name)) dropStandaloneIdx(name)
   for (const i of m.indexes) if (i.orig && idxChanged(i)) dropStandaloneIdx(i.orig.name)
 
@@ -194,22 +203,25 @@ export function generateModify(schema: string, m: TableModel, engine: Engine = '
   const liveCol = new Set(m.cols.map(c => c.orig?.name).filter(Boolean))
   for (const name of snap.colNames) if (!liveCol.has(name)) alter(`DROP COLUMN ${dx.qi(name)}`)
 
-  // 5. add new / changed constraints + indexes
-  if (pkChanged && pkCols.length)
-    alter(dx.mysql
-      ? `ADD PRIMARY KEY (${pkCols.map(dx.qi).join(', ')})`
-      : `ADD CONSTRAINT ${dx.qi(pkName(m))} PRIMARY KEY (${pkCols.map(dx.qi).join(', ')})`)
-  for (const u of m.uniques) if (u.cols.trim() && (!u.orig || uniqChanged(u)))
-    alter(`ADD CONSTRAINT ${dx.qi(u.name)} UNIQUE (${dx.idList(u.cols)})`)
-  for (const f of m.fks) if (f.cols.trim() && f.refTable.trim() && (!f.orig || fkChanged(f)))
-    alter(`ADD ${fkClause(dx, f)}`)
-  for (const c of m.checks) if (c.expr.trim() && (!c.orig || chkChanged(c)))
-    alter(`ADD CONSTRAINT ${dx.qi(c.name)} CHECK (${c.expr.trim()})`)
+  // 5. add new / changed constraints + indexes. SQLite can't add PK/table
+  // constraints via ALTER (only standalone indexes), so those are skipped.
+  if (!dx.sqlite) {
+    if (pkChanged && pkCols.length)
+      alter(dx.mysql
+        ? `ADD PRIMARY KEY (${pkCols.map(dx.qi).join(', ')})`
+        : `ADD CONSTRAINT ${dx.qi(pkName(m))} PRIMARY KEY (${pkCols.map(dx.qi).join(', ')})`)
+    for (const u of m.uniques) if (u.cols.trim() && (!u.orig || uniqChanged(u)))
+      alter(`ADD CONSTRAINT ${dx.qi(u.name)} UNIQUE (${dx.idList(u.cols)})`)
+    for (const f of m.fks) if (f.cols.trim() && f.refTable.trim() && (!f.orig || fkChanged(f)))
+      alter(`ADD ${fkClause(dx, f)}`)
+    for (const c of m.checks) if (c.expr.trim() && (!c.orig || chkChanged(c)))
+      alter(`ADD CONSTRAINT ${dx.qi(c.name)} CHECK (${c.expr.trim()})`)
+  }
   for (const i of m.indexes) if (i.cols.trim() && (!i.orig || idxChanged(i)))
     out.push(`CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX ${dx.qi(i.name)} ON ${t} (${i.cols.trim()})`)
 
-  // 6. table comment
-  if (m.comment.trim() !== snap.comment.trim()) {
+  // 6. table comment (SQLite has none, so it is dropped there)
+  if (m.comment.trim() !== snap.comment.trim() && !dx.sqlite) {
     if (dx.mysql) out.push(`ALTER TABLE ${t} COMMENT = ${dx.ql(m.comment.trim())}`)
     else out.push(`COMMENT ON TABLE ${t} IS ${m.comment.trim() ? dx.ql(m.comment.trim()) : 'NULL'}`)
   }
@@ -217,6 +229,31 @@ export function generateModify(schema: string, m: TableModel, engine: Engine = '
   // 7. rename table (last, so every statement above used the original name)
   if (m.name.trim() && m.name !== m.origName) out.push(`ALTER TABLE ${t} RENAME TO ${dx.qi(m.name)}`)
 
+  return out
+}
+
+// Edits the designer cannot apply on SQLite (which has no in-place column
+// modify and cannot ALTER constraints), described for a warning banner. The
+// generated statements omit these silently, so the UI must surface them.
+export function sqliteUnsupported(m: TableModel): string[] {
+  const snap = m.snapshot
+  if (!snap) return []
+  const out: string[] = []
+  for (const c of m.cols) {
+    if (!c.orig) continue
+    const o = c.orig
+    if (c.type.trim() !== o.type.trim()) out.push(`change type of "${o.name}"`)
+    if (c.notNull !== o.notNull) out.push(`${c.notNull ? 'set' : 'drop'} NOT NULL on "${o.name}"`)
+    if (c.def.trim() !== o.def.trim()) out.push(`change the default of "${o.name}"`)
+  }
+  if (pkColsChanged(m)) out.push('change the primary key')
+  if (snap.uniqueNames.some(n => !m.uniques.some(u => u.orig?.name === n)) ||
+      m.uniques.some(u => !u.orig || uniqChanged(u))) out.push('add or drop a UNIQUE constraint')
+  if (snap.fkNames.some(n => !m.fks.some(f => f.orig?.name === n)) ||
+      m.fks.some(f => f.cols.trim() && f.refTable.trim() && (!f.orig || fkChanged(f)))) out.push('add or drop a foreign key')
+  if (snap.checkNames.some(n => !m.checks.some(c => c.orig?.name === n)) ||
+      m.checks.some(c => c.expr.trim() && (!c.orig || chkChanged(c)))) out.push('add or drop a CHECK constraint')
+  if (m.comment.trim() !== snap.comment.trim()) out.push('set a table comment')
   return out
 }
 

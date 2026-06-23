@@ -6,7 +6,7 @@ import {
   Link2, ListTree, Check as CheckIcon,
 } from '../icons'
 import {
-  emptyModel, generateCreate, generateModify, loadModel, uid,
+  emptyModel, generateCreate, generateModify, loadModel, sqliteUnsupported, uid,
   type Chk, type Col, type FK, type Idx, type TableModel, type Uniq,
 } from '../tableModel'
 import { kindEngine } from '../dbkinds'
@@ -50,6 +50,11 @@ export default function TableDesigner({ params, onClose, onApplied }: {
     catch { return [] }
   }, [mode, schema, m, engine])
   const preview = statements.length ? statements.join(';\n\n') + ';' : '-- nothing to apply'
+  // Edits SQLite can't apply (in-place column modify, constraint ALTERs); the
+  // generated SQL omits them, so warn rather than silently dropping the change.
+  const sqliteSkipped = useMemo(
+    () => engine === 'sqlite' && mode === 'modify' ? sqliteUnsupported(m) : [],
+    [engine, mode, m])
 
   const base = (m.name || m.origName || 'table').trim() || 'table'
   const patch = (p: Partial<TableModel>) => setM(s => ({ ...s, ...p }))
@@ -197,6 +202,11 @@ export default function TableDesigner({ params, onClose, onApplied }: {
               {engine === 'mysql' && statements.length > 1 && (
                 <div className="hint dim" style={{ padding: '.2rem .6rem' }}>
                   MySQL DDL is not transactional: if a statement fails partway, earlier ones stay applied (no rollback).
+                </div>
+              )}
+              {sqliteSkipped.length > 0 && (
+                <div className="hint bad" style={{ padding: '.2rem .6rem' }}>
+                  SQLite cannot {sqliteSkipped.join('; ')} via ALTER. {sqliteSkipped.length === 1 ? 'This edit is' : 'These edits are'} not included. Recreate the table to apply {sqliteSkipped.length === 1 ? 'it' : 'them'}.
                 </div>
               )}
               <pre>{preview}</pre>
