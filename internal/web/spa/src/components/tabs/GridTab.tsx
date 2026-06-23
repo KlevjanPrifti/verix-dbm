@@ -390,7 +390,20 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       .catch(e => app.notify(String(e.message || e), 'error'))
       .finally(() => setSavingCell(false))
   }
-  const deleteRow = (r: number) => {
+  // Run a confirmed DELETE immediately (auto-commit) and reload, mirroring the
+  // inline-edit path: the user already confirmed, so we pass confirm=true past the
+  // server's destructive-statement gate and audit it like any other write.
+  const execDelete = (sql: string, done: string) => {
+    setSavingCell(true)
+    api.query(connId, sql, true)
+      .then(res => {
+        if (res.error) { app.notify(res.error, 'error'); return }
+        app.notify(done); load(page, where, order)
+      })
+      .catch(e => app.notify(String(e.message || e), 'error'))
+      .finally(() => setSavingCell(false))
+  }
+  const deleteRow = async (r: number) => {
     // Manual mode: mark the row for deletion and drop any pending edits on it
     // (an UPDATE then DELETE of the same row in one tx would mis-target, since
     // the DELETE's WHERE matches the row's original, now-updated, contents).
@@ -399,13 +412,32 @@ export default function GridTab({ connId, schema, table }: { connId: number; sch
       setPendingEdits(p => { const next = { ...p }; delete next[r]; return next })
       return
     }
-    openSql(
-      `console:${connId}:delete:${schema}.${table}`, `delete · ${table}`,
-      `DELETE FROM ${qual}\nWHERE ${rowWhere(r)};`)
+    // Auto-commit: confirm, then run the engine-aware DELETE in place (no console).
+    const ok = await app.confirm({
+      title: 'Delete row',
+      body: `Permanently delete this row from ${schema}.${table}? This commits immediately and cannot be undone.`,
+      buttons: [{ label: 'Delete row', value: 'ok', variant: 'danger' }],
+    })
+    if (ok !== 'ok') return
+    execDelete(`DELETE FROM ${qual}\nWHERE ${rowWhere(r)};`, 'row deleted')
   }
-  const deleteFiltered = () => openSql(
-    `console:${connId}:delete:${schema}.${table}`, `delete · ${table}`,
-    `DELETE FROM ${qual}${whereSuffix || '\nWHERE /* add a condition */ false'};`)
+  const deleteFiltered = async () => {
+    // No active filter: there's no row set to target, so seed a console where the
+    // user authors the WHERE (a guarded `false` placeholder prevents a full wipe).
+    if (!whereSuffix) {
+      openSql(`console:${connId}:delete:${schema}.${table}`, `delete · ${table}`,
+        `DELETE FROM ${qual}\nWHERE /* add a condition */ false;`)
+      return
+    }
+    // Auto-commit: confirm a filter-scoped bulk delete, then run it in place.
+    const ok = await app.confirm({
+      title: 'Delete filtered rows',
+      body: `Permanently delete every row in ${schema}.${table} matching the current filter? This commits immediately and cannot be undone.`,
+      buttons: [{ label: 'Delete rows', value: 'ok', variant: 'danger' }],
+    })
+    if (ok !== 'ok') return
+    execDelete(`DELETE FROM ${qual}${whereSuffix};`, 'rows deleted')
+  }
 
   // ── manual transaction (Tx: Manual) ──
   // Rows with at least one surviving edit (a deleted row's edits are ignored).
